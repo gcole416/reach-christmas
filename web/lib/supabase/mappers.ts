@@ -1,0 +1,110 @@
+// Postgres uses snake_case, the app uses camelCase — these functions are the
+// one place that boundary gets crossed, so every other file can stay in
+// terms of DataBundle / types.ts (see SCHEMA.md for the source-of-truth
+// column names).
+import type {
+  Assignment,
+  AssignmentStatus,
+  CardRecord,
+  Child,
+  DistributionMethod,
+  Drive,
+  DriveSchool,
+  DriveStatus,
+  Family,
+  School,
+  Sponsor,
+  WishlistItem,
+} from "../types";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export function mapDrive(row: any): Drive {
+  return {
+    id: row.id,
+    year: row.year,
+    name: row.name,
+    status: row.status as DriveStatus,
+    defaultDistributionMethod: row.default_distribution_method as DistributionMethod | null,
+  };
+}
+
+export function mapSchool(row: any): School {
+  return { id: row.id, name: row.name };
+}
+
+export function mapDriveSchool(row: any): DriveSchool {
+  return {
+    id: row.id,
+    driveId: row.drive_id,
+    schoolId: row.school_id,
+    code: row.code,
+    liaisonName: row.liaison_name,
+    liaisonPhone: row.liaison_phone,
+    liaisonEmail: row.liaison_email,
+    distributionMethod: row.distribution_method as DistributionMethod | null,
+  };
+}
+
+export function mapFamily(row: any): Family {
+  return {
+    id: row.id,
+    driveId: row.drive_id,
+    driveSchoolId: row.drive_school_id,
+    familyNumber: row.family_number,
+    isConfidential: row.is_confidential,
+    sortTag: row.sort_tag,
+    distributionMethodOverride: row.distribution_method_override as DistributionMethod | null,
+    scheduledPickupAt: row.scheduled_pickup_at,
+    checkedInAt: row.checked_in_at,
+  };
+}
+
+export function mapChild(row: any): Child {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    childIndex: row.child_index,
+    firstName: row.first_name,
+    grade: row.grade,
+    age: row.age,
+    sex: row.sex,
+    specificNeeds: row.specific_needs,
+    pantSize: row.pant_size,
+    shirtSize: row.shirt_size,
+    shoeSize: row.shoe_size,
+    otherNotes: row.other_notes,
+    targetCardCount: row.target_card_count,
+  };
+}
+
+export function mapWishlistItem(row: any): WishlistItem {
+  return { id: row.id, childId: row.child_id, position: row.position, description: row.description };
+}
+
+export function mapSponsor(row: any): Sponsor {
+  return { id: row.id, name: row.name, phone: row.phone, email: row.email };
+}
+
+export function mapCard(row: any): CardRecord {
+  return {
+    id: row.id,
+    childId: row.child_id,
+    copyNumber: row.copy_number,
+    totalCopies: row.total_copies,
+    printedAt: row.printed_at,
+  };
+}
+
+export function mapAssignment(row: any): Assignment {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    sponsorId: row.sponsor_id,
+    status: row.status as AssignmentStatus,
+    claimedAt: row.claimed_at,
+    purchasedAt: row.purchased_at,
+    receivedAtChurchAt: row.received_at_church_at,
+    deliveredAt: row.delivered_at,
+  };
+}
