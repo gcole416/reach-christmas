@@ -6,7 +6,13 @@ import { createClient } from "@/lib/supabase/client";
 
 const TABS = [
   { href: "/admin", label: "Dashboard" },
+  { href: "/admin/families", label: "Family Admin" },
+  { href: "/admin/fulfillment", label: "Fulfillment" },
+  { href: "/admin/print", label: "Print" },
+  { href: "/admin/distribution", label: "Distribution" },
   { href: "/admin/schools", label: "Schools" },
+  { href: "/admin/staff", label: "Staff" },
+  { href: "/admin/drives", label: "Drives" },
 ];
 
 export function AdminNav() {
@@ -22,9 +28,9 @@ export function AdminNav() {
 
   return (
     <div className="mb-8 flex items-center justify-between border-b border-border">
-      <div className="flex gap-1">
+      <div className="flex flex-wrap gap-1">
         {TABS.map((tab) => {
-          const active = pathname === tab.href;
+          const active = tab.href === "/admin" ? pathname === "/admin" : pathname.startsWith(tab.href);
           return (
             <Link
               key={tab.href}

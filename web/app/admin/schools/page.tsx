@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useData } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
 import { FormField } from "@/components/FormField";
+import { SearchInput } from "@/components/SearchInput";
 import type { DistributionMethod } from "@/lib/types";
 import { AdminNav } from "../AdminNav";
 
@@ -15,10 +16,15 @@ const DISTRIBUTION_LABELS: Record<DistributionMethod, string> = {
 export default function SchoolsAdminPage() {
   const { data } = useData();
   const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState("");
 
   if (!data) return null;
 
-  const schools = getSchoolsForDrive(data);
+  const allSchools = getSchoolsForDrive(data);
+  const q = search.trim().toLowerCase();
+  const schools = q
+    ? allSchools.filter((s) => [s.name, s.code, s.liaisonName ?? ""].join(" ").toLowerCase().includes(q))
+    : allSchools;
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
@@ -30,14 +36,19 @@ export default function SchoolsAdminPage() {
 
       <AdminNav />
 
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-ink-muted">{schools.length} schools in this drive</p>
-        <button
-          onClick={() => setShowForm(true)}
-          className="rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-        >
-          Add school
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by name, code, or liaison…" />
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-ink-muted">
+            {schools.length} of {allSchools.length}
+          </p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            Add school
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border">
@@ -69,7 +80,7 @@ export default function SchoolsAdminPage() {
             {schools.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
-                  No schools yet — add the first one.
+                  {allSchools.length === 0 ? "No schools yet — add the first one." : "No schools match this search."}
                 </td>
               </tr>
             ) : null}

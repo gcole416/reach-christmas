@@ -38,7 +38,7 @@ Grounded in the 2021 master spreadsheet structure, which had ~407 children acros
 
 - **Drive / Season** — year, referral/registration window, distribution date(s), status (open/closed/archived)
 - **School (referral partner)** — name, single-letter code (used in card numbers, e.g. `C` = CCHS), contact person name/phone/email, default distribution method for that school (see below)
-- **Family** — belongs to a School (or flagged **Confidential** with no school), a per-school family number, privacy tier (normal / confidential), a family-level sort tag (see "Color" question below)
+- **Family** — belongs to a School (or flagged **Confidential** with no school), a per-school family number (assigned automatically, not chosen by whoever's entering it — see SCHEMA.md's `create_family()`), privacy tier (normal / confidential), a family-level sort tag (see "Color" question below). `Family` is a distribution-day convenience for grouping siblings, not a strict household model — a real household with kids at different schools becomes multiple `Family` records, one per school (see §8).
 - **Child** — belongs to a Family; card number (`{SchoolLetter}{FamilyNumber}.{ChildIndex}`, e.g. `C1.3`), first name, grade, age, sex, wishlist items (up to 3), specific needs, pant/shirt/shoe size, other notes. Only first name + grade are ever shown publicly (see §5).
 - **Sponsor** — name, phone, email. The legacy sheet already captured this per child/card (one sponsor can claim multiple kids across multiple families — confirmed in the data, e.g. one CCHS sponsor claimed 7 different families' kids). We should model Sponsor as its own entity (not just free text per card) so the same person/group is recognizable across kids and across years.
 - **Match/Assignment** — links a Sponsor to a Child (their "card"), status: pledged → purchased → received at church → delivered. The legacy sheet only had two checkboxes (`Received`, `Delivered`); the app should track the fuller lifecycle so staff can see *who hasn't purchased yet*, not just who hasn't been delivered to.
@@ -48,7 +48,7 @@ Grounded in the 2021 master spreadsheet structure, which had ~407 children acros
 
 ## 5. Privacy & security (important — this holds kids' names, ages, schools, and sponsor contact info — no home addresses are collected)
 
-- **Confidential tier**: some families (the legacy "Confidential" tab) need a higher privacy bar than a normal referral — no school shown, sometimes no first name shown even to volunteers, only a small circle of staff should see these records at all. The app needs this as an explicit per-family flag, not an afterthought.
+- **Confidential tier**: some families (the legacy "Confidential" tab) need a higher privacy bar than a normal referral — no school shown, and (built) no first name shown even to volunteers with clearance, only a first initial — full name is only ever shown to admins, or on the one form where a cleared volunteer is actively editing that specific record. Only a small circle of staff should see full confidential records at all. See `displayFirstName()` in `lib/queries.ts`.
 - **Least privilege by role**: only staff/volunteers see full family/child details (school, notes, sizes) and the referring contact's info. Sponsors see only a first name, grade, and wishlist — e.g. "Emma, 3rd grade, wants a bike" — never a school name, last name, or any address (none is collected anyway).
 - **Enforce access rules at the database layer** (not just in app code) so a bug in the UI can't leak PII — e.g. Postgres Row Level Security if we use Supabase.
 - **Data retention**: decide how long to keep past years' child/school-contact PII — likely archive or anonymize after each season rather than keep it all indefinitely.
@@ -73,12 +73,22 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 ## 7. Phased scope
 
 **Phase 1 — MVP (target: ready before this year's drive)**
-- Staff/volunteer intake of schools, families & kids (this alone replaces the spreadsheet)
-- Confidential-tier flag with restricted visibility
-- Public sponsor-facing page to browse and claim kids/wishlist items (no sponsor login required)
-- **Sponsor assignment tracking** — who claimed which card, and a real status lifecycle (pledged/purchased/received), not just the old sheet's single received/delivered checkbox — this is the piece that lets admins chase down late sponsors
-- Distribution tracking flexible enough to handle either school delivery or church pickup, decided per drive/school
-- Basic reporting: how many kids registered, how many matched, how many fulfilled, which sponsors are overdue
+- [x] Staff/volunteer intake of schools, families & kids (this alone replaces the spreadsheet) — `/admin/intake`, plus `/admin/families/[id]` for corrections and adding a sibling later
+- [x] Confidential-tier flag with restricted visibility — any staff member can *create* a confidential referral now (see SCHEMA.md's RLS section), only cleared staff/admins can keep viewing it afterward
+- [x] Public sponsor-facing page to browse and claim kids/wishlist items (no sponsor login required) — `/sponsor`
+- [x] **Sponsor assignment tracking** — who claimed which card, and a real status lifecycle (pledged/purchased/received), not just the old sheet's single received/delivered checkbox — `/admin/fulfillment`
+- [x] Distribution tracking flexible enough to handle either school delivery or church pickup, decided per drive/school — `/admin/distribution`
+- [x] Printable cards, with the "(1 of 2)" copy notation only ever appearing here — `/admin/print`
+- [x] Drive (year) management — create/open/close a drive, exactly one `open` at a time — `/admin/drives`
+- [x] Staff/permission management — promote/demote role, toggle confidential access — `/admin/staff`
+- [x] Basic reporting: how many kids registered, how many matched, how many fulfilled, which sponsors are overdue — dashboard stat tiles
+
+**Known follow-ups (not Phase 2 — near-term, already scoped)**
+- [ ] Printable cards need a real nametag-sticker layout (`/admin/print`). The current layout is a plain
+  index-card-style grid meant for regular paper — still needs a version sized/spaced to print directly onto
+  adhesive nametag sticker sheets (e.g. Avery-style label sheets) for easy application, so cards can go
+  straight from printer to being stuck on/attached to the physical gift or tree tag. Needs to know the actual
+  label sheet product/dimensions being used before building the CSS grid for it.
 
 **Phase 2**
 - Pin wishlist items to a specific card copy (see [SCHEMA.md](SCHEMA.md#8-wishlist_items--was-3-fixed-columns-opened-up)) so multi-sponsor children can't have the same gift bought twice
@@ -105,9 +115,26 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 - [x] ~~Do sponsors capture a name/email when they claim a card?~~ → Yes — confirmed the legacy sheet's `Name`/`Phone Number`/`Email` columns are the **sponsor's** contact info (I'd initially misread this as a school counselor's — corrected in §2). Sponsor tracking already existed in spirit; it just needs a proper status lifecycle instead of one checkbox.
 - [ ] Now that `Name`/`Phone`/`Email` = sponsor, is there any separate contact tracked for the **school referral liaison** (e.g. a counselor who submits the family list to the church), or is that relationship handled informally/outside the spreadsheet entirely?
 - [ ] What is the **"Color"** field in the old spreadsheet actually for? Best guess: a per-family wrapping-paper/bin color code used to sort physical gifts back together at distribution. Worth confirming since it may or may not be relevant to a digital-first version.
-- [ ] Is the school list fixed year to year (the 12 schools found: CCHS, Clear Falls, CLHS, Dickinson, GoForth, Kohfeldt, Levi Fry, Ross, SeaBrook, Simms, Tegeler, Ward) or does it change each drive?
-- [ ] For "Confidential" families — who decides a family goes in that tier, and who specifically should be allowed to view them (all staff, or a smaller subset)?
-- [ ] Does a referral ever cover just one child from a family, or always the whole sibling group at once? (Affects whether "Family" needs to be a first-class grouping or whether Child-level referral is enough.)
+- [x] ~~Is the school list fixed year to year, or does it change each drive?~~ → Changes year to year, though some schools may repeat. Confirmed OK to just rebuild the school list from scratch each drive via "Add school" — no import/carry-forward needed, matching how `schools`/`drive_schools` already separates "the school exists" from "the school is in this year's drive."
+- [x] ~~For "Confidential" families — who decides a family goes in that tier, and who specifically should be allowed to view them?~~ → Resolved during the fresh-eyes review: any staff member can *create* a confidential referral (they already know the details firsthand — that's not new exposure), but only admins/cleared staff can go on *viewing* it afterward, plus the original creator for their own submission. See SCHEMA.md's RLS section for the mechanism.
+- [x] ~~Does a referral ever cover just one child from a family, or always the whole sibling group at once?~~ →
+  Yes, a family can be just one child (other kids in the household may not get gifts at all) — already
+  supported, no change needed. The harder real-world case: `Family` is modeled as belonging to exactly one
+  school, but a real household's siblings sometimes attend different schools (elementary/middle/high).
+  **Decision: leave this split.** A cross-school household becomes two-or-more separate `Family` records
+  (one per school) rather than one record spanning schools. `Family` exists purely as a distribution-day
+  convenience for volunteers (so siblings' gifts can be grouped/sorted together) — not as a strict
+  household model — so this is an accepted, known limitation rather than something the schema needs to
+  solve.
+- [x] ~~Should sponsor email be optional or required when claiming a card?~~ → Keep it required (confirmed,
+  no change) — it's the reliable way staff follow up on overdue pledges. The `claim_card` function still
+  accepts email as an optional parameter at the database level; the requirement is enforced in the
+  sponsor-facing form, not the schema.
+- [ ] How will distribution actually run this year (one church pickup event, school drop-offs, or a mix)? —
+  confirmed still genuinely undecided as of 2026-07; revisit closer to the date. No code depends on this
+  being answered — the distribution page already supports any combination per-family.
+- [ ] Deployment (Vercel now vs. staying local) — explicitly deferred at your request; not re-asking
+  proactively, but flagging it's still on the list whenever you want to revisit it.
 
 ## 9. Next steps
 

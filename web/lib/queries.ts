@@ -59,9 +59,27 @@ export function getActiveAssignment(data: DataBundle, cardId: string): Assignmen
   return data.assignments.find((a) => a.cardId === cardId && a.status !== "cancelled");
 }
 
+/**
+ * Confidential children only ever show a first initial to non-admin staff —
+ * admins still see the full name. This is a presentation-layer redaction on
+ * top of (not instead of) RLS: RLS already decides whether a non-cleared
+ * volunteer can see the row exists at all; this just limits how much a
+ * cleared volunteer sees of it in shared/glanceable views (tables, printed
+ * cards). The dedicated family edit form deliberately does NOT use this —
+ * whoever can reach that page for a confidential family already has
+ * legitimate access to the real name, and needs it to actually edit the
+ * record correctly.
+ */
+export function displayFirstName(firstName: string, isConfidential: boolean, viewerIsAdmin: boolean): string {
+  if (!isConfidential || viewerIsAdmin) return firstName;
+  const initial = firstName.trim().charAt(0);
+  return initial ? `${initial}.` : "";
+}
+
 export interface CardsNeedingPrintRow {
   childId: string;
   firstName: string;
+  isConfidential: boolean;
   cardNumber: string;
   targetCardCount: number;
   cardsGenerated: number;
@@ -77,6 +95,7 @@ export function getCardsNeedingPrint(data: DataBundle): CardsNeedingPrintRow[] {
       return {
         childId: child.id,
         firstName: child.firstName,
+        isConfidential: getFamily(data, child.familyId).isConfidential,
         cardNumber: getChildCardNumber(data, child),
         targetCardCount: child.targetCardCount,
         cardsGenerated: childCards.length,
@@ -92,6 +111,7 @@ export interface OverdueAssignmentRow {
   assignmentId: string;
   cardNumber: string;
   childFirstName: string;
+  isConfidential: boolean;
   sponsorName: string;
   sponsorPhone: string | null;
   sponsorEmail: string | null;
@@ -114,6 +134,7 @@ export function getOverdueAssignments(data: DataBundle): OverdueAssignmentRow[] 
         assignmentId: a.id,
         cardNumber: getChildCardNumber(data, child),
         childFirstName: child.firstName,
+        isConfidential: getFamily(data, child.familyId).isConfidential,
         sponsorName: sponsor.name,
         sponsorPhone: sponsor.phone,
         sponsorEmail: sponsor.email,
@@ -245,4 +266,184 @@ export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
         familyCount,
       };
     });
+}
+
+/** Which status an assignment moves to next when staff click "advance" (fulfillment page). */
+export const NEXT_STATUS: Partial<Record<AssignmentStatus, AssignmentStatus>> = {
+  pledged: "purchased",
+  purchased: "received_at_church",
+  received_at_church: "delivered",
+};
+
+// The fulfillment board's columns, left to right. "unassigned" isn't a real
+// assignment_status — it's a card with no active (non-cancelled) assignment
+// at all, whether never claimed or claimed-then-cancelled.
+export type FulfillmentColumn = "unassigned" | "pledged" | "purchased" | "received_at_church" | "delivered";
+
+export const FULFILLMENT_COLUMNS: { value: FulfillmentColumn; label: string }[] = [
+  { value: "unassigned", label: "Unassigned" },
+  { value: "pledged", label: "Pledged" },
+  { value: "purchased", label: "Purchased" },
+  { value: "received_at_church", label: "Received at church" },
+  { value: "delivered", label: "Delivered" },
+];
+
+export interface FulfillmentCard {
+  cardId: string;
+  cardNumber: string;
+  childFirstName: string;
+  isConfidential: boolean;
+  column: FulfillmentColumn;
+  assignmentId: string | null;
+  sponsorName: string | null;
+  sponsorPhone: string | null;
+  sponsorEmail: string | null;
+  daysSinceClaimed: number | null;
+  overdueSeverity: OverdueSeverity | null;
+}
+
+/**
+ * Every card, grouped into the same five buckets staff think in — including
+ * cards nobody has claimed at all, which the old assignment-only view had no
+ * way to show. Delivered cards stay on the board (as their own column) rather
+ * than disappearing once fulfilled, so the board reflects the whole season,
+ * not just what's still outstanding.
+ */
+export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
+  const board: FulfillmentCard[] = [];
+
+  for (const card of data.cards) {
+    const active = getActiveAssignment(data, card.id);
+
+    const child = data.children.find((c) => c.id === card.childId)!;
+    const cardNumber = getChildCardNumber(data, child);
+    const isConfidential = getFamily(data, child.familyId).isConfidential;
+
+    if (!active) {
+      board.push({
+        cardId: card.id,
+        cardNumber,
+        childFirstName: child.firstName,
+        isConfidential,
+        column: "unassigned",
+        assignmentId: null,
+        sponsorName: null,
+        sponsorPhone: null,
+        sponsorEmail: null,
+        daysSinceClaimed: null,
+        overdueSeverity: null,
+      });
+      continue;
+    }
+
+    const sponsor = data.sponsors.find((s) => s.id === active.sponsorId)!;
+    const days = daysSince(active.claimedAt);
+    const isDelivered = active.status === "delivered";
+    board.push({
+      cardId: card.id,
+      cardNumber,
+      childFirstName: child.firstName,
+      isConfidential,
+      column: active.status as FulfillmentColumn,
+      assignmentId: active.id,
+      sponsorName: sponsor.name,
+      sponsorPhone: sponsor.phone,
+      sponsorEmail: sponsor.email,
+      daysSinceClaimed: days,
+      overdueSeverity: isDelivered
+        ? null
+        : days >= OVERDUE_WARNING_DAYS
+          ? days >= OVERDUE_CRITICAL_DAYS
+            ? "critical"
+            : "warning"
+          : null,
+    });
+  }
+
+  return board.sort((a, b) => (b.daysSinceClaimed ?? -1) - (a.daysSinceClaimed ?? -1));
+}
+
+export interface DistributionRow {
+  familyId: string;
+  driveSchoolId: string | null;
+  schoolName: string | null;
+  isConfidential: boolean;
+  familyNumber: number;
+  /** Resolved: this family's override, else the school's, else the drive default — what will actually happen. */
+  distributionMethod: DistributionMethod | null;
+  /** Raw per-family override, or null if this family just inherits — lets the edit UI distinguish "set to X" from "not set." */
+  distributionMethodOverride: DistributionMethod | null;
+  scheduledPickupAt: string | null;
+  checkedInAt: string | null;
+  totalChildren: number;
+  totalCards: number;
+  deliveredCards: number;
+}
+
+/** One row per family — resolves distribution method (family override > school override > drive default) and rolls up how many of the family's cards have actually reached "delivered." */
+export function getDistributionRows(data: DataBundle): DistributionRow[] {
+  return data.families.map((family) => {
+    const driveSchool = getDriveSchool(data, family.driveSchoolId);
+    const school = driveSchool ? data.schools.find((s) => s.id === driveSchool.schoolId) : null;
+    const familyChildren = data.children.filter((c) => c.familyId === family.id);
+    const childIds = new Set(familyChildren.map((c) => c.id));
+    const familyCards = data.cards.filter((c) => childIds.has(c.childId));
+    const deliveredCards = familyCards.filter((c) => getActiveAssignment(data, c.id)?.status === "delivered").length;
+
+    const distributionMethod =
+      family.distributionMethodOverride ?? driveSchool?.distributionMethod ?? data.drive.defaultDistributionMethod;
+
+    return {
+      familyId: family.id,
+      driveSchoolId: family.driveSchoolId,
+      schoolName: school?.name ?? null,
+      isConfidential: family.isConfidential,
+      familyNumber: family.familyNumber,
+      distributionMethod,
+      distributionMethodOverride: family.distributionMethodOverride,
+      scheduledPickupAt: family.scheduledPickupAt,
+      checkedInAt: family.checkedInAt,
+      totalChildren: familyChildren.length,
+      totalCards: familyCards.length,
+      deliveredCards,
+    };
+  });
+}
+
+export interface PrintableCardRow {
+  cardId: string;
+  displayLabel: string;
+  firstName: string;
+  isConfidential: boolean;
+  grade: string | null;
+  wishlist: string[];
+  pantSize: string | null;
+  shirtSize: string | null;
+  shoeSize: string | null;
+  specificNeeds: string | null;
+  printedAt: string | null;
+}
+
+/** Mirrors `printable_cards`, grouping each card's wishlist items (the view is one-row-per-item; this is one-row-per-card for a print layout). */
+export function getPrintableCards(data: DataBundle): PrintableCardRow[] {
+  return data.cards.map((card) => {
+    const child = data.children.find((c) => c.id === card.childId)!;
+    const wishlist = data.wishlistItems
+      .filter((w) => w.childId === child.id)
+      .sort((a, b) => a.position - b.position)
+      .map((w) => w.description);
+    return {
+      cardId: card.id,
+      displayLabel: getPrintableCardLabel(data, card, child),
+      firstName: child.firstName,
+      isConfidential: getFamily(data, child.familyId).isConfidential,
+      grade: child.grade,
+      wishlist,
+      pantSize: child.pantSize,
+      shirtSize: child.shirtSize,
+      shoeSize: child.shoeSize,
+      specificNeeds: child.specificNeeds,
+      printedAt: card.printedAt,
+    };
+  });
 }

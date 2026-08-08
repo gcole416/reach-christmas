@@ -4,18 +4,19 @@ import { StatTile } from "@/components/StatTile";
 import { OverdueBadge, StatusBadge } from "@/components/StatusBadge";
 import { useData } from "@/lib/store";
 import {
+  displayFirstName,
   getCardsNeedingPrint,
   getDashboardStats,
   getOverdueAssignments,
   OVERDUE_WARNING_DAYS,
 } from "@/lib/queries";
 import { AdminNav } from "./AdminNav";
-import { FamiliesExplorer } from "./FamiliesExplorer";
 
 export default function AdminPage() {
-  const { data } = useData();
+  const { data, viewerRole } = useData();
   if (!data) return null;
 
+  const isAdmin = viewerRole === "admin";
   const stats = getDashboardStats(data);
   const overdue = getOverdueAssignments(data);
   const needsPrint = getCardsNeedingPrint(data);
@@ -64,7 +65,8 @@ export default function AdminPage() {
                 {overdue.map((row) => (
                   <tr key={row.assignmentId}>
                     <td className="px-4 py-3 text-ink-primary">
-                      {row.childFirstName} <span className="text-ink-muted">({row.cardNumber})</span>
+                      {displayFirstName(row.childFirstName, row.isConfidential, isAdmin)}{" "}
+                      <span className="text-ink-muted">({row.cardNumber})</span>
                     </td>
                     <td className="px-4 py-3 text-ink-primary">{row.sponsorName}</td>
                     <td className="px-4 py-3 text-ink-secondary">
@@ -108,7 +110,8 @@ export default function AdminPage() {
                 {needsPrint.map((row) => (
                   <tr key={row.childId}>
                     <td className="px-4 py-3 text-ink-primary">
-                      {row.firstName} <span className="text-ink-muted">({row.cardNumber})</span>
+                      {displayFirstName(row.firstName, row.isConfidential, isAdmin)}{" "}
+                      <span className="text-ink-muted">({row.cardNumber})</span>
                     </td>
                     <td className="px-4 py-3 text-ink-secondary">{row.targetCardCount}</td>
                     <td className="px-4 py-3 text-ink-secondary">{row.cardsGenerated}</td>
@@ -120,8 +123,6 @@ export default function AdminPage() {
           )}
         </div>
       </section>
-
-      <FamiliesExplorer />
     </div>
   );
 }

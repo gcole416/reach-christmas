@@ -17,6 +17,8 @@ export interface Drive {
   year: number;
   name: string;
   status: DriveStatus;
+  referralWindowStart: string | null;
+  referralWindowEnd: string | null;
   defaultDistributionMethod: DistributionMethod | null;
 }
 
@@ -43,9 +45,12 @@ export interface Family {
   familyNumber: number;
   isConfidential: boolean;
   sortTag: string | null;
+  internalNotes: string | null;
   distributionMethodOverride: DistributionMethod | null;
   scheduledPickupAt: string | null;
   checkedInAt: string | null;
+  checkedInBy: string | null;
+  createdBy: string | null;
 }
 
 export interface Child {
@@ -69,6 +74,15 @@ export interface WishlistItem {
   childId: string;
   position: number;
   description: string;
+}
+
+export interface Profile {
+  id: string;
+  fullName: string;
+  email: string | null;
+  role: AppRole;
+  canViewConfidential: boolean;
+  createdAt: string;
 }
 
 export interface Sponsor {

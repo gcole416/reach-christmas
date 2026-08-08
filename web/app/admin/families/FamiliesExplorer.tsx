@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useData } from "@/lib/store";
-import { getAdminFamilies, getSchoolsForDrive } from "@/lib/queries";
+import { displayFirstName, getAdminFamilies, getSchoolsForDrive } from "@/lib/queries";
 import { StatusBadge, STATUS_OPTIONS } from "@/components/StatusBadge";
+import { SearchInput } from "@/components/SearchInput";
 
 interface ViewFilters {
   schoolFilter: string; // "all" | driveSchoolId | "confidential"
@@ -13,13 +15,15 @@ interface ViewFilters {
 const ALL_VIEW = { id: "__all", name: "All", schoolFilter: "all", statusFilter: "all" } as const;
 
 export function FamiliesExplorer() {
-  const { data, savedViews, addSavedView, deleteSavedView } = useData();
+  const { data, viewerRole, savedViews, addSavedView, deleteSavedView } = useData();
   const [schoolFilter, setSchoolFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [newViewName, setNewViewName] = useState("");
+  const [search, setSearch] = useState("");
 
   if (!data) return null;
 
+  const isAdmin = viewerRole === "admin";
   const families = getAdminFamilies(data);
   const schools = getSchoolsForDrive(data);
 
@@ -27,11 +31,12 @@ export function FamiliesExplorer() {
     family.children.flatMap((child) =>
       child.cards.map((card) => ({
         key: card.cardId,
+        familyId: family.familyId,
         driveSchoolId: family.driveSchoolId,
         school: family.schoolName ?? "Confidential / direct referral",
         familyLabel: `Family ${family.familyNumber}`,
         isConfidential: family.isConfidential,
-        childName: child.firstName,
+        childName: displayFirstName(child.firstName, family.isConfidential, isAdmin),
         grade: child.grade,
         cardNumber: card.cardNumber,
         status: card.status,
@@ -40,12 +45,24 @@ export function FamiliesExplorer() {
     )
   );
 
+  const q = search.trim().toLowerCase();
   const filteredRows = rows.filter((row) => {
     const schoolMatches =
-      schoolFilter === "all" ||
-      (schoolFilter === "confidential" ? row.isConfidential : row.driveSchoolId === schoolFilter);
+      schoolFilter === "all"
+        ? true
+        : schoolFilter === "confidential"
+          ? row.isConfidential
+          : schoolFilter === "direct"
+            ? !row.isConfidential && row.driveSchoolId === null
+            : row.driveSchoolId === schoolFilter;
     const statusMatches = statusFilter === "all" || row.status === statusFilter;
-    return schoolMatches && statusMatches;
+    const searchMatches =
+      !q ||
+      [row.school, row.familyLabel, row.childName, row.cardNumber, row.sponsorName ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+    return schoolMatches && statusMatches && searchMatches;
   });
 
   function applyView(view: ViewFilters) {
@@ -63,14 +80,8 @@ export function FamiliesExplorer() {
   const allViews = [ALL_VIEW, ...savedViews];
 
   return (
-    <section className="mt-12 mb-10">
-      <h2 className="text-xl font-semibold text-ink-primary">All families</h2>
-      <p className="mt-1 text-sm text-ink-secondary">
-        Every referral, one row per card — confidential families are flagged and would be hidden from
-        volunteers without clearance in the real app.
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+    <section>
+      <div className="flex flex-wrap items-center gap-2">
         {allViews.map((view) => {
           const active = schoolFilter === view.schoolFilter && statusFilter === view.statusFilter;
           return (
@@ -101,6 +112,10 @@ export function FamiliesExplorer() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="text-sm">
+          <span className="mb-1 block text-ink-secondary">Search</span>
+          <SearchInput value={search} onChange={setSearch} placeholder="Child, family, card, sponsor…" />
+        </label>
+        <label className="text-sm">
           <span className="mb-1 block text-ink-secondary">School</span>
           <select
             value={schoolFilter}
@@ -113,7 +128,8 @@ export function FamiliesExplorer() {
                 {s.name}
               </option>
             ))}
-            <option value="confidential">Confidential / direct referral</option>
+            <option value="direct">Direct referral (no school)</option>
+            <option value="confidential">Confidential</option>
           </select>
         </label>
         <label className="text-sm">
@@ -181,7 +197,11 @@ export function FamiliesExplorer() {
                     row.school
                   )}
                 </td>
-                <td className="px-4 py-3 text-ink-secondary">{row.familyLabel}</td>
+                <td className="px-4 py-3">
+                  <Link href={`/admin/families/${row.familyId}`} className="text-cat-blue hover:underline">
+                    {row.familyLabel}
+                  </Link>
+                </td>
                 <td className="px-4 py-3 text-ink-primary">{row.childName}</td>
                 <td className="px-4 py-3 text-ink-secondary">{row.grade ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-secondary">{row.cardNumber}</td>

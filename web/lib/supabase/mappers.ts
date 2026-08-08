@@ -3,6 +3,7 @@
 // terms of DataBundle / types.ts (see SCHEMA.md for the source-of-truth
 // column names).
 import type {
+  AppRole,
   Assignment,
   AssignmentStatus,
   CardRecord,
@@ -12,6 +13,7 @@ import type {
   DriveSchool,
   DriveStatus,
   Family,
+  Profile,
   School,
   Sponsor,
   WishlistItem,
@@ -25,6 +27,8 @@ export function mapDrive(row: any): Drive {
     year: row.year,
     name: row.name,
     status: row.status as DriveStatus,
+    referralWindowStart: row.referral_window_start,
+    referralWindowEnd: row.referral_window_end,
     defaultDistributionMethod: row.default_distribution_method as DistributionMethod | null,
   };
 }
@@ -54,9 +58,12 @@ export function mapFamily(row: any): Family {
     familyNumber: row.family_number,
     isConfidential: row.is_confidential,
     sortTag: row.sort_tag,
+    internalNotes: row.internal_notes,
     distributionMethodOverride: row.distribution_method_override as DistributionMethod | null,
     scheduledPickupAt: row.scheduled_pickup_at,
     checkedInAt: row.checked_in_at,
+    checkedInBy: row.checked_in_by,
+    createdBy: row.created_by,
   };
 }
 
@@ -80,6 +87,17 @@ export function mapChild(row: any): Child {
 
 export function mapWishlistItem(row: any): WishlistItem {
   return { id: row.id, childId: row.child_id, position: row.position, description: row.description };
+}
+
+export function mapProfile(row: any): Profile {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    role: row.role as AppRole,
+    canViewConfidential: row.can_view_confidential,
+    createdAt: row.created_at,
+  };
 }
 
 export function mapSponsor(row: any): Sponsor {

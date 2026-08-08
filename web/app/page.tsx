@@ -3,9 +3,6 @@ import Link from "next/link";
 export default function Home() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col items-center px-6 py-20 text-center">
-      <span className="rounded-full bg-cat-blue/10 px-3 py-1 text-xs font-medium text-ink-primary">
-        Early prototype — seed data only
-      </span>
       <h1 className="mt-6 text-4xl font-semibold text-ink-primary sm:text-5xl">
         Reach Christmas gift drive
       </h1>

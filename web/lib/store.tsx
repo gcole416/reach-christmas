@@ -13,7 +13,7 @@ import {
   mapSponsor,
   mapWishlistItem,
 } from "./supabase/mappers";
-import type { DataBundle, DistributionMethod } from "./types";
+import type { AppRole, AssignmentStatus, DataBundle, DistributionMethod } from "./types";
 
 const SAVED_VIEWS_KEY = "reach-ol-saved-views-v1";
 
@@ -33,6 +33,51 @@ export interface AddSchoolInput {
   distributionMethod: DistributionMethod | "inherit";
 }
 
+export type ReferralType = "school" | "direct" | "confidential";
+
+export interface IntakeChildInput {
+  firstName: string;
+  grade: string;
+  age: string;
+  sex: string;
+  specificNeeds: string;
+  pantSize: string;
+  shirtSize: string;
+  shoeSize: string;
+  otherNotes: string;
+  targetCardCount: string;
+  wishlistItems: string[];
+}
+
+export interface AddFamilyInput {
+  referralType: ReferralType;
+  driveSchoolId: string | null;
+  sortTag: string;
+  internalNotes: string;
+  children: IntakeChildInput[];
+}
+
+// Family number is assigned by the database (create_family() RPC), never
+// chosen client-side — see the migration that introduced it for why. The
+// caller still needs it back to show staff what got assigned, for tags.
+export type AddFamilyResult = { ok: true; familyNumber: number } | { ok: false; error: string };
+
+// Same shape as IntakeChildInput, plus which row it maps to: null means "not
+// saved yet" (insert), a uuid means "existing child" (update in place).
+export interface EditableChildInput extends IntakeChildInput {
+  id: string | null;
+}
+
+export interface UpdateFamilyDetailsInput {
+  sortTag: string;
+  internalNotes: string;
+}
+
+export interface FamilyDistributionInput {
+  scheduledPickupAt: string | null;
+  distributionMethodOverride: DistributionMethod | "inherit";
+}
+
 type Result = { ok: true } | { ok: false; error: string };
 
 interface DataContextValue {
@@ -40,7 +85,23 @@ interface DataContextValue {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  // The current signed-in user's own role — null until it's loaded. Used to
+  // redact confidential children's names down to a first initial for
+  // non-admin staff (see queries.ts's displayFirstName).
+  viewerRole: AppRole | null;
   addSchool: (input: AddSchoolInput) => Promise<Result>;
+  addFamily: (input: AddFamilyInput) => Promise<AddFamilyResult>;
+  saveFamilyEdit: (
+    familyId: string,
+    details: UpdateFamilyDetailsInput,
+    children: EditableChildInput[]
+  ) => Promise<Result>;
+  updateAssignmentStatus: (assignmentId: string, status: AssignmentStatus) => Promise<Result>;
+  cancelAssignment: (assignmentId: string) => Promise<Result>;
+  updateCardPrinted: (cardId: string, printed: boolean) => Promise<Result>;
+  updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
+  checkInFamily: (familyId: string) => Promise<Result>;
+  undoCheckInFamily: (familyId: string) => Promise<Result>;
   savedViews: SavedView[];
   addSavedView: (view: Omit<SavedView, "id">) => void;
   deleteSavedView: (id: string) => void;
@@ -87,6 +148,34 @@ async function fetchDataBundle(): Promise<DataBundle> {
   };
 }
 
+// Only handles the "raise target_card_count" direction (see SCHEMA.md §7) —
+// generates the missing card row(s) and syncs total_copies on every sibling
+// card for that child. Lowering the count is deliberately a no-op: a card
+// that's already been claimed can't be safely un-generated from here, so
+// shrinking stays a manual/admin decision rather than something a save
+// button does silently.
+async function reconcileCardsForChild(
+  supabase: ReturnType<typeof createClient>,
+  childId: string,
+  targetCardCount: number,
+  existingCardCount: number
+): Promise<{ error: string | null }> {
+  if (targetCardCount <= existingCardCount) return { error: null };
+
+  const newRows = Array.from({ length: targetCardCount - existingCardCount }, (_, i) => ({
+    child_id: childId,
+    copy_number: existingCardCount + i + 1,
+    total_copies: targetCardCount,
+  }));
+  const { error: insertError } = await supabase.from("cards").insert(newRows);
+  if (insertError) return { error: insertError.message };
+
+  const { error: updateError } = await supabase.from("cards").update({ total_copies: targetCardCount }).eq("child_id", childId);
+  if (updateError) return { error: updateError.message };
+
+  return { error: null };
+}
+
 function loadSavedViews(): SavedView[] {
   try {
     const raw = window.localStorage.getItem(SAVED_VIEWS_KEY);
@@ -102,6 +191,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [viewerRole, setViewerRole] = useState<AppRole | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -116,12 +206,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadViewerRole = useCallback(async () => {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", userData.user.id).single();
+    setViewerRole((profile?.role as AppRole) ?? null);
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- loading saved views is a one-time read from an external system (localStorage) on mount
     setSavedViews(loadSavedViews());
     setHydrated(true);
     refresh();
-  }, [refresh]);
+    loadViewerRole();
+  }, [refresh, loadViewerRole]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -169,6 +268,281 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  async function addFamily(input: AddFamilyInput): Promise<AddFamilyResult> {
+    if (!data) return { ok: false, error: "Data hasn't finished loading yet." };
+
+    const isConfidential = input.referralType === "confidential";
+    const driveSchoolId = input.referralType === "school" ? input.driveSchoolId : null;
+
+    if (input.referralType === "school" && !driveSchoolId) {
+      return { ok: false, error: "Choose a school, or switch to direct referral / confidential." };
+    }
+
+    const validChildren = input.children.filter((c) => c.firstName.trim());
+    if (validChildren.length === 0) {
+      return { ok: false, error: "Add at least one child with a first name." };
+    }
+
+    const supabase = createClient();
+
+    // Family number is assigned inside this call, not chosen here — see
+    // create_family() in the migrations for why (concurrent volunteers on
+    // different devices could otherwise race on the same number).
+    const { data: familyRow, error: familyError } = await supabase.rpc("create_family", {
+      p_drive_id: data.drive.id,
+      p_drive_school_id: driveSchoolId,
+      p_is_confidential: isConfidential,
+      p_sort_tag: input.sortTag.trim() || null,
+      p_internal_notes: input.internalNotes.trim() || null,
+    });
+    if (familyError || !familyRow) {
+      return { ok: false, error: familyError?.message ?? "Could not create the family." };
+    }
+
+    for (let i = 0; i < validChildren.length; i++) {
+      const child = validChildren[i];
+      const targetCardCount = Math.max(1, Number(child.targetCardCount) || 1);
+
+      const { data: childRow, error: childError } = await supabase
+        .from("children")
+        .insert({
+          family_id: familyRow.id,
+          child_index: i + 1,
+          first_name: child.firstName.trim(),
+          grade: child.grade.trim() || null,
+          age: child.age.trim() ? Number(child.age) : null,
+          sex: child.sex.trim() || null,
+          specific_needs: child.specificNeeds.trim() || null,
+          pant_size: child.pantSize.trim() || null,
+          shirt_size: child.shirtSize.trim() || null,
+          shoe_size: child.shoeSize.trim() || null,
+          other_notes: child.otherNotes.trim() || null,
+          target_card_count: targetCardCount,
+        })
+        .select()
+        .single();
+      if (childError || !childRow) {
+        await refresh();
+        return {
+          ok: false,
+          error: `Family saved, but couldn't add ${child.firstName || "a child"}: ${
+            childError?.message ?? "unknown error"
+          }. What was saved so far is already in "All families" — check there before retrying.`,
+        };
+      }
+
+      const wishlistRows = child.wishlistItems
+        .map((description, idx) => ({ child_id: childRow.id, position: idx + 1, description: description.trim() }))
+        .filter((row) => row.description);
+      if (wishlistRows.length > 0) {
+        const { error: wishlistError } = await supabase.from("wishlist_items").insert(wishlistRows);
+        if (wishlistError) {
+          await refresh();
+          return {
+            ok: false,
+            error: `${child.firstName}'s wishlist items failed to save: ${wishlistError.message}. Everything else was saved.`,
+          };
+        }
+      }
+
+      const cardRows = Array.from({ length: targetCardCount }, (_, idx) => ({
+        child_id: childRow.id,
+        copy_number: idx + 1,
+        total_copies: targetCardCount,
+      }));
+      const { error: cardError } = await supabase.from("cards").insert(cardRows);
+      if (cardError) {
+        await refresh();
+        return {
+          ok: false,
+          error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Everything else was saved — use "Cards to print" to retry.`,
+        };
+      }
+    }
+
+    await refresh();
+    return { ok: true, familyNumber: familyRow.family_number };
+  }
+
+  async function saveFamilyEdit(
+    familyId: string,
+    details: UpdateFamilyDetailsInput,
+    children: EditableChildInput[]
+  ): Promise<Result> {
+    if (!data) return { ok: false, error: "Data hasn't finished loading yet." };
+
+    const validChildren = children.filter((c) => c.firstName.trim());
+    if (validChildren.length === 0) {
+      return { ok: false, error: "A family needs at least one child with a first name." };
+    }
+
+    const supabase = createClient();
+
+    const { error: familyError } = await supabase
+      .from("families")
+      .update({
+        sort_tag: details.sortTag.trim() || null,
+        internal_notes: details.internalNotes.trim() || null,
+      })
+      .eq("id", familyId);
+    if (familyError) {
+      return { ok: false, error: familyError.message };
+    }
+
+    const existingChildIndexes = data.children.filter((c) => c.familyId === familyId).map((c) => c.childIndex);
+    let nextChildIndex = existingChildIndexes.length > 0 ? Math.max(...existingChildIndexes) + 1 : 1;
+
+    for (const child of validChildren) {
+      const targetCardCount = Math.max(1, Number(child.targetCardCount) || 1);
+      let childId = child.id;
+
+      const childFields = {
+        first_name: child.firstName.trim(),
+        grade: child.grade.trim() || null,
+        age: child.age.trim() ? Number(child.age) : null,
+        sex: child.sex.trim() || null,
+        specific_needs: child.specificNeeds.trim() || null,
+        pant_size: child.pantSize.trim() || null,
+        shirt_size: child.shirtSize.trim() || null,
+        shoe_size: child.shoeSize.trim() || null,
+        other_notes: child.otherNotes.trim() || null,
+        target_card_count: targetCardCount,
+      };
+
+      if (childId) {
+        const { error: updateError } = await supabase.from("children").update(childFields).eq("id", childId);
+        if (updateError) {
+          await refresh();
+          return {
+            ok: false,
+            error: `Couldn't update ${child.firstName}: ${updateError.message}. Other changes on this page may already be saved.`,
+          };
+        }
+      } else {
+        const { data: childRow, error: insertError } = await supabase
+          .from("children")
+          .insert({ family_id: familyId, child_index: nextChildIndex, ...childFields })
+          .select()
+          .single();
+        if (insertError || !childRow) {
+          await refresh();
+          return {
+            ok: false,
+            error: `Couldn't add ${child.firstName}: ${
+              insertError?.message ?? "unknown error"
+            }. Other changes on this page may already be saved.`,
+          };
+        }
+        childId = childRow.id;
+        nextChildIndex += 1;
+      }
+
+      if (!childId) {
+        await refresh();
+        return { ok: false, error: `Internal error saving ${child.firstName} — no child id was resolved.` };
+      }
+
+      // Wishlist rows have no other references pointing at them, so a
+      // wholesale replace is simpler and just as safe as diffing.
+      const { error: deleteError } = await supabase.from("wishlist_items").delete().eq("child_id", childId);
+      if (deleteError) {
+        await refresh();
+        return { ok: false, error: `Couldn't update ${child.firstName}'s wishlist: ${deleteError.message}.` };
+      }
+      const wishlistRows = child.wishlistItems
+        .map((description, idx) => ({ child_id: childId, position: idx + 1, description: description.trim() }))
+        .filter((row) => row.description);
+      if (wishlistRows.length > 0) {
+        const { error: wishlistError } = await supabase.from("wishlist_items").insert(wishlistRows);
+        if (wishlistError) {
+          await refresh();
+          return { ok: false, error: `Couldn't save ${child.firstName}'s wishlist: ${wishlistError.message}.` };
+        }
+      }
+
+      const existingCardCount = data.cards.filter((c) => c.childId === child.id).length;
+      const { error: cardError } = await reconcileCardsForChild(supabase, childId, targetCardCount, existingCardCount);
+      if (cardError) {
+        await refresh();
+        return { ok: false, error: `Couldn't generate cards for ${child.firstName}: ${cardError}.` };
+      }
+    }
+
+    await refresh();
+    return { ok: true };
+  }
+
+  async function updateAssignmentStatus(assignmentId: string, status: AssignmentStatus): Promise<Result> {
+    const supabase = createClient();
+    const now = new Date().toISOString();
+    const patch: Record<string, string> = { status };
+    if (status === "purchased") patch.purchased_at = now;
+    if (status === "received_at_church") patch.received_at_church_at = now;
+    if (status === "delivered") patch.delivered_at = now;
+
+    const { error } = await supabase.from("assignments").update(patch).eq("id", assignmentId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function cancelAssignment(assignmentId: string): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase.from("assignments").update({ status: "cancelled" }).eq("id", assignmentId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function updateCardPrinted(cardId: string, printed: boolean): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("cards")
+      .update({ printed_at: printed ? new Date().toISOString() : null })
+      .eq("id", cardId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function updateFamilyDistribution(familyId: string, input: FamilyDistributionInput): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("families")
+      .update({
+        scheduled_pickup_at: input.scheduledPickupAt,
+        distribution_method_override:
+          input.distributionMethodOverride === "inherit" ? null : input.distributionMethodOverride,
+      })
+      .eq("id", familyId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function checkInFamily(familyId: string): Promise<Result> {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const { error } = await supabase
+      .from("families")
+      .update({ checked_in_at: new Date().toISOString(), checked_in_by: userData.user?.id ?? null })
+      .eq("id", familyId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function undoCheckInFamily(familyId: string): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("families")
+      .update({ checked_in_at: null, checked_in_by: null })
+      .eq("id", familyId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
   function addSavedView(view: Omit<SavedView, "id">) {
     setSavedViews((prev) => [...prev, { ...view, id: crypto.randomUUID() }]);
   }
@@ -179,7 +553,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   return (
     <DataContext.Provider
-      value={{ data, loading, error, refresh, addSchool, savedViews, addSavedView, deleteSavedView }}
+      value={{
+        data,
+        loading,
+        error,
+        refresh,
+        viewerRole,
+        addSchool,
+        addFamily,
+        saveFamilyEdit,
+        updateAssignmentStatus,
+        cancelAssignment,
+        updateCardPrinted,
+        updateFamilyDistribution,
+        checkInFamily,
+        undoCheckInFamily,
+        savedViews,
+        addSavedView,
+        deleteSavedView,
+      }}
     >
       {children}
     </DataContext.Provider>

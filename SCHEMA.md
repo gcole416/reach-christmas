@@ -53,6 +53,7 @@ Mirrors Supabase's built-in `auth.users`; this table adds the app-specific field
 create table profiles (
   id uuid primary key references auth.users(id),
   full_name text not null,
+  email text,                                 -- synced copy, see below
   role app_role not null default 'volunteer',
   can_view_confidential boolean not null default false,
   created_at timestamptz not null default now()
@@ -114,13 +115,19 @@ create table families (
   scheduled_pickup_at timestamptz,
   checked_in_at timestamptz,
   checked_in_by uuid references profiles(id),
+  created_by uuid references profiles(id),    -- who submitted this referral, see confidential-access note below
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- family_number is scoped per school, except confidential families which are scoped per drive instead
+-- family_number is scoped per school, except confidential families which are
+-- scoped per drive instead. The coalesce collapses "no school" (direct
+-- referral) down to a fixed sentinel so two direct-referral families can't
+-- silently share a number — a plain (drive_id, drive_school_id, family_number)
+-- index wouldn't catch that, since Postgres unique indexes treat NULL as
+-- distinct from NULL.
 create unique index families_number_per_school
-  on families (drive_id, drive_school_id, family_number)
+  on families (drive_id, coalesce(drive_school_id, '00000000-0000-0000-0000-000000000000'::uuid), family_number)
   where not is_confidential;
 
 create unique index families_number_confidential
@@ -129,6 +136,69 @@ create unique index families_number_confidential
 
 create index families_drive_id_idx on families (drive_id);
 ```
+
+**`family_number` is assigned by the database, never chosen by whoever's filling out the intake form.**
+Early versions let a volunteer see a "suggested next number" and override it — but multiple volunteers can
+be entering families at the same time on different iPads/browsers, and that's a real race: two people could
+see the same suggestion and both submit, with one getting a raw unique-violation error instead of a saved
+family. The number still exists and still matters (it's what goes on a printed tag, and it's how staff refer
+to a family verbally) — it's just never client-supplied. See `create_family()` below.
+
+```sql
+create or replace function public.create_family(
+  p_drive_id uuid,
+  p_drive_school_id uuid,
+  p_is_confidential boolean,
+  p_sort_tag text default null,
+  p_internal_notes text default null
+)
+returns families
+language plpgsql
+security invoker
+as $$
+declare
+  v_lock_key bigint;
+  v_next_number int;
+  v_family families;
+begin
+  v_lock_key := hashtextextended(
+    coalesce(p_drive_school_id::text, 'confidential:' || p_is_confidential::text) || ':' || p_drive_id::text,
+    0
+  );
+  -- Held for the rest of this transaction (this one RPC call) — a concurrent
+  -- call for the same scope blocks here until this one commits, so two calls
+  -- can never compute the same "next" number.
+  perform pg_advisory_xact_lock(v_lock_key);
+
+  if p_is_confidential then
+    select coalesce(max(family_number), 0) + 1 into v_next_number
+    from families where drive_id = p_drive_id and is_confidential;
+  else
+    select coalesce(max(family_number), 0) + 1 into v_next_number
+    from families
+    where drive_id = p_drive_id
+      and drive_school_id is not distinct from p_drive_school_id
+      and not is_confidential;
+  end if;
+
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, internal_notes, created_by)
+  values (p_drive_id, p_drive_school_id, v_next_number, p_is_confidential, p_sort_tag, p_internal_notes, auth.uid())
+  returning * into v_family;
+
+  return v_family;
+end;
+$$;
+```
+
+Why an advisory lock rather than just "select max, add one, insert" as two separate statements from the
+client: that's exactly the race described above — nothing stops two concurrent calls from both reading the
+same `max` before either has inserted. Doing the read, compute, and insert inside one function call, guarded
+by a lock scoped to (drive, school-or-confidential-pool), means a second concurrent call for the *same*
+scope simply waits its turn instead of racing; a call for a *different* school isn't blocked at all. This
+function is `security invoker`, not `security definer` — unlike `claim_card` (which exists specifically so
+an anonymous sponsor can act despite having zero table access), any authenticated staff member already has
+full insert rights on `families` directly, so there's nothing to bypass and no reason to run with elevated
+privileges.
 
 ## 6. `children` — one referral record per kid
 
@@ -384,7 +454,7 @@ on RLS alone to prevent race conditions or abuse.
 |---|---|---|---|
 | `drives`, `schools`, `drive_schools` | no direct access | read | read/write |
 | `families`, `children`, `cards` (non-confidential) | no direct access (only via `public_available_cards`) | read/write | read/write |
-| `families`, `children`, `cards` (confidential) | no access | **no access** | read/write |
+| `families`, `children`, `cards` (confidential) | no access | **create only** (see below); read/edit own submission | read/write |
 | `sponsors`, `assignments` | write only via claim function | read/write | read/write |
 | `profiles` | no access | own row only | read/write |
 | `audit_log` | no access | no access | read |
@@ -393,6 +463,35 @@ This is enforced with Postgres Row Level Security policies (not just app-code ch
 frontend can't leak a confidential family or someone's home info. A `cards` row inherits its
 confidentiality from its child's family (via a join), rather than carrying its own flag — one source of
 truth for "is this confidential," not two that could disagree.
+
+**`profiles.email` is a synced copy, not a live source.** `auth.users` (where the real email lives) has no
+grant at all for the client API — not even for admins — so without a copy here, the staff management page
+would have no way to identify accounts beyond `full_name`. Populated once at signup by `handle_new_user()`
+and backfilled for existing rows in the migration that added it; if someone changes their email through
+Supabase Auth later, this copy goes stale until manually refreshed. Acceptable for a handful of staff
+accounts — not worth a sync trigger on `auth.users` for this scale.
+
+**A trigger, not just RLS, protects `role` and `can_view_confidential`.** The "own row" update policy above
+is necessarily row-level (Postgres RLS has no column-level equivalent) — it can't tell "editing your own
+`full_name`" apart from "editing your own `role`." Left alone, that policy would let any volunteer promote
+themselves to admin with a direct table update. `prevent_role_self_escalation()` (a `before update` trigger
+on `profiles`) closes that: a non-admin can still update their own row, just not those two columns, no
+matter what path the request takes to the database.
+
+**Any staff member can *create* a confidential referral; only cleared staff can keep seeing it.** The
+original design gated INSERT the same way as SELECT — requiring `can_view_confidential()` just to create a
+confidential family/child/card/wishlist_item — which meant an ordinary volunteer flagging a sensitive case
+during intake would hit a bare RLS error and couldn't submit at all. That's resolved now: insert is open to
+any authenticated staff member (`with check (true)`; the row's `family_id`/`child_id` still has to be a
+real, known uuid, so this isn't a meaningful new exposure). The read/update gate is unchanged for
+`can_view_confidential()`/admin, and extended to also cover `families.created_by = auth.uid()` — the
+volunteer who personally entered a confidential case can still see and fix their own submission, but gains
+no visibility into confidential families anyone else created.
+
+**At most one `open` drive at a time.** `create unique index one_open_drive on drives (status) where
+status = 'open';` — nothing previously stopped two drives from both being `open` simultaneously (e.g.
+forgetting to close last year's before opening this year's); the app would have just silently picked the
+newer year. Now the database rejects it outright.
 
 ## Open schema questions
 
@@ -407,6 +506,15 @@ truth for "is this confidential," not two that could disagree.
 - Is one `scheduled_pickup_at` per family enough, or do we need multiple distinct distribution events
   (e.g. different pickup days per school)? If the latter, we'll want a `distribution_events` table rather
   than a single timestamp on `families`. Low cost to add later if it turns out to be needed.
-- Does a referral ever split siblings across two different `drive_school_id`s? Current design assumes one
-  family belongs to exactly one school (or is fully confidential) — if a family can be genuinely split,
-  the model needs a rethink.
+- ~~Does a referral ever split siblings across two different `drive_school_id`s?~~ → **Resolved** (see
+  DESIGN.md §8): yes, in practice, and the answer is to let it split — a cross-school household becomes
+  multiple `Family` records, one per school, rather than changing the model. `Family` was never meant to be
+  a strict household grouping, just a distribution-day convenience.
+- **PII retention — decided (for now): keep indefinitely, revisit later.** Asked directly; the answer as of
+  2026-07 is not to build any automatic purge/anonymization yet. `audit_log` keeps a full jsonb copy of
+  every insert/update forever (see §11), with no cascade tied to the source record, so this applies there
+  too. The proposal below is still here for whenever this gets revisited, but nothing should be built
+  against it until that happens: archive a drive (already supported — see the `drives` page) at season's
+  end, then anonymize `children`/`families`/`sponsors` for drives archived more than N years ago (redact
+  names/contact info, keep grade/counts/statuses for year-over-year reporting), and separately purge or
+  redact `audit_log` rows referencing those same records.
