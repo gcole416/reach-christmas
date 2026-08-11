@@ -622,11 +622,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       })
       .eq("id", familyId);
     if (!force) {
-      // Guard with the value the pre-flight just read rather than the one the
-      // caller passed: identical at this point (we just compared them), but
-      // guaranteed to be PostgREST's own rendering, un-round-tripped through
-      // form state. Still closes the pre-flight-to-write window.
-      familyUpdate = familyUpdate.eq("updated_at", familyRow.updated_at);
+      // Guard with the caller's baseline, not the value the pre-flight just
+      // read. The two are identical here (we just compared them and returned
+      // otherwise), so this changes no behaviour today — but it makes the
+      // database an independent second check of the version the user actually
+      // edited, so a future bug in the string comparison above fails closed
+      // instead of writing unguarded. Still closes the pre-flight-to-write
+      // window either way.
+      familyUpdate = familyUpdate.eq("updated_at", expectedFamilyUpdatedAt);
     }
     const { data: familyUpdated, error: familyError } = await familyUpdate.select("id");
     if (familyError) {
@@ -669,11 +672,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // Present for every id-bearing block — the pre-flight loop above
         // returned NOT_FOUND for any that weren't.
         const knownVersion = currentChildById.get(childId);
-        if (!force && knownVersion) {
-          // Same reasoning as the family guard above: use the pre-flight
-          // reading of this row's version, and .select() so a zero-row result
-          // is observable.
-          childUpdate = childUpdate.eq("updated_at", knownVersion.updated_at);
+        if (!force) {
+          if (!knownVersion || !child.updatedAt) {
+            // Unreachable via the pre-flight loop, which already rejected an
+            // id-bearing block that's missing from the map (NOT_FOUND) or has
+            // no version to check (UNVERIFIABLE). If that invariant ever
+            // drifts, fail closed here rather than issuing an unguarded
+            // update. Generic not-found, and deliberately no `conflict` flag:
+            // same privacy rule as the pre-flight: never confirm to a
+            // volunteer that a row they can't see exists.
+            await refresh();
+            return { ok: false, error: NOT_FOUND_MESSAGE, partialSave: wroteSomething };
+          }
+          // Same reasoning as the family guard above: guard on the caller's
+          // baseline for this row, and .select() so a zero-row result is
+          // observable.
+          childUpdate = childUpdate.eq("updated_at", child.updatedAt);
         }
         const { data: childUpdated, error: updateError } = await childUpdate.select("id");
         if (updateError) {

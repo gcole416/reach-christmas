@@ -17,6 +17,10 @@ Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--re
   overwrite the first's (US-13 / GitLab issue #2). Don't drop those triggers, don't add a precision
   modifier to the columns (`timestamptz(3)` would round microseconds away and break the match), and
   don't let app code reformat the value — it has to round-trip byte-for-byte.
+  **Gap to know about:** editing `wishlist_items` does *not* bump the parent `children.updated_at`, so
+  wishlist rows are not covered by that check. It's safe today only because every UI path that edits a
+  wishlist also writes the child row through the same `saveFamilyEdit()` call. If you ever build a
+  wishlist-only editor, it needs its own conflict story first.
 - Enums are used for small fixed sets of statuses; free text is used wherever the old spreadsheet
   showed messy real-world values (e.g. sizes like `"32-34"` or `"Girls 6"`) that don't fit a clean type.
 - `profiles` is the staff/volunteer accounts table — named to match Supabase's common convention of

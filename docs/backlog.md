@@ -243,19 +243,79 @@ so **no migration is required**. The missing piece is that `updated_at` is
 never selected or mapped into the client.
 
 Acceptance criteria:
-- [ ] `updated_at` is fetched and mapped for `families` and `children` into the client data bundle.
-- [ ] `saveFamilyEdit()` sends the `updated_at` it loaded and the update is rejected if the row changed since (`.eq("updated_at", loadedValue)` or a guarded RPC).
-- [ ] On rejection the edit form shows a plain-language warning ("Someone else changed this family while you were editing") and does not silently discard the user's typed input.
-- [ ] The user can reload fresh values and re-apply their change.
-- [ ] Existing "other changes on this page may already be saved" messaging stays accurate — i.e. it appears only when writes actually did land before the conflict was detected, and not when the save was rejected before writing anything.
+- [x] `updated_at` is fetched and mapped for `families` and `children` into the client data bundle.
+- [x] `saveFamilyEdit()` sends the `updated_at` it loaded and the update is rejected if the row changed since (`.eq("updated_at", loadedValue)` or a guarded RPC).
+- [x] On rejection the edit form shows a plain-language warning ("Someone else changed this family while you were editing") and does not silently discard the user's typed input.
+- [x] The user can reload fresh values and re-apply their change.
+- [x] Existing "other changes on this page may already be saved" messaging stays accurate — i.e. it appears only when writes actually did land before the conflict was detected, and not when the save was rejected before writing anything.
+
+**No migration was made or needed** — `families`/`children` already had `updated_at` + `set_updated_at` triggers. database-engineer ran **no SQL against any project**, dev or prod.
+
+How it works: `saveFamilyEdit()` does a **pre-flight** re-read of `updated_at` for the family and every existing child and rejects **before writing anything** on a mismatch — that's what keeps the "may already be saved" sentence a rare case rather than the normal one. Each UPDATE additionally carries `.eq("updated_at", <the caller's baseline>)` with `.select()`, because supabase-js does *not* error on a zero-row update; the empty-array check is the actual conflict signal.
 
 Out of scope (deliberate, not oversights):
 - Field-level merge / showing a diff of what the other person changed. The user gets "reload theirs" or "keep mine" — not a three-way merge.
-- Conflict detection on the other family write paths (`updateFamilyDistribution`, `checkInFamily`, `undoCheckInFamily`). Those are single-field, idempotent-ish actions where last-write-wins is defensible; this story is scoped to the full-record edit form.
+- Conflict detection on the other family write paths (`updateFamilyDistribution`, `checkInFamily`, `undoCheckInFamily`). Those are single-field, idempotent-ish actions where last-write-wins is defensible; this story is scoped to the full-record edit form. **Note for distribution day:** these write to `families` and fire the trigger, so a check-in during someone's open edit *will* raise a genuine "Someone else changed this family" warning. That's correct behaviour, not a bug — and a force-save only writes `sort_tag`/`internal_notes`, so `checked_in_at` survives it.
+- "Save my version anyway" has no time bound — a banner left open for an hour will still overwrite changes made after the conflict the user was shown. Consistent with the no-merge decision above.
+- Wishlist edits don't bump `children.updated_at`, so the wholesale delete+replace of wishlist rows is unversioned. Safe only because every UI path that edits a wishlist also writes the child row through this same function — see the warning in SCHEMA.md before building a wishlist-only editor.
 - Any schema change. If one turns out to be genuinely required, it stops and comes back to the owner first.
 
-Status: In progress
+Status: In review — code complete, code-reviewer passed with no critical issues, all 5 criteria verified against a stubbed PostgREST. **Blocked on owner** for live verification: the two dev test accounts fail sign-in with "Email not confirmed" and the dev database is empty, so nothing could be run against a real Postgres. Five live tests are committed and ready in `web/tests/e2e/concurrency.spec.ts` (`--grep "US-13"`).
 Owner: database-engineer (data layer), frontend-designer (edit-form UI), qa-tester (verification), code-reviewer (gate)
+
+---
+
+## US-14: Don't discard typed input when a background refresh fails
+
+As a staff member, I want the admin page to keep what I've typed when a
+background data refresh fails, so that a network blip doesn't cost me my work.
+
+Found by qa-tester during US-13 and confirmed reproducible; deliberately
+deferred rather than widening US-13's scope. Pre-existing behaviour, not a
+regression from US-13.
+
+`AdminGate.tsx`'s `if (error)` branch runs after the loading branch and swaps
+the **entire page** for a bare error string whenever `error` is set — including
+after a good initial load, when `data` is perfectly valid. US-13 fixed the
+sibling case (`if (loading)` → `if (loading && !data)`, which was unmounting
+the page on every refresh); this is the same class of bug one branch down.
+
+Repro: open a family, type into Internal notes, cause the child write to fail
+so `saveFamilyEdit` calls `refresh()`, and make that refresh fail. The page
+renders only the error string; everything typed is gone.
+
+Acceptance criteria:
+- [ ] A failed refresh after a successful initial load shows the error without unmounting the page or discarding form state.
+- [ ] A failed *initial* load (no `data` yet) still shows the full-page error as it does today.
+- [ ] `refresh()` can tell its caller whether it succeeded, so "Reload the latest version" on the family edit form can't silently not-reload.
+
+Status: Backlog
+Owner: unassigned
+
+---
+
+## US-15: Confirm dev test accounts and reseed the dev database
+
+As the team, we want the dev Supabase project usable for automated testing, so
+that stories can be verified against a real database instead of a stub.
+
+Discovered while trying to verify US-13. This is the reason US-13 is sitting in
+review rather than Done, and it blocks the *entire* existing e2e suite
+(`security.spec.ts` and `ui-flows.spec.ts` fail at `signInAs` too), not just
+the new tests.
+
+Acceptance criteria:
+- [ ] Both dev test accounts (`testadmin@test.account`, `testuser@test.account`) can sign in — they currently fail with `email_not_confirmed`. The stored passwords are correct; only the confirmation flag is missing. Fix in Supabase dashboard → Authentication → Users → confirm each, or turn off "Confirm email" on the dev project (`mailer_autoconfirm` is currently `false`).
+- [ ] The dev database is seeded — `reset_dev_sql` then `demo_seed` (see [memory.md](../memory.md)). It is currently empty.
+- [ ] `npx playwright test concurrency.spec.ts --grep "US-13"` passes, in particular the `updated_at` precision round-trip test.
+
+Requires dashboard access — cannot be done by an agent, and explicitly must not
+be worked around with the service_role key.
+
+Status: Backlog
+Owner: unassigned (owner action)
+
+---
 
 ---
 

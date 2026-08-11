@@ -1,4 +1,0 @@
-# Scratch mirror of the app created by tests/stub/run-stub-suite.mjs so the
-# stub-backed suite can run its own `next dev` without fighting the one in web/
-# for Next's per-directory dev lock. Regenerated on every run; never edit here.
-.stub-app/

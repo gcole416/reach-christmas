@@ -113,14 +113,16 @@ function FamilyEditForm({
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(initialSuccessMessage);
   const [pendingAction, setPendingAction] = useState<"save" | "force" | "reload" | null>(null);
-  const conflictRef = useRef<HTMLDivElement>(null);
+  const choiceRef = useRef<HTMLDivElement>(null);
 
   // role="alert" gets the banner announced; this gets the user to it. It renders
   // above the Save button that triggered it, so without moving focus a keyboard
   // user would have to shift-tab backwards to find the two choices — and on a
   // long family the banner may be off-screen entirely for everyone else.
+  // Both decision banners (conflict and partial save) share the ref: only one of
+  // them is ever on screen at a time.
   useEffect(() => {
-    if (failure?.conflict) conflictRef.current?.focus();
+    if (failure?.conflict || failure?.partialSave) choiceRef.current?.focus();
   }, [failure]);
 
   if (!data) return null;
@@ -144,6 +146,14 @@ function FamilyEditForm({
     : (school?.name ?? "Direct referral (no school)");
 
   const busy = pendingAction !== null;
+
+  // `partialSave` is only ever returned after the family row itself was
+  // updated, so once it comes back the baseline this form was seeded from is
+  // stale BY THE USER'S OWN SAVE. A plain "Save changes" retry from here can
+  // only ever come back as a conflict — one that blames a person who doesn't
+  // exist, above a button that offers to throw the user's typing away. So the
+  // plain retry is withdrawn and the banner's two explicit choices take over.
+  const halfSaved = failure?.partialSave === true;
 
   // Any edit invalidates the "Changes saved." banner — leaving it up next to
   // unsaved typing is a small lie that costs the form its credibility. The
@@ -220,6 +230,14 @@ function FamilyEditForm({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    // The Save button is pulled from the page while a half-saved banner is up,
+    // but pressing Enter in any text input still submits the form. Send that
+    // back to the two choices instead of into a save that would report a
+    // conflict nobody caused.
+    if (halfSaved) {
+      choiceRef.current?.focus();
+      return;
+    }
     await runSave(false);
   }
 
@@ -305,7 +323,7 @@ function FamilyEditForm({
 
         {failure?.conflict ? (
           <div
-            ref={conflictRef}
+            ref={choiceRef}
             role="alert"
             tabIndex={-1}
             aria-labelledby="conflict-heading"
@@ -365,18 +383,73 @@ function FamilyEditForm({
           </div>
         ) : null}
 
-        {failure && !failure.conflict ? (
+        {failure && !failure.conflict && failure.partialSave ? (
+          <div
+            ref={choiceRef}
+            role="alert"
+            tabIndex={-1}
+            aria-labelledby="partial-heading"
+            className="rounded-xl border border-status-serious/40 bg-status-serious/10 p-4 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue"
+          >
+            <h2 id="partial-heading" className="text-sm font-semibold text-ink-primary">
+              Only part of this save went through
+            </h2>
+            {/* The data layer's own message ends with the same sentence this
+                banner's heading now makes in plain language — drop it rather
+                than say it twice. */}
+            <p className="mt-1.5 text-sm text-ink-secondary">
+              {failure.message.replace(PARTIAL_SAVE_NOTICE, "").trim()}
+            </p>
+            <p className="mt-2 text-sm text-ink-secondary">
+              The family details saved, then it stopped partway. Nothing you typed has been lost — it&apos;s
+              all still on this page. Saving again on its own won&apos;t work now that part of it has
+              landed, so choose one:
+            </p>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <button
+                  type="button"
+                  onClick={handleReloadTheirs}
+                  disabled={busy}
+                  aria-describedby="partial-reload-help"
+                  className="w-full rounded-lg bg-cat-blue px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue disabled:opacity-50"
+                >
+                  {pendingAction === "reload" ? "Reloading…" : "Reload the latest version"}
+                </button>
+                <p id="partial-reload-help" className="mt-1.5 text-xs text-ink-secondary">
+                  Shows you what did save, and replaces what you typed. Then redo the rest.
+                </p>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => runSave(true)}
+                  disabled={busy}
+                  aria-describedby="partial-force-help"
+                  className="w-full rounded-lg border border-border bg-surface px-4 py-2.5 text-sm font-medium text-ink-primary hover:border-ink-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue disabled:opacity-50"
+                >
+                  {pendingAction === "force" ? "Saving…" : "Try again with what I typed"}
+                </button>
+                <p id="partial-force-help" className="mt-1.5 text-xs text-ink-secondary">
+                  Keeps everything on this page and saves it over what&apos;s on the family now.
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-3 text-xs text-ink-secondary">
+              If you&apos;re not sure, reload — you&apos;ll see exactly what saved and what didn&apos;t.
+            </p>
+          </div>
+        ) : null}
+
+        {failure && !failure.conflict && !failure.partialSave ? (
           <div
             role="alert"
             className="rounded-lg border border-status-critical/30 bg-status-critical/10 px-3 py-2 text-sm text-ink-primary"
           >
             <p>{failure.message}</p>
-            {/* Only ever shown when writes actually landed — and not a second
-                time on the paths where the data layer's own message already
-                ends with this sentence. */}
-            {failure.partialSave && !failure.message.includes(PARTIAL_SAVE_NOTICE) ? (
-              <p className="mt-1">{PARTIAL_SAVE_NOTICE}</p>
-            ) : null}
           </div>
         ) : null}
 
@@ -395,15 +468,20 @@ function FamilyEditForm({
           </div>
         ) : null}
 
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={busy}
-            className="rounded-lg bg-cat-blue px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue disabled:opacity-50"
-          >
-            {pendingAction === "save" ? "Saving…" : "Save changes"}
-          </button>
-        </div>
+        {/* Withdrawn, not disabled, while the page is half-saved: a greyed-out
+            primary button is a dead end you can't focus to ask about, and the
+            banner immediately above already holds both real ways forward. */}
+        {halfSaved ? null : (
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={busy}
+              className="rounded-lg bg-cat-blue px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue disabled:opacity-50"
+            >
+              {pendingAction === "save" ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        )}
       </form>
 
       <p className="mt-6 text-xs text-ink-muted">
