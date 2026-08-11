@@ -4,16 +4,18 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { createClient } from "./supabase/client";
 import {
   mapAssignment,
+  mapAuditLogEntry,
   mapCard,
   mapChild,
   mapDrive,
   mapDriveSchool,
   mapFamily,
+  mapProfile,
   mapSchool,
   mapSponsor,
   mapWishlistItem,
 } from "./supabase/mappers";
-import type { AppRole, AssignmentStatus, DataBundle, DistributionMethod } from "./types";
+import type { AppRole, AssignmentStatus, AuditLogEntry, DataBundle, DistributionMethod } from "./types";
 
 const SAVED_VIEWS_KEY = "reach-ol-saved-views-v1";
 
@@ -112,7 +114,7 @@ const DataContext = createContext<DataContextValue | null>(null);
 async function fetchDataBundle(): Promise<DataBundle> {
   const supabase = createClient();
 
-  const [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments] =
+  const [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments, profiles] =
     await Promise.all([
       supabase.from("drives").select("*").eq("status", "open").order("year", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("schools").select("*"),
@@ -123,9 +125,14 @@ async function fetchDataBundle(): Promise<DataBundle> {
       supabase.from("sponsors").select("*"),
       supabase.from("cards").select("*"),
       supabase.from("assignments").select("*"),
+      // RLS ("read own or admin profile", 20260708120000_init.sql) means a
+      // non-admin gets back only their own row here, not the full roster —
+      // that's expected, not a bug. The admin volunteer-management page is
+      // the only consumer that needs every row, and it only renders for admins.
+      supabase.from("profiles").select("*"),
     ]);
 
-  for (const res of [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments]) {
+  for (const res of [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments, profiles]) {
     if (res.error) throw new Error(res.error.message);
   }
 
@@ -145,6 +152,7 @@ async function fetchDataBundle(): Promise<DataBundle> {
     sponsors: (sponsors.data ?? []).map(mapSponsor),
     cards: (cards.data ?? []).map(mapCard),
     assignments: (assignments.data ?? []).map(mapAssignment),
+    profiles: (profiles.data ?? []).map(mapProfile),
   };
 }
 
@@ -174,6 +182,46 @@ async function reconcileCardsForChild(
   if (updateError) return { error: updateError.message };
 
   return { error: null };
+}
+
+// Deliberately NOT part of fetchDataBundle / DataContext: audit_log can grow
+// large (a row per insert/update/delete across 10 tables) and its `diff`
+// column carries full row contents for families/children, i.e. real kids'
+// PII. Loading it on every admin page load would mean pulling that PII into
+// memory even for admins who never open the audit viewer. Call this only
+// from the audit-log page itself, on demand.
+//
+// RLS already restricts SELECT on audit_log to is_admin() (see "admin read
+// audit_log" policy in supabase/migrations/20260708120000_init.sql), so a
+// volunteer calling this gets an empty result / RLS error, not a leak — but
+// the UI should still only expose the entry point to admins.
+//
+// NOTE for whoever builds the viewer: `changed_by` is a profiles.id (uuid),
+// not a name. `data.profiles` (fetched as part of the main DataBundle, see
+// fetchDataBundle above) now exists and can be joined against by id to show
+// a name — but remember a non-admin's `data.profiles` only ever contains
+// their own row (RLS), so that join will only resolve to a name for entries
+// they themselves made unless the viewer is admin-gated.
+export async function fetchAuditLog(options?: {
+  tableName?: string;
+  limit?: number;
+}): Promise<AuditLogEntry[]> {
+  const supabase = createClient();
+
+  let query = supabase
+    .from("audit_log")
+    .select("*")
+    .order("changed_at", { ascending: false })
+    .limit(options?.limit ?? 200);
+
+  if (options?.tableName) {
+    query = query.eq("table_name", options.tableName);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map(mapAuditLogEntry);
 }
 
 function loadSavedViews(): SavedView[] {
@@ -261,6 +309,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
       distribution_method: input.distributionMethod === "inherit" ? null : input.distributionMethod,
     });
     if (driveSchoolError) {
+      // The client-side codeTaken check above isn't atomic — two admins
+      // submitting the same new code at nearly the same instant can both
+      // pass it, since neither has the other's in-flight insert in their
+      // locally-loaded `data` yet. The real guarantee is the
+      // `unique (drive_id, code)` constraint on drive_schools (see
+      // supabase/migrations/20260708120000_init.sql), which surfaces here as
+      // a Postgres unique-violation (code 23505). Translate that specific
+      // case back into the same friendly message the pre-check uses instead
+      // of leaking the raw constraint name; fall through to the raw message
+      // for any other error (e.g. RLS denial, network failure) so we don't
+      // swallow genuinely useful info.
+      if (driveSchoolError.code === "23505" && driveSchoolError.message.includes("drive_schools_drive_id_code_key")) {
+        return {
+          ok: false,
+          error: `Code "${trimmedCode}" was just taken by another school this drive.`,
+        };
+      }
       return { ok: false, error: driveSchoolError.message };
     }
 

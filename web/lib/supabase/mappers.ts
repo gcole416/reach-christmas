@@ -6,6 +6,8 @@ import type {
   AppRole,
   Assignment,
   AssignmentStatus,
+  AuditAction,
+  AuditLogEntry,
   CardRecord,
   Child,
   DistributionMethod,
@@ -111,6 +113,18 @@ export function mapCard(row: any): CardRecord {
     copyNumber: row.copy_number,
     totalCopies: row.total_copies,
     printedAt: row.printed_at,
+  };
+}
+
+export function mapAuditLogEntry(row: any): AuditLogEntry {
+  return {
+    id: row.id,
+    tableName: row.table_name,
+    recordId: row.record_id,
+    action: row.action as AuditAction,
+    changedBy: row.changed_by,
+    changedAt: row.changed_at,
+    diff: row.diff,
   };
 }
 

@@ -476,7 +476,10 @@ is necessarily row-level (Postgres RLS has no column-level equivalent) — it ca
 `full_name`" apart from "editing your own `role`." Left alone, that policy would let any volunteer promote
 themselves to admin with a direct table update. `prevent_role_self_escalation()` (a `before update` trigger
 on `profiles`) closes that: a non-admin can still update their own row, just not those two columns, no
-matter what path the request takes to the database.
+matter what path the request takes to the database. Scoped to `auth.uid() is not null` (fixed in
+[supabase/migrations/20260808130000_fix_role_escalation_guard_null_auth.sql](supabase/migrations/20260808130000_fix_role_escalation_guard_null_auth.sql))
+so it doesn't also block service-role/system contexts — e.g. the demo/reset scripts — which already bypass
+RLS entirely and are trusted.
 
 **Any staff member can *create* a confidential referral; only cleared staff can keep seeing it.** The
 original design gated INSERT the same way as SELECT — requiring `can_view_confidential()` just to create a
