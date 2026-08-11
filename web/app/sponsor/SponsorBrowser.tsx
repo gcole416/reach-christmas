@@ -97,6 +97,11 @@ export function SponsorBrowser() {
       p_sponsor_phone: sponsor.phone || null,
     });
     if (error) {
+      // The claim failed (e.g. someone else just claimed this card first).
+      // Refresh the grid so the now-stale card disappears, but keep the
+      // modal open by re-throwing — ClaimModal's handleSubmit catches this
+      // to show the error message to the sponsor.
+      await loadCards();
       throw new Error(error.message);
     }
     setActiveCard(null);

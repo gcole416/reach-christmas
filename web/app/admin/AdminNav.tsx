@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 const TABS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/schools", label: "Schools" },
+  { href: "/admin/volunteers", label: "Volunteers" },
+  { href: "/admin/audit", label: "Audit log" },
 ];
 
 export function AdminNav() {

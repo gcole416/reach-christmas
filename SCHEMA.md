@@ -59,6 +59,17 @@ create table profiles (
 );
 ```
 
+**Privilege-escalation guard (added [supabase/migrations/20260808130000_profiles_column_guard.sql](supabase/migrations/20260808130000_profiles_column_guard.sql)):**
+the RLS policy `"update own or admin profile"` is row-level only — it lets a
+user update their own row, but doesn't restrict *which* columns change. Without
+more, that would let a volunteer set their own `role` or
+`can_view_confidential` via a direct client call. A `before update` trigger
+(`guard_profile_privilege_columns`) closes this: it raises an exception if
+either column is changing and the caller isn't `is_admin()` (with an
+`auth.uid() is not null` escape hatch for service-role/system contexts, which
+already bypass RLS and are trusted). This is defense in depth on top of the
+RLS policy, not a replacement for it.
+
 ## 3. `schools` — reusable year over year
 
 Kept separate from any one drive, since a school might participate in multiple years and its identity

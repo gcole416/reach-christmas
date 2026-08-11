@@ -3,8 +3,11 @@
 // terms of DataBundle / types.ts (see SCHEMA.md for the source-of-truth
 // column names).
 import type {
+  AppRole,
   Assignment,
   AssignmentStatus,
+  AuditAction,
+  AuditLogEntry,
   CardRecord,
   Child,
   DistributionMethod,
@@ -12,6 +15,7 @@ import type {
   DriveSchool,
   DriveStatus,
   Family,
+  Profile,
   School,
   Sponsor,
   WishlistItem,
@@ -93,6 +97,28 @@ export function mapCard(row: any): CardRecord {
     copyNumber: row.copy_number,
     totalCopies: row.total_copies,
     printedAt: row.printed_at,
+  };
+}
+
+export function mapProfile(row: any): Profile {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    role: row.role as AppRole,
+    canViewConfidential: row.can_view_confidential,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapAuditLogEntry(row: any): AuditLogEntry {
+  return {
+    id: row.id,
+    tableName: row.table_name,
+    recordId: row.record_id,
+    action: row.action as AuditAction,
+    changedBy: row.changed_by,
+    changedAt: row.changed_at,
+    diff: row.diff,
   };
 }
 

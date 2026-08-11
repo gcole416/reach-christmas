@@ -64,6 +64,18 @@ export interface Child {
   targetCardCount: number;
 }
 
+// Staff/volunteer account. RLS on `profiles` means a non-admin fetching this
+// only ever gets their own row back (see supabase/migrations/20260708120000_init.sql
+// "read own or admin profile") — admins get every row, which is what the
+// volunteer-management admin page is built on.
+export interface Profile {
+  id: string;
+  fullName: string;
+  role: AppRole;
+  canViewConfidential: boolean;
+  createdAt: string;
+}
+
 export interface WishlistItem {
   id: string;
   childId: string;
@@ -97,6 +109,29 @@ export interface Assignment {
   deliveredAt: string | null;
 }
 
+export type AuditAction = "insert" | "update" | "delete";
+
+// Row shape of `audit_log` (see SCHEMA.md §11). Admin-only, RLS-restricted to
+// is_admin(); fetched on demand via lib/store.tsx's fetchAuditLog, never as
+// part of the full-bundle fetch — see that function's docstring for why.
+export interface AuditLogEntry {
+  id: string;
+  tableName: string;
+  recordId: string;
+  action: AuditAction;
+  // profiles.id of the user who made the change, or null if the change was
+  // made without an authenticated session (auth.uid() was null at write
+  // time — e.g. a service-role/system operation). Not a user-facing name;
+  // see the fetchAuditLog docstring in lib/store.tsx for how to resolve it.
+  changedBy: string | null;
+  changedAt: string;
+  // Shape varies by tableName/action: insert/delete store the full row
+  // (to_jsonb(old|new)); update stores { old: {...}, new: {...} }. Typed
+  // loosely on purpose — narrow it at the call site once you know the
+  // action/tableName.
+  diff: Record<string, unknown> | null;
+}
+
 // Everything the admin UI needs, fetched from Supabase in one shot by
 // lib/store.tsx — one bundle so the derivation functions in lib/queries.ts
 // can take a single argument.
@@ -110,4 +145,7 @@ export interface DataBundle {
   sponsors: Sponsor[];
   cards: CardRecord[];
   assignments: Assignment[];
+  // Own row only for a non-admin, every profile for an admin — see the
+  // `Profile` doc comment above. Powers the admin volunteer-management page.
+  profiles: Profile[];
 }
