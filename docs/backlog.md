@@ -312,8 +312,78 @@ Acceptance criteria:
 Requires dashboard access — cannot be done by an agent, and explicitly must not
 be worked around with the service_role key.
 
+Status: Done
+Owner: Grant (owner action) — confirmed both accounts and reseeded 2026-08-11
+
+---
+
+## US-16: Fix confidential-family RLS leak on children/cards/wishlist_items
+
+As a family in the drive, I want my confidential status to actually keep my
+children's records private from non-cleared volunteers, so that marking a
+family confidential means what it says.
+
+Found while verifying US-13, unrelated to it. `children`/`cards`/`wishlist_items`
+gated confidentiality with a subquery back to `families` (e.g. `not exists
+(select 1 from families f where f.id = family_id and f.is_confidential)`).
+That subquery is itself subject to `families`' own RLS, so for a caller who
+can't see a confidential family, the subquery finds nothing and the check
+incorrectly passes — the family stays hidden, but its children/cards/wishlist
+items leak through regardless of role. Same root cause also broke
+`create_family()`'s confidential-numbering count, causing real unique-constraint
+collisions for any caller who couldn't see an existing confidential family in
+the same drive.
+
+Acceptance criteria:
+- [x] All six affected policies (`children`/`cards`/`wishlist_items` × read/update) replaced the raw `families` subquery with `security definer` helper functions (`family_is_confidential`, `family_created_by`, `child_family_id`) that resolve confidentiality independent of the caller's own RLS visibility.
+- [x] `create_family()`'s confidential branch uses a matching helper (`next_confidential_family_number`) instead of a caller-RLS-subject read; its advisory-lock concurrency guarantee (from US-2-era `atomic_family_numbers.sql`) is untouched.
+- [x] Reproduced live against dev before the fix (3 new tests in `security.spec.ts`, confirmed red), then confirmed green after the migration was applied.
+- [x] Full existing e2e suite re-run afterward — no regressions from this change (2 unrelated pre-existing failures found and filed separately as US-17/US-18).
+- [ ] Applied to prod — pending reach-reviewer sign-off.
+
+Status: In review
+Owner: database-engineer — see [supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql)
+
+---
+
+## US-17: Public sponsor page returns zero cards for real anonymous visitors
+
+As a sponsor, I want to actually see and claim available kids on `/sponsor`
+without an account, so that I can participate in the drive at all.
+
+Found while regression-testing US-16, unrelated to it — `public_available_cards`
+is untouched by that fix. Querying the view as a genuinely anonymous client
+returns 0 rows; querying the identical view as an authenticated admin returns
+15 rows (5 legitimately available cards with wishlist items). The view is
+deliberately not `security_invoker`, intending to bypass RLS on the base
+tables via the view owner's privileges regardless of caller — that assumption
+doesn't appear to hold in practice. Possibly never exercised against live
+Postgres before, since the dev project was unusable until this session.
+
+No acceptance criteria yet — needs root-causing before it can be scoped as a fix.
+
 Status: Backlog
-Owner: unassigned (owner action)
+Owner: unassigned
+
+---
+
+## US-18: Confidential-redaction e2e test times out despite correct rendering
+
+As the team, we want e2e coverage of confidential-name redaction to actually
+run, so regressions there get caught automatically.
+
+Found while regression-testing US-16, unrelated to it. The "confidential name
+redaction" test in `ui-flows.spec.ts` times out waiting for a locator that,
+per the saved page snapshot at failure time, is present and the page is
+rendering correctly (redaction itself works — "Z." shown to the volunteer,
+full name to the admin). Ruled out: flakiness (fails identically on repeat),
+timeout length (still fails at 60s), and stale dev-server state (still fails
+after a clean restart). Not yet root-caused.
+
+No acceptance criteria yet — needs root-causing before it can be scoped as a fix.
+
+Status: Backlog
+Owner: unassigned
 
 ---
 

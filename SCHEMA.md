@@ -501,6 +501,37 @@ real, known uuid, so this isn't a meaningful new exposure). The read/update gate
 volunteer who personally entered a confidential case can still see and fix their own submission, but gains
 no visibility into confidential families anyone else created.
 
+**Confidentiality checks on `children`/`cards`/`wishlist_items` must not depend on the caller's own
+visibility into `families`.** The original read/update policies on those three tables gated confidentiality
+with an inline `not exists (select 1 from families f where ... and f.is_confidential)` subquery. That
+subquery runs as the querying user, so it's itself subject to `families`' own RLS policy — for a volunteer
+without `can_view_confidential()` who didn't create the family, the confidential family's row is invisible
+to them *inside that subquery too*, `not exists(...)` evaluates to true, and the child/card/wishlist item
+leaks through even though the family record itself stays correctly hidden (GitLab issue #19; fixed by
+[supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql](supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql)).
+Fixed by resolving confidentiality/ownership through `security definer` helper functions
+(`family_is_confidential(family_id)`, `family_created_by(family_id)`, `child_family_id(child_id)`) that read
+`families`/`children` with the function owner's privileges — same pattern as `is_admin()`/
+`can_view_confidential()` — rather than a subquery subject to the caller's own RLS. `families`' own policies
+were never affected (they check `is_confidential`/`created_by` directly on the row being evaluated, no
+subquery back to itself); neither were the INSERT policies on children/cards/wishlist_items, which have been
+unconditional (`with check (true)`) since the confidential-referral-access change above. Any future table
+that needs a confidentiality gate reached via a join back to `families` should use these helpers, not a raw
+subquery.
+
+**The same root cause also reached `create_family()`'s confidential-numbering read.** `create_family()` (§5
+above) is `security invoker`, and its confidential branch —
+`select coalesce(max(family_number), 0) + 1 from families where drive_id = ... and is_confidential` — is a
+permission-sensitive count subject to that same caller RLS on `families`. A caller who can't see an
+already-existing confidential family in a drive (not cleared, not its creator) computes a "next" number that
+family already holds, and the insert fails on the `families_number_confidential` unique index instead of
+succeeding with the real next number — same bug class as above, just surfacing as a confusing constraint
+violation instead of a data leak. Fixed in the same migration by routing that one count through
+`next_confidential_family_number(drive_id)`, a `security definer` helper; `create_family()` itself stays
+`security invoker` (the insert needs no elevated privilege, only that read did) and the non-confidential
+branch is untouched, since a non-confidential family is always visible under `families`' own policy
+regardless of caller.
+
 **At most one `open` drive at a time.** `create unique index one_open_drive on drives (status) where
 status = 'open';` — nothing previously stopped two drives from both being `open` simultaneously (e.g.
 forgetting to close last year's before opening this year's); the app would have just silently picked the
