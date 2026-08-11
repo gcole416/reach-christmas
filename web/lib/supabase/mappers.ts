@@ -66,6 +66,11 @@ export function mapFamily(row: any): Family {
     checkedInAt: row.checked_in_at,
     checkedInBy: row.checked_in_by,
     createdBy: row.created_by,
+    // Copied through verbatim on purpose — this is the row version used by
+    // saveFamilyEdit's concurrency guard, and any reformatting here (e.g.
+    // `new Date(...).toISOString()`, which drops microseconds) would break
+    // the `.eq("updated_at", ...)` match. See Family.updatedAt in types.ts.
+    updatedAt: row.updated_at,
   };
 }
 
@@ -84,6 +89,8 @@ export function mapChild(row: any): Child {
     shoeSize: row.shoe_size,
     otherNotes: row.other_notes,
     targetCardCount: row.target_card_count,
+    // Verbatim, same reasoning as mapFamily's updatedAt above.
+    updatedAt: row.updated_at,
   };
 }
 

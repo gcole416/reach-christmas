@@ -218,8 +218,44 @@ Acceptance criteria:
 - [x] **Two admins adding a school with the same code**: the database already had a `unique (drive_id, code)` constraint; this story added friendly error handling for it, so a losing admin now sees "Code "X" was just taken by another school this drive." instead of a raw Postgres error.
 - [x] **Two admins editing the same family/child record**: explicitly deferred — there is no edit UI for families/children yet (that's the intake/edit UI project, on hold pending the owner's user-base meeting). `families`/`children` already have `updated_at` columns to build a "changed since you loaded it" warning on, once that UI exists.
 
-Status: Done (claim + schools-form pieces); the admin-edit-conflict piece is Backlog, blocked on the intake/edit UI project
+Status: Done (claim + schools-form pieces); the admin-edit-conflict piece is **unblocked and split out as US-13** — the intake/edit UI it was waiting on now exists
 Owner: frontend-designer ([web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx)), database-engineer ([web/lib/store.tsx](../web/lib/store.tsx) `addSchool`)
+
+---
+
+## US-13: Detect concurrent edits to a family/child record
+
+As a staff member or volunteer editing a family, I want to be told when
+someone else has changed that family since I opened it, so that I don't
+silently overwrite their work (and they don't silently overwrite mine).
+
+Origin: GitLab issue #2 (`reach-christmas-group/reach-christmas-project`). This
+is the deferred fourth bullet of US-12, unblocked now that the family edit UI
+([web/app/admin/families/[familyId]/page.tsx](../web/app/admin/families/%5BfamilyId%5D/page.tsx)) exists.
+
+Today `saveFamilyEdit()` issues a bare `.update(...).eq("id", familyId)` with
+no version check: a volunteer who loaded the form five minutes ago overwrites
+everything a second volunteer saved in the meantime, with no warning to
+either. The database side is already in place — `families` and `children` both
+have `updated_at` with `set_updated_at` triggers
+([supabase/migrations/20260708120000_init.sql:448-453](../supabase/migrations/20260708120000_init.sql)) —
+so **no migration is required**. The missing piece is that `updated_at` is
+never selected or mapped into the client.
+
+Acceptance criteria:
+- [ ] `updated_at` is fetched and mapped for `families` and `children` into the client data bundle.
+- [ ] `saveFamilyEdit()` sends the `updated_at` it loaded and the update is rejected if the row changed since (`.eq("updated_at", loadedValue)` or a guarded RPC).
+- [ ] On rejection the edit form shows a plain-language warning ("Someone else changed this family while you were editing") and does not silently discard the user's typed input.
+- [ ] The user can reload fresh values and re-apply their change.
+- [ ] Existing "other changes on this page may already be saved" messaging stays accurate — i.e. it appears only when writes actually did land before the conflict was detected, and not when the save was rejected before writing anything.
+
+Out of scope (deliberate, not oversights):
+- Field-level merge / showing a diff of what the other person changed. The user gets "reload theirs" or "keep mine" — not a three-way merge.
+- Conflict detection on the other family write paths (`updateFamilyDistribution`, `checkInFamily`, `undoCheckInFamily`). Those are single-field, idempotent-ish actions where last-write-wins is defensible; this story is scoped to the full-record edit form.
+- Any schema change. If one turns out to be genuinely required, it stops and comes back to the owner first.
+
+Status: In progress
+Owner: database-engineer (data layer), frontend-designer (edit-form UI), qa-tester (verification), code-reviewer (gate)
 
 ---
 

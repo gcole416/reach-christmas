@@ -64,11 +64,32 @@ export interface AddFamilyInput {
 // caller still needs it back to show staff what got assigned, for tags.
 export type AddFamilyResult = { ok: true; familyNumber: number } | { ok: false; error: string };
 
-// Same shape as IntakeChildInput, plus which row it maps to: null means "not
-// saved yet" (insert), a uuid means "existing child" (update in place).
+// Same shape as IntakeChildInput, plus which row it maps to and which version
+// of that row the form was populated from.
 export interface EditableChildInput extends IntakeChildInput {
+  // null means "not saved yet" (insert), a uuid means "existing child"
+  // (update in place).
   id: string | null;
+  // The `Child.updatedAt` this block's fields were loaded from — null when
+  // the child block hasn't been saved yet (i.e. whenever `id` is null).
+  // Opaque string: pass it straight through from Child.updatedAt, never
+  // through `new Date(...)`/`.toISOString()` (that truncates microseconds and
+  // would make every save look like a conflict).
+  updatedAt: string | null;
 }
+
+// saveFamilyEdit's result. The two optional flags drive UI messaging:
+//   conflict    — the family/child changed underneath the user. Show the
+//                 "someone else changed this" warning and offer reload vs.
+//                 save-anyway (which re-calls with { force: true }).
+//   partialSave — some writes had already landed before the failure was
+//                 detected, so the page is now half-saved. Kept accurate: it
+//                 is false whenever nothing at all was written, which is the
+//                 normal case for a conflict (see the pre-flight check in
+//                 saveFamilyEdit).
+export type SaveFamilyEditResult =
+  | { ok: true }
+  | { ok: false; error: string; conflict?: boolean; partialSave?: boolean };
 
 export interface UpdateFamilyDetailsInput {
   sortTag: string;
@@ -93,11 +114,16 @@ interface DataContextValue {
   viewerRole: AppRole | null;
   addSchool: (input: AddSchoolInput) => Promise<Result>;
   addFamily: (input: AddFamilyInput) => Promise<AddFamilyResult>;
+  // `expectedFamilyUpdatedAt` is the Family.updatedAt the form was loaded
+  // from; pass `{ force: true }` only after the user has seen the conflict
+  // warning and explicitly chose to overwrite. See saveFamilyEdit below.
   saveFamilyEdit: (
     familyId: string,
     details: UpdateFamilyDetailsInput,
-    children: EditableChildInput[]
-  ) => Promise<Result>;
+    children: EditableChildInput[],
+    expectedFamilyUpdatedAt: string | null,
+    options?: { force?: boolean }
+  ) => Promise<SaveFamilyEditResult>;
   updateAssignmentStatus: (assignmentId: string, status: AssignmentStatus) => Promise<Result>;
   cancelAssignment: (assignmentId: string) => Promise<Result>;
   updateCardPrinted: (cardId: string, printed: boolean) => Promise<Result>;
@@ -222,6 +248,38 @@ export async function fetchAuditLog(options?: {
   if (error) throw new Error(error.message);
 
   return (data ?? []).map(mapAuditLogEntry);
+}
+
+// Sane plain-language defaults. The edit page owns the final wording of the
+// conflict banner (US-13) — these are what it gets if it just renders
+// `result.error`.
+const CONFLICT_MESSAGE =
+  "Someone else changed this family while you were editing it. Reload to see their version, or save your version anyway to replace theirs.";
+
+// Deliberately the SAME message for "the row does not exist" and "row level
+// security hid it from you". A volunteer without can_view_confidential() gets
+// zero rows back for a confidential family exactly like they would for a
+// deleted one (see the "staff read families" policy in
+// supabase/migrations/20260708140000_confidential_referral_access.sql), and
+// answering that with "someone else changed this" would confirm the row
+// exists. Generic not-found is the only safe answer on that path.
+const NOT_FOUND_MESSAGE =
+  "This family couldn't be found, or you no longer have access to it. Reload the page.";
+
+// Shown when the caller had no row version to check against, so we can't tell
+// whether anyone else has edited in the meantime. Refusing is the safe
+// direction: the whole point of US-13 is not to blind-overwrite.
+const UNVERIFIABLE_MESSAGE =
+  "Couldn't check whether anyone else has changed this family. Reload the page and make your edit again.";
+
+// Shape of the pre-flight version reads. Untyped supabase client, so these are
+// asserted rather than inferred.
+interface VersionRow {
+  id: string;
+  updated_at: string;
+}
+interface ChildVersionRow extends VersionRow {
+  child_index: number;
 }
 
 function loadSavedViews(): SavedView[] {
@@ -429,33 +487,165 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true, familyNumber: familyRow.family_number };
   }
 
+  // Concurrent-edit safe (US-13). Two layers, both needed:
+  //
+  //  1. A PRE-FLIGHT pass that re-reads the current `updated_at` of the family
+  //     and of every child of that family before writing anything, and bails
+  //     out with partialSave:false if any of them moved. Without this, a
+  //     conflict on child #3 would leave the family row and children #1-2
+  //     already mutated, and "other changes may already be saved" would be the
+  //     normal outcome of a conflict instead of a rare one.
+  //  2. A PER-ROW `.eq("updated_at", ...)` guard on each UPDATE, for the small
+  //     window between the pre-flight read and the write. Note the `.select()`
+  //     on every guarded update: PostgREST answers an UPDATE that matched zero
+  //     rows with 204/no body and supabase-js reports NO error for it, so
+  //     without asking for the affected rows back a blocked update is
+  //     indistinguishable from a successful one and the guard would silently
+  //     do nothing.
+  //
+  // `force: true` skips both comparisons (not the reads — those still resolve
+  // the child indexes and confirm access): the user has already been shown the
+  // conflict warning and chosen to overwrite.
+  //
+  // Deliberately does NOT call refresh() on the paths that wrote nothing, so a
+  // rejected save can't clobber whatever the user has typed into the form. The
+  // page decides when to pull fresh values (i.e. when the user picks "reload
+  // theirs").
   async function saveFamilyEdit(
     familyId: string,
     details: UpdateFamilyDetailsInput,
-    children: EditableChildInput[]
-  ): Promise<Result> {
-    if (!data) return { ok: false, error: "Data hasn't finished loading yet." };
+    children: EditableChildInput[],
+    expectedFamilyUpdatedAt: string | null,
+    options?: { force?: boolean }
+  ): Promise<SaveFamilyEditResult> {
+    if (!data) return { ok: false, error: "Data hasn't finished loading yet.", partialSave: false };
+
+    const force = options?.force === true;
 
     const validChildren = children.filter((c) => c.firstName.trim());
     if (validChildren.length === 0) {
-      return { ok: false, error: "A family needs at least one child with a first name." };
+      return { ok: false, error: "A family needs at least one child with a first name.", partialSave: false };
+    }
+
+    if (!force && !expectedFamilyUpdatedAt) {
+      return { ok: false, error: UNVERIFIABLE_MESSAGE, partialSave: false };
     }
 
     const supabase = createClient();
 
-    const { error: familyError } = await supabase
+    // ---- Pre-flight: read current versions, write nothing ------------------
+
+    const { data: familyRowData, error: familyCheckError } = await supabase
+      .from("families")
+      .select("id, updated_at")
+      .eq("id", familyId)
+      .maybeSingle();
+    if (familyCheckError) {
+      return { ok: false, error: familyCheckError.message, partialSave: false };
+    }
+    if (!familyRowData) {
+      // Missing row and RLS-hidden row are the same observation here — see
+      // NOT_FOUND_MESSAGE.
+      return { ok: false, error: NOT_FOUND_MESSAGE, partialSave: false };
+    }
+    const familyRow = familyRowData as VersionRow;
+
+    // Every child of the family, not just the ones being written: this both
+    // version-checks the blocks the form is holding and notices a child
+    // someone else added since the form was opened.
+    const { data: childRowData, error: childCheckError } = await supabase
+      .from("children")
+      .select("id, child_index, updated_at")
+      .eq("family_id", familyId);
+    if (childCheckError) {
+      return { ok: false, error: childCheckError.message, partialSave: false };
+    }
+    const currentChildren = (childRowData ?? []) as ChildVersionRow[];
+    const currentChildById = new Map(currentChildren.map((row) => [row.id, row]));
+
+    // Existing blocks are taken from the FULL children array, not
+    // validChildren: an existing child whose name the user blanked out is
+    // skipped for writing (as it always has been) but is still a row this form
+    // is holding a version of, and still counts as "known" so it isn't
+    // mistaken for someone else's new child below.
+    const loadedChildren = children.filter((c): c is EditableChildInput & { id: string } => Boolean(c.id));
+
+    for (const child of loadedChildren) {
+      if (!currentChildById.has(child.id)) {
+        // Deleted, or never visible to this user. Same reasoning as the
+        // family case: do not answer this with the conflict message.
+        return { ok: false, error: NOT_FOUND_MESSAGE, partialSave: false };
+      }
+      if (!force && !child.updatedAt) {
+        // An existing row with no version to check against.
+        return { ok: false, error: UNVERIFIABLE_MESSAGE, partialSave: false };
+      }
+    }
+
+    if (!force) {
+      // Exact string comparison. Both sides are the same PostgREST rendering
+      // of the same timestamptz column, so they are byte-identical when the
+      // row hasn't moved. No Date parsing on either side — that would truncate
+      // microseconds and could call two distinct versions equal.
+      const familyMoved = familyRow.updated_at !== expectedFamilyUpdatedAt;
+      const childMoved = loadedChildren.some((c) => currentChildById.get(c.id)?.updated_at !== c.updatedAt);
+
+      if (familyMoved || childMoved) {
+        return { ok: false, error: CONFLICT_MESSAGE, conflict: true, partialSave: false };
+      }
+    }
+
+    // Deliberately NOT treated as a conflict: a child row that exists in the
+    // database but isn't in `children` at all. That would catch someone else
+    // inserting a sibling while this form was open — but it would also fire
+    // every time a user removes an existing child's block from the form (a
+    // supported action that has always been a silent no-op for the saved row),
+    // turning a normal edit into a bogus "someone else changed this". The
+    // trade is safe in the direction that matters: a concurrent INSERT can't
+    // lose anyone's work, because this function never writes to a child it
+    // wasn't given, and nextChildIndex below is computed from the pre-flight
+    // read rather than the stale bundle so the new sibling can't collide. A
+    // concurrent EDIT to a child, which *can* lose work, is still caught by
+    // the version comparison above.
+
+    // ---- Writes ------------------------------------------------------------
+
+    // Tracks whether anything has actually hit the database yet, so
+    // `partialSave` is accurate rather than assumed.
+    let wroteSomething = false;
+
+    let familyUpdate = supabase
       .from("families")
       .update({
         sort_tag: details.sortTag.trim() || null,
         internal_notes: details.internalNotes.trim() || null,
       })
       .eq("id", familyId);
-    if (familyError) {
-      return { ok: false, error: familyError.message };
+    if (!force) {
+      // Guard with the value the pre-flight just read rather than the one the
+      // caller passed: identical at this point (we just compared them), but
+      // guaranteed to be PostgREST's own rendering, un-round-tripped through
+      // form state. Still closes the pre-flight-to-write window.
+      familyUpdate = familyUpdate.eq("updated_at", familyRow.updated_at);
     }
+    const { data: familyUpdated, error: familyError } = await familyUpdate.select("id");
+    if (familyError) {
+      return { ok: false, error: familyError.message, partialSave: false };
+    }
+    if ((familyUpdated ?? []).length === 0) {
+      // Zero rows affected, no error: either the guard blocked it, or the row
+      // isn't visible/updatable for this user (only possible on the forced
+      // path, since the pre-flight already read it).
+      if (force) return { ok: false, error: NOT_FOUND_MESSAGE, partialSave: false };
+      return { ok: false, error: CONFLICT_MESSAGE, conflict: true, partialSave: false };
+    }
+    wroteSomething = true;
 
-    const existingChildIndexes = data.children.filter((c) => c.familyId === familyId).map((c) => c.childIndex);
-    let nextChildIndex = existingChildIndexes.length > 0 ? Math.max(...existingChildIndexes) + 1 : 1;
+    // Fresh from the pre-flight read, not from the possibly-stale bundle, so a
+    // child added by someone else can't cause a (family_id, child_index)
+    // unique violation on the forced path.
+    let nextChildIndex =
+      currentChildren.length > 0 ? Math.max(...currentChildren.map((row) => row.child_index)) + 1 : 1;
 
     for (const child of validChildren) {
       const targetCardCount = Math.max(1, Number(child.targetCardCount) || 1);
@@ -475,14 +665,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
       };
 
       if (childId) {
-        const { error: updateError } = await supabase.from("children").update(childFields).eq("id", childId);
+        let childUpdate = supabase.from("children").update(childFields).eq("id", childId);
+        // Present for every id-bearing block — the pre-flight loop above
+        // returned NOT_FOUND for any that weren't.
+        const knownVersion = currentChildById.get(childId);
+        if (!force && knownVersion) {
+          // Same reasoning as the family guard above: use the pre-flight
+          // reading of this row's version, and .select() so a zero-row result
+          // is observable.
+          childUpdate = childUpdate.eq("updated_at", knownVersion.updated_at);
+        }
+        const { data: childUpdated, error: updateError } = await childUpdate.select("id");
         if (updateError) {
           await refresh();
           return {
             ok: false,
             error: `Couldn't update ${child.firstName}: ${updateError.message}. Other changes on this page may already be saved.`,
+            partialSave: wroteSomething,
           };
         }
+        if ((childUpdated ?? []).length === 0) {
+          // Changed inside the pre-flight-to-write window. The family row (and
+          // possibly earlier children) already went through, so this really is
+          // a partial save.
+          await refresh();
+          if (force) {
+            return { ok: false, error: NOT_FOUND_MESSAGE, partialSave: wroteSomething };
+          }
+          return { ok: false, error: CONFLICT_MESSAGE, conflict: true, partialSave: wroteSomething };
+        }
+        wroteSomething = true;
       } else {
         const { data: childRow, error: insertError } = await supabase
           .from("children")
@@ -496,15 +708,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
             error: `Couldn't add ${child.firstName}: ${
               insertError?.message ?? "unknown error"
             }. Other changes on this page may already be saved.`,
+            partialSave: wroteSomething,
           };
         }
         childId = childRow.id;
         nextChildIndex += 1;
+        wroteSomething = true;
       }
 
       if (!childId) {
         await refresh();
-        return { ok: false, error: `Internal error saving ${child.firstName} — no child id was resolved.` };
+        return {
+          ok: false,
+          error: `Internal error saving ${child.firstName} — no child id was resolved.`,
+          partialSave: wroteSomething,
+        };
       }
 
       // Wishlist rows have no other references pointing at them, so a
@@ -512,7 +730,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const { error: deleteError } = await supabase.from("wishlist_items").delete().eq("child_id", childId);
       if (deleteError) {
         await refresh();
-        return { ok: false, error: `Couldn't update ${child.firstName}'s wishlist: ${deleteError.message}.` };
+        return {
+          ok: false,
+          error: `Couldn't update ${child.firstName}'s wishlist: ${deleteError.message}.`,
+          partialSave: wroteSomething,
+        };
       }
       const wishlistRows = child.wishlistItems
         .map((description, idx) => ({ child_id: childId, position: idx + 1, description: description.trim() }))
@@ -521,7 +743,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const { error: wishlistError } = await supabase.from("wishlist_items").insert(wishlistRows);
         if (wishlistError) {
           await refresh();
-          return { ok: false, error: `Couldn't save ${child.firstName}'s wishlist: ${wishlistError.message}.` };
+          return {
+            ok: false,
+            error: `Couldn't save ${child.firstName}'s wishlist: ${wishlistError.message}.`,
+            partialSave: wroteSomething,
+          };
         }
       }
 
@@ -529,7 +755,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const { error: cardError } = await reconcileCardsForChild(supabase, childId, targetCardCount, existingCardCount);
       if (cardError) {
         await refresh();
-        return { ok: false, error: `Couldn't generate cards for ${child.firstName}: ${cardError}.` };
+        return {
+          ok: false,
+          error: `Couldn't generate cards for ${child.firstName}: ${cardError}.`,
+          partialSave: wroteSomething,
+        };
       }
     }
 

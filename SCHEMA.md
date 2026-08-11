@@ -11,6 +11,12 @@ Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--re
 
 - Every table has a `uuid` primary key (`gen_random_uuid()`), matching Supabase norms.
 - `created_at` / `updated_at` are `timestamptz`, defaulting to `now()`.
+- `families.updated_at` and `children.updated_at` (maintained by the `set_updated_at` BEFORE UPDATE
+  triggers) double as **row versions**: the family edit form in the app reads them, sends them back, and
+  its UPDATEs carry `.eq("updated_at", <value loaded>)` so a second person's save can't silently
+  overwrite the first's (US-13 / GitLab issue #2). Don't drop those triggers, don't add a precision
+  modifier to the columns (`timestamptz(3)` would round microseconds away and break the match), and
+  don't let app code reformat the value — it has to round-trip byte-for-byte.
 - Enums are used for small fixed sets of statuses; free text is used wherever the old spreadsheet
   showed messy real-world values (e.g. sizes like `"32-34"` or `"Girls 6"`) that don't fit a clean type.
 - `profiles` is the staff/volunteer accounts table — named to match Supabase's common convention of

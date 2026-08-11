@@ -51,6 +51,14 @@ export interface Family {
   checkedInAt: string | null;
   checkedInBy: string | null;
   createdBy: string | null;
+  // `families.updated_at`, maintained by the set_updated_at BEFORE UPDATE
+  // trigger (supabase/migrations/20260708120000_init.sql). Used as the row
+  // version for concurrent-edit detection in store.tsx's saveFamilyEdit —
+  // treat it as an OPAQUE STRING. Pass it back exactly as it arrived; do not
+  // reformat it or round-trip it through `new Date(...)`/`.toISOString()`,
+  // which truncates Postgres's microseconds to milliseconds and would make
+  // every save look like a conflict.
+  updatedAt: string;
 }
 
 export interface Child {
@@ -67,6 +75,9 @@ export interface Child {
   shoeSize: string | null;
   otherNotes: string | null;
   targetCardCount: number;
+  // `children.updated_at` — same trigger, same row-version role, and the same
+  // "opaque string, pass it back untouched" rule as Family.updatedAt above.
+  updatedAt: string;
 }
 
 // Staff/volunteer account. RLS on `profiles` means a non-admin fetching this

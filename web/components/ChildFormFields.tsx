@@ -9,12 +9,20 @@ import { TextAreaField } from "@/components/TextAreaField";
 export interface ChildFormState extends IntakeChildInput {
   key: string;
   id: string | null;
+  // The `Child.updatedAt` this block was seeded from, so the edit page can tell
+  // the data layer which version of the row the user was looking at (US-13).
+  // Opaque string — seed it straight from `Child.updatedAt` and pass it back
+  // untouched; never round-trip it through `new Date(...)`/`.toISOString()` or
+  // a datetime input, which drops microseconds and makes every save look like a
+  // conflict. null means "this block isn't a saved row yet" (insert on submit).
+  updatedAt: string | null;
 }
 
 export function emptyChild(): ChildFormState {
   return {
     key: crypto.randomUUID(),
     id: null,
+    updatedAt: null,
     firstName: "",
     grade: "",
     age: "",

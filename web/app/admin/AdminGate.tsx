@@ -14,7 +14,13 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  if (loading) {
+  // Only take the page over while there is genuinely nothing to show. Every
+  // mutation in the store ends with a refresh(), which flips `loading` back on
+  // — swapping the page out for this placeholder each time would unmount
+  // whatever form the user is standing in and silently discard everything they
+  // had typed, which is exactly what the family edit page (US-13) must not do.
+  // Pages can still assume `data` is present: the !data guard below stands.
+  if (loading && !data) {
     return <div className="mx-auto max-w-6xl px-6 py-10 text-ink-secondary">Loading…</div>;
   }
 
