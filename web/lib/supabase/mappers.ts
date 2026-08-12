@@ -144,10 +144,8 @@ export function mapAssignment(row: any): Assignment {
     claimedAt: row.claimed_at,
     purchasedAt: row.purchased_at,
     receivedAtChurchAt: row.received_at_church_at,
+    verifiedAt: row.verified_at,
     deliveredAt: row.delivered_at,
     volunteerNotes: row.volunteer_notes,
-    verifiedByTeam: row.verified_by_team,
-    verifiedAt: row.verified_at,
-    verifiedBy: row.verified_by,
   };
 }

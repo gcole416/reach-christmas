@@ -7,6 +7,7 @@ const STATUS_CONFIG: Record<Status, { label: string; dot: string; bg: string }> 
   pledged: { label: "Pledged", dot: "bg-cat-blue", bg: "bg-cat-blue/10" },
   purchased: { label: "Purchased", dot: "bg-cat-violet", bg: "bg-cat-violet/10" },
   received_at_church: { label: "Received at church", dot: "bg-cat-aqua", bg: "bg-cat-aqua/10" },
+  verified: { label: "Verified", dot: "bg-cat-yellow", bg: "bg-cat-yellow/10" },
   delivered: { label: "Delivered", dot: "bg-status-good", bg: "bg-status-good/10" },
   cancelled: { label: "Cancelled", dot: "bg-ink-muted", bg: "bg-ink-muted/10" },
 };

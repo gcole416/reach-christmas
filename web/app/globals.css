@@ -19,6 +19,7 @@
   --color-cat-blue: #2a78d6;
   --color-cat-aqua: #1baf7a;
   --color-cat-violet: #4a3aa7;
+  --color-cat-yellow: #a1750d;
 }
 
 @theme inline {
@@ -37,6 +38,7 @@
   --color-cat-blue: var(--color-cat-blue);
   --color-cat-aqua: var(--color-cat-aqua);
   --color-cat-violet: var(--color-cat-violet);
+  --color-cat-yellow: var(--color-cat-yellow);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -56,6 +58,7 @@
     --color-cat-blue: #3987e5;
     --color-cat-aqua: #199e70;
     --color-cat-violet: #9085e9;
+    --color-cat-yellow: #d1a336;
   }
 }
 

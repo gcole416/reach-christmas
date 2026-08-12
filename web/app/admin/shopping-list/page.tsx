@@ -6,13 +6,13 @@ import { displayFirstName, getShoppingList } from "@/lib/queries";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AdminNav } from "../AdminNav";
 
-// What the admin team still needs to shop for: every open (unverified)
-// volunteer note, consolidated across all cards. Marking a row verified here
-// is the same action as the checkbox on the fulfillment board — see
-// setAssignmentVerified in lib/store.tsx — so it drops off both places at
-// once.
+// What the admin team still needs to shop for: every card that's reached
+// church with a volunteer note attached and hasn't advanced to 'verified'
+// yet. Marking a row verified here advances that assignment's status the
+// same way the fulfillment board's "Mark verified" button does, so it drops
+// off both places at once.
 export default function ShoppingListPage() {
-  const { data, viewerRole, setAssignmentVerified } = useData();
+  const { data, viewerRole, updateAssignmentStatus } = useData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
 
@@ -27,7 +27,7 @@ export default function ShoppingListPage() {
   async function handleMarkVerified(assignmentId: string) {
     setBusyId(assignmentId);
     setRowError(null);
-    const result = await setAssignmentVerified(assignmentId, true);
+    const result = await updateAssignmentStatus(assignmentId, "verified");
     setBusyId(null);
     if (!result.ok) setRowError({ id: assignmentId, message: result.error });
   }

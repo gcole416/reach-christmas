@@ -272,21 +272,34 @@ export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
 export const NEXT_STATUS: Partial<Record<AssignmentStatus, AssignmentStatus>> = {
   pledged: "purchased",
   purchased: "received_at_church",
-  received_at_church: "delivered",
+  received_at_church: "verified",
+  verified: "delivered",
 };
 
 // The fulfillment board's columns, left to right. "unassigned" isn't a real
 // assignment_status — it's a card with no active (non-cancelled) assignment
 // at all, whether never claimed or claimed-then-cancelled.
-export type FulfillmentColumn = "unassigned" | "pledged" | "purchased" | "received_at_church" | "delivered";
+export type FulfillmentColumn =
+  | "unassigned"
+  | "pledged"
+  | "purchased"
+  | "received_at_church"
+  | "verified"
+  | "delivered";
 
 export const FULFILLMENT_COLUMNS: { value: FulfillmentColumn; label: string }[] = [
   { value: "unassigned", label: "Unassigned" },
   { value: "pledged", label: "Pledged" },
   { value: "purchased", label: "Purchased" },
   { value: "received_at_church", label: "Received at church" },
+  { value: "verified", label: "Verified" },
   { value: "delivered", label: "Delivered" },
 ];
+
+// Volunteer notes only make sense once a gift has physically arrived —
+// before that there's nothing to check against the wishlist yet. Also keeps
+// notes out of sight of anything upstream of church intake.
+const NOTES_VISIBLE_FROM: FulfillmentColumn[] = ["received_at_church", "verified", "delivered"];
 
 export interface FulfillmentCard {
   cardId: string;
@@ -300,10 +313,9 @@ export interface FulfillmentCard {
   sponsorEmail: string | null;
   daysSinceClaimed: number | null;
   overdueSeverity: OverdueSeverity | null;
-  // null/false for "unassigned" — there's no assignment row to hang a note or
-  // verification on until someone claims the card.
+  // null until the card has reached the church (see NOTES_VISIBLE_FROM) —
+  // there's nothing to check against the wishlist before then.
   volunteerNotes: string | null;
-  verifiedByTeam: boolean;
 }
 
 /**
@@ -337,20 +349,20 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
         daysSinceClaimed: null,
         overdueSeverity: null,
         volunteerNotes: null,
-        verifiedByTeam: false,
       });
       continue;
     }
 
     const sponsor = data.sponsors.find((s) => s.id === active.sponsorId)!;
     const days = daysSince(active.claimedAt);
+    const column = active.status as FulfillmentColumn;
     const isDelivered = active.status === "delivered";
     board.push({
       cardId: card.id,
       cardNumber,
       childFirstName: child.firstName,
       isConfidential,
-      column: active.status as FulfillmentColumn,
+      column,
       assignmentId: active.id,
       sponsorName: sponsor.name,
       sponsorPhone: sponsor.phone,
@@ -363,8 +375,7 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
             ? "critical"
             : "warning"
           : null,
-      volunteerNotes: active.volunteerNotes,
-      verifiedByTeam: active.verifiedByTeam,
+      volunteerNotes: NOTES_VISIBLE_FROM.includes(column) ? active.volunteerNotes : null,
     });
   }
 
@@ -384,22 +395,21 @@ export interface ShoppingListRow {
 
 /**
  * Consolidates volunteer notes into what the admin team still needs to shop
- * for: every non-cancelled assignment with a note attached that hasn't been
- * verified yet. Marking an assignment verified (fulfillment page or the
- * shopping-list page itself) is what drops it off this list — see
- * setAssignmentVerified in lib/store.tsx.
+ * for: every assignment sitting at 'received_at_church' with a note attached
+ * — i.e. arrived, not yet checked against the wishlist. Advancing it to
+ * 'verified' (fulfillment page or the shopping-list page itself) is what
+ * drops it off this list.
  */
 export function getShoppingList(data: DataBundle): ShoppingListRow[] {
   return data.assignments
-    .filter((a) => a.status !== "cancelled" && !a.verifiedByTeam && (a.volunteerNotes ?? "").trim())
+    .filter((a) => a.status === "received_at_church" && (a.volunteerNotes ?? "").trim())
     .map((a) => {
       // Non-null assertion relies on the same invariant getOverdueAssignments
       // above does: every assignments row's card is visible under the
       // viewer's own `data.cards` RLS filter, because claim_card() (the only
       // insert path into assignments) refuses confidential cards. See the
-      // "Confidentiality note" in this feature's migration
-      // (20260812100000_assignment_notes_and_verification.sql) if that ever
-      // changes.
+      // "Confidentiality note" in 20260812100000_assignment_notes_and_verification.sql
+      // if that ever changes.
       const card = data.cards.find((c) => c.id === a.cardId)!;
       const child = data.children.find((c) => c.id === card.childId)!;
       const sponsor = data.sponsors.find((s) => s.id === a.sponsorId)!;

@@ -18,8 +18,15 @@ const COLUMN_DOT: Record<FulfillmentColumn, string> = {
   pledged: "bg-cat-blue",
   purchased: "bg-cat-violet",
   received_at_church: "bg-cat-aqua",
+  verified: "bg-cat-yellow",
   delivered: "bg-status-good",
 };
+
+// Notes only make sense once a gift has actually arrived — see
+// NOTES_VISIBLE_FROM's twin in lib/queries.ts, which already nulls out
+// volunteerNotes for earlier columns. This just controls whether the
+// add/edit affordance is offered at all.
+const NOTES_EDITABLE_COLUMNS: FulfillmentColumn[] = ["received_at_church", "verified"];
 
 function nextStatusLabel(column: FulfillmentColumn): string | null {
   const next = NEXT_STATUS[column as keyof typeof NEXT_STATUS];
@@ -28,8 +35,7 @@ function nextStatusLabel(column: FulfillmentColumn): string | null {
 }
 
 export default function FulfillmentPage() {
-  const { data, viewerRole, updateAssignmentStatus, cancelAssignment, updateAssignmentNotes, setAssignmentVerified } =
-    useData();
+  const { data, viewerRole, updateAssignmentStatus, cancelAssignment, updateAssignmentNotes } = useData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [search, setSearch] = useState("");
@@ -100,14 +106,6 @@ export default function FulfillmentPage() {
       return;
     }
     setOpenNotesId(null);
-  }
-
-  async function handleToggleVerified(assignmentId: string, verified: boolean) {
-    setBusyId(assignmentId);
-    setRowError(null);
-    const result = await setAssignmentVerified(assignmentId, verified);
-    setBusyId(null);
-    if (!result.ok) setRowError({ id: assignmentId, message: result.error });
   }
 
   return (
@@ -191,22 +189,8 @@ export default function FulfillmentPage() {
                         ) : (
                           <p className="mt-1 text-xs text-ink-muted">Needs a sponsor</p>
                         )}
-                        {assignmentId ? (
-                          <div className="mt-2 flex flex-wrap items-center gap-3">
-                            <label className="flex items-center gap-1.5 text-xs text-ink-secondary">
-                              <input
-                                type="checkbox"
-                                checked={card.verifiedByTeam}
-                                disabled={busy}
-                                onChange={(e) => handleToggleVerified(assignmentId, e.target.checked)}
-                                className="h-3.5 w-3.5 rounded border-border"
-                              />
-                              {card.verifiedByTeam ? (
-                                <span className="font-medium text-status-good">Verified by team</span>
-                              ) : (
-                                "Verified by team"
-                              )}
-                            </label>
+                        {assignmentId && NOTES_EDITABLE_COLUMNS.includes(card.column) ? (
+                          <div className="mt-2">
                             <button
                               onClick={() => handleToggleNotes(assignmentId, card.volunteerNotes)}
                               className="text-xs font-medium text-cat-blue hover:opacity-80"
@@ -216,7 +200,7 @@ export default function FulfillmentPage() {
                             </button>
                           </div>
                         ) : null}
-                        {assignmentId && openNotesId === assignmentId ? (
+                        {assignmentId && openNotesId === assignmentId && NOTES_EDITABLE_COLUMNS.includes(card.column) ? (
                           <div className="mt-2">
                             <textarea
                               value={noteDrafts[assignmentId] ?? ""}

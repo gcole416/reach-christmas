@@ -127,7 +127,6 @@ interface DataContextValue {
   updateAssignmentStatus: (assignmentId: string, status: AssignmentStatus) => Promise<Result>;
   cancelAssignment: (assignmentId: string) => Promise<Result>;
   updateAssignmentNotes: (assignmentId: string, notes: string) => Promise<Result>;
-  setAssignmentVerified: (assignmentId: string, verified: boolean) => Promise<Result>;
   updateCardPrinted: (cardId: string, printed: boolean) => Promise<Result>;
   updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
   checkInFamily: (familyId: string) => Promise<Result>;
@@ -789,6 +788,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const patch: Record<string, string> = { status };
     if (status === "purchased") patch.purchased_at = now;
     if (status === "received_at_church") patch.received_at_church_at = now;
+    if (status === "verified") patch.verified_at = now;
     if (status === "delivered") patch.delivered_at = now;
 
     const { error } = await supabase.from("assignments").update(patch).eq("id", assignmentId);
@@ -810,25 +810,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase
       .from("assignments")
       .update({ volunteer_notes: notes.trim() || null })
-      .eq("id", assignmentId);
-    if (error) return { ok: false, error: error.message };
-    await refresh();
-    return { ok: true };
-  }
-
-  // Mirrors checkInFamily/undoCheckInFamily below: verifying stamps who/when,
-  // unverifying clears both rather than leaving a stale verifier attached to
-  // a flag that's no longer true.
-  async function setAssignmentVerified(assignmentId: string, verified: boolean): Promise<Result> {
-    const supabase = createClient();
-    const { data: userData } = await supabase.auth.getUser();
-    const { error } = await supabase
-      .from("assignments")
-      .update({
-        verified_by_team: verified,
-        verified_at: verified ? new Date().toISOString() : null,
-        verified_by: verified ? (userData.user?.id ?? null) : null,
-      })
       .eq("id", assignmentId);
     if (error) return { ok: false, error: error.message };
     await refresh();
@@ -906,7 +887,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateAssignmentStatus,
         cancelAssignment,
         updateAssignmentNotes,
-        setAssignmentVerified,
         updateCardPrinted,
         updateFamilyDistribution,
         checkInFamily,
