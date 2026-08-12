@@ -3,10 +3,14 @@
 Status legend: Backlog | In progress | In review | Done
 
 Stories below marked **Done** were backfilled from the existing codebase (not
-written before the feature was built) — see [AGENT-TEAM-SETUP.md](../agent_coding_help/AGENT-TEAM-SETUP.md)
-for how the team audited the app to produce these. Acceptance criteria
-describe exactly what the code does today, cited to file/line, so you can
-hand this to your team as documentation of decisions already made.
+written before the feature was built) by reading the shipped code and writing
+acceptance criteria to match. Those criteria describe exactly what the code
+does today, cited to file/line, so you can hand this to your team as
+documentation of decisions already made.
+
+For the doc map (which file to read for what) see [START_HERE.md](../START_HERE.md);
+for how the agent team itself is set up and driven, see
+[AGENT-TEAM-SETUP.md](../agent_coding_help/AGENT-TEAM-SETUP.md).
 
 ---
 
@@ -94,7 +98,7 @@ Acceptance criteria:
 - [x] Columns: school, family label ("Family `N`"), child first name, grade, card number, status badge, sponsor name (or "—" if unclaimed).
 
 Status: Done
-Owner: (pre-existing — see [web/app/admin/FamiliesExplorer.tsx](../web/app/admin/FamiliesExplorer.tsx))
+Owner: (pre-existing — see [web/app/admin/families/FamiliesExplorer.tsx](../web/app/admin/families/FamiliesExplorer.tsx))
 
 **Note:** this screen is currently **read-only** — there is no way to create, edit, or mark-confidential a family/child/wishlist item from the app. See the intake/edit UI discovery questions below; that's intentionally not scoped as a story yet pending your user-base meeting.
 
@@ -179,13 +183,13 @@ access, so that I can grant/revoke clearance without going into the Supabase
 dashboard.
 
 Acceptance criteria:
-- [x] `/admin/volunteers` lists every profile (name, role, confidential access, created date); an admin can change role (admin/volunteer) and toggle confidential access inline per row.
+- [x] `/admin/staff` lists every profile (name, role, confidential access, created date); an admin can change role (admin/volunteer) and toggle confidential access inline per row.
 - [x] Changes apply optimistically and roll back with an inline error if the server rejects them.
 - [x] **Enforced at the database layer, not just the UI**: a new `BEFORE UPDATE` trigger on `profiles` blocks anyone but an admin from changing `role` or `can_view_confidential` — including a volunteer calling the update directly, bypassing this page entirely. This closes a real gap found during this work: the existing RLS policy allowed a volunteer to update their own profile row, but had no column-level restriction, so a volunteer could previously have self-promoted to admin via a direct API call.
 - [x] Scoped to editing existing accounts only — creating a brand-new login still happens via the Supabase dashboard (would require a server-side admin API route to do in-app; deferred, not started).
 
 Status: Done
-Owner: database-engineer (schema/RLS/data layer), frontend-designer (UI) — see [supabase/migrations/20260808130000_profiles_column_guard.sql](../supabase/migrations/20260808130000_profiles_column_guard.sql), [web/app/admin/volunteers/page.tsx](../web/app/admin/volunteers/page.tsx)
+Owner: database-engineer (schema/RLS/data layer), frontend-designer (UI) — see [supabase/migrations/20260708130000_profiles_staff_management.sql](../supabase/migrations/20260708130000_profiles_staff_management.sql) (defines `prevent_role_self_escalation()`), [supabase/migrations/20260808130000_fix_role_escalation_guard_null_auth.sql](../supabase/migrations/20260808130000_fix_role_escalation_guard_null_auth.sql) (later fix), [web/app/admin/staff/page.tsx](../web/app/admin/staff/page.tsx)
 
 ---
 

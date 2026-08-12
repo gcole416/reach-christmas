@@ -1,6 +1,7 @@
 # Reach Christmas — Agent Team Setup
 
-A five-role Claude Code agent team for the Reach Christmas gift-drive site:
+A Claude Code agent team for the Reach Christmas gift-drive site. Five roles
+spawn and message each other as a team (agent teams), sharing a task list:
 
 - **product-manager** — your main session; writes/manages user stories, spawns and
   coordinates the team, runs the review gate.
@@ -12,8 +13,13 @@ A five-role Claude Code agent team for the Reach Christmas gift-drive site:
 - **qa-tester** — verifies functionality, writes/runs tests (owns `web/tests/`).
 - **code-reviewer** — read-only review before a story is marked Done.
 
-They share a task list and can message each other directly (agent teams), which is
-what lets them collaborate rather than just report back.
+A sixth role, **reach-reviewer**, isn't part of that spawn loop — it's a
+targeted safety-invariant check (RLS gating, concurrency, `security definer`
+usage) invoked directly for a pre-push review or after any change touching
+migrations/RLS, rather than something the PM routinely spawns per story.
+
+All six role files already live in [.claude/agents/](../.claude/agents/) in
+this repo — see [START_HERE.md](../START_HERE.md) for the full doc map.
 
 This app handles real children's names, ages, and confidential family
 records, so the split isn't arbitrary: database-engineer exists specifically
@@ -30,21 +36,13 @@ on the local filesystem. Set this up in the Claude Code session on the **desktop
 where the Christmas-drive repo lives. You can still monitor/steer it remotely from
 the Claude app, but execution happens on the desktop.
 
-## 1. Install the role files
+## 1. Role files — already installed
 
-Copy the five `.md` files into the repo so they're version-controlled and travel
-with the project:
-
-```
-<repo>/.claude/agents/product-manager.md
-<repo>/.claude/agents/code-reviewer.md
-<repo>/.claude/agents/qa-tester.md
-<repo>/.claude/agents/frontend-designer.md
-<repo>/.claude/agents/database-engineer.md
-```
-
-(If the `.claude/agents/` directory didn't exist before your current session,
-restart Claude Code once so it gets picked up.)
+The six role files are git-tracked at [.claude/agents/](../.claude/agents/),
+so cloning this repo already gives you all of them; there's nothing to copy.
+This step only matters if you're bootstrapping a brand-new repo from scratch —
+in that case, create `<repo>/.claude/agents/<role>.md` for each role and
+restart Claude Code once so the new directory gets picked up.
 
 ## 2. Enable agent teams
 
@@ -59,7 +57,7 @@ Agent teams are experimental and **off by default**. Turn them on in
 }
 ```
 
-Optional, for watching all four agents at once in separate panes (macOS-friendly;
+Optional, for watching all five agents at once in separate panes (macOS-friendly;
 needs tmux or iTerm2 — in-process mode works in any terminal without this):
 
 ```json
@@ -123,6 +121,8 @@ Talk to any teammate directly: select its row in the panel and press Enter
 - **The root `CLAUDE.md`/`AGENTS.md` are already set up** and read by every
   teammate automatically — the role/privacy model lives there, not duplicated
   in each role file. If the domain model changes, update `AGENTS.md` once.
+  [START_HERE.md](../START_HERE.md) maps every other doc; link to it instead
+  of re-explaining what's in DESIGN.md/SCHEMA.md/backlog.md inside a role file.
 - **Destructive SQL needs a live human, every time**: database-engineer's role
   file requires it to state the target project and get explicit confirmation
   before running `reset_dev_sql`/`demo_seed`/any drop or truncate — don't
