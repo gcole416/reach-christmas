@@ -7,16 +7,16 @@
 -- step, the same shape as purchased/received_at_church/delivered already are.
 --
 -- Supersedes part of 20260812100000_assignment_notes_and_verification.sql:
--- volunteer_notes stays as-is, but verified_by_team/verified_by are dropped
--- in favor of the new 'verified' status value plus a verified_at timestamp —
--- matching the existing purchased_at/received_at_church_at/delivered_at
--- pattern exactly (no dedicated "verified_by" column, same as those: the
--- audit_log's changed_by, captured automatically by the generic
--- audit_log_change() trigger, already answers "who").
+-- volunteer_notes AND verified_at both stay exactly as that migration added
+-- them (verified_at already matches the purchased_at/received_at_church_at/
+-- delivered_at pattern this stage now uses); only verified_by_team/
+-- verified_by are dropped, since a boolean flag is redundant now that
+-- 'verified' is a real status value, and "who" is answered by audit_log's
+-- changed_by (captured automatically by the generic audit_log_change()
+-- trigger), not a dedicated column.
 
-alter type assignment_status add value 'verified' after 'received_at_church';
+alter type assignment_status add value if not exists 'verified' after 'received_at_church';
 
 alter table assignments
-  add column verified_at timestamptz,
-  drop column verified_by_team,
-  drop column verified_by;
+  drop column if exists verified_by_team,
+  drop column if exists verified_by;
