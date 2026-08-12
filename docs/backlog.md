@@ -339,10 +339,11 @@ Acceptance criteria:
 - [x] `create_family()`'s confidential branch uses a matching helper (`next_confidential_family_number`) instead of a caller-RLS-subject read; its advisory-lock concurrency guarantee (from US-2-era `atomic_family_numbers.sql`) is untouched.
 - [x] Reproduced live against dev before the fix (3 new tests in `security.spec.ts`, confirmed red), then confirmed green after the migration was applied.
 - [x] Full existing e2e suite re-run afterward — no regressions from this change (2 unrelated pre-existing failures found and filed separately as US-17/US-18).
-- [ ] Applied to prod — pending reach-reviewer sign-off.
+- [x] reach-reviewer's one finding (new helper functions callable as anon RPCs with no login, since Supabase's platform default privileges grant them EXECUTE regardless of migration-level grants) fixed in a follow-up migration and verified live — anon now gets a real permission-denied error, staff sessions unaffected.
+- [ ] Applied to prod.
 
 Status: In review
-Owner: database-engineer — see [supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql)
+Owner: database-engineer — see [supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql), [supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql](../supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql)
 
 ---
 
