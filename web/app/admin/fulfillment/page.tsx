@@ -28,12 +28,15 @@ function nextStatusLabel(column: FulfillmentColumn): string | null {
 }
 
 export default function FulfillmentPage() {
-  const { data, viewerRole, updateAssignmentStatus, cancelAssignment } = useData();
+  const { data, viewerRole, updateAssignmentStatus, cancelAssignment, updateAssignmentNotes, setAssignmentVerified } =
+    useData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [search, setSearch] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [focusedColumn, setFocusedColumn] = useState<FulfillmentColumn | null>(null);
+  const [openNotesId, setOpenNotesId] = useState<string | null>(null);
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
 
   if (!data) return null;
 
@@ -74,6 +77,35 @@ export default function FulfillmentPage() {
     setBusyId(assignmentId);
     setRowError(null);
     const result = await cancelAssignment(assignmentId);
+    setBusyId(null);
+    if (!result.ok) setRowError({ id: assignmentId, message: result.error });
+  }
+
+  function handleToggleNotes(assignmentId: string, currentNotes: string | null) {
+    if (openNotesId === assignmentId) {
+      setOpenNotesId(null);
+      return;
+    }
+    setNoteDrafts((prev) => ({ ...prev, [assignmentId]: prev[assignmentId] ?? currentNotes ?? "" }));
+    setOpenNotesId(assignmentId);
+  }
+
+  async function handleSaveNotes(assignmentId: string) {
+    setBusyId(assignmentId);
+    setRowError(null);
+    const result = await updateAssignmentNotes(assignmentId, noteDrafts[assignmentId] ?? "");
+    setBusyId(null);
+    if (!result.ok) {
+      setRowError({ id: assignmentId, message: result.error });
+      return;
+    }
+    setOpenNotesId(null);
+  }
+
+  async function handleToggleVerified(assignmentId: string, verified: boolean) {
+    setBusyId(assignmentId);
+    setRowError(null);
+    const result = await setAssignmentVerified(assignmentId, verified);
     setBusyId(null);
     if (!result.ok) setRowError({ id: assignmentId, message: result.error });
   }
@@ -159,6 +191,61 @@ export default function FulfillmentPage() {
                         ) : (
                           <p className="mt-1 text-xs text-ink-muted">Needs a sponsor</p>
                         )}
+                        {assignmentId ? (
+                          <div className="mt-2 flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-1.5 text-xs text-ink-secondary">
+                              <input
+                                type="checkbox"
+                                checked={card.verifiedByTeam}
+                                disabled={busy}
+                                onChange={(e) => handleToggleVerified(assignmentId, e.target.checked)}
+                                className="h-3.5 w-3.5 rounded border-border"
+                              />
+                              {card.verifiedByTeam ? (
+                                <span className="font-medium text-status-good">Verified by team</span>
+                              ) : (
+                                "Verified by team"
+                              )}
+                            </label>
+                            <button
+                              onClick={() => handleToggleNotes(assignmentId, card.volunteerNotes)}
+                              className="text-xs font-medium text-cat-blue hover:opacity-80"
+                            >
+                              {card.volunteerNotes ? "Edit note" : "Add note"}
+                              {card.volunteerNotes && openNotesId !== assignmentId ? " ●" : ""}
+                            </button>
+                          </div>
+                        ) : null}
+                        {assignmentId && openNotesId === assignmentId ? (
+                          <div className="mt-2">
+                            <textarea
+                              value={noteDrafts[assignmentId] ?? ""}
+                              onChange={(e) =>
+                                setNoteDrafts((prev) => ({ ...prev, [assignmentId]: e.target.value }))
+                              }
+                              placeholder="e.g. missing shoes, only 1 of 2 wishlist items…"
+                              rows={2}
+                              className="w-full rounded-lg border border-border bg-surface p-2 text-xs text-ink-primary"
+                            />
+                            <div className="mt-1 flex items-center gap-3">
+                              <button
+                                onClick={() => handleSaveNotes(assignmentId)}
+                                disabled={busy}
+                                className="rounded-lg bg-cat-blue px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                              >
+                                {busy ? "Saving…" : "Save note"}
+                              </button>
+                              <button
+                                onClick={() => setOpenNotesId(null)}
+                                className="text-xs font-medium text-ink-secondary hover:text-ink-primary"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : card.volunteerNotes && openNotesId !== assignmentId ? (
+                          <p className="mt-1 text-xs italic text-ink-muted">{card.volunteerNotes}</p>
+                        ) : null}
                         {assignmentId && card.column !== "delivered" ? (
                           <div className="mt-2 flex items-center gap-3">
                             {label ? (

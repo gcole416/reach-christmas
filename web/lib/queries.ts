@@ -300,6 +300,10 @@ export interface FulfillmentCard {
   sponsorEmail: string | null;
   daysSinceClaimed: number | null;
   overdueSeverity: OverdueSeverity | null;
+  // null/false for "unassigned" — there's no assignment row to hang a note or
+  // verification on until someone claims the card.
+  volunteerNotes: string | null;
+  verifiedByTeam: boolean;
 }
 
 /**
@@ -332,6 +336,8 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
         sponsorEmail: null,
         daysSinceClaimed: null,
         overdueSeverity: null,
+        volunteerNotes: null,
+        verifiedByTeam: false,
       });
       continue;
     }
@@ -357,10 +363,58 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
             ? "critical"
             : "warning"
           : null,
+      volunteerNotes: active.volunteerNotes,
+      verifiedByTeam: active.verifiedByTeam,
     });
   }
 
   return board.sort((a, b) => (b.daysSinceClaimed ?? -1) - (a.daysSinceClaimed ?? -1));
+}
+
+export interface ShoppingListRow {
+  assignmentId: string;
+  cardNumber: string;
+  childFirstName: string;
+  isConfidential: boolean;
+  status: AssignmentStatus;
+  notes: string;
+  sponsorName: string;
+  daysSinceClaimed: number;
+}
+
+/**
+ * Consolidates volunteer notes into what the admin team still needs to shop
+ * for: every non-cancelled assignment with a note attached that hasn't been
+ * verified yet. Marking an assignment verified (fulfillment page or the
+ * shopping-list page itself) is what drops it off this list — see
+ * setAssignmentVerified in lib/store.tsx.
+ */
+export function getShoppingList(data: DataBundle): ShoppingListRow[] {
+  return data.assignments
+    .filter((a) => a.status !== "cancelled" && !a.verifiedByTeam && (a.volunteerNotes ?? "").trim())
+    .map((a) => {
+      // Non-null assertion relies on the same invariant getOverdueAssignments
+      // above does: every assignments row's card is visible under the
+      // viewer's own `data.cards` RLS filter, because claim_card() (the only
+      // insert path into assignments) refuses confidential cards. See the
+      // "Confidentiality note" in this feature's migration
+      // (20260812100000_assignment_notes_and_verification.sql) if that ever
+      // changes.
+      const card = data.cards.find((c) => c.id === a.cardId)!;
+      const child = data.children.find((c) => c.id === card.childId)!;
+      const sponsor = data.sponsors.find((s) => s.id === a.sponsorId)!;
+      return {
+        assignmentId: a.id,
+        cardNumber: getChildCardNumber(data, child),
+        childFirstName: child.firstName,
+        isConfidential: getFamily(data, child.familyId).isConfidential,
+        status: a.status,
+        notes: (a.volunteerNotes ?? "").trim(),
+        sponsorName: sponsor.name,
+        daysSinceClaimed: daysSince(a.claimedAt),
+      };
+    })
+    .sort((a, b) => b.daysSinceClaimed - a.daysSinceClaimed);
 }
 
 export interface DistributionRow {

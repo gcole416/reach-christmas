@@ -124,6 +124,17 @@ export interface Assignment {
   purchasedAt: string | null;
   receivedAtChurchAt: string | null;
   deliveredAt: string | null;
+  // Free-text note a volunteer leaves on this pledge — e.g. what's missing
+  // from the wishlist once the gift arrives at church. Feeds the shopping
+  // list (see queries.ts's getShoppingList).
+  volunteerNotes: string | null;
+  // Set once admin/staff have checked the gift against the wishlist and
+  // shopped for anything short. Clears volunteerNotes off the shopping list,
+  // but does not erase the note itself.
+  verifiedByTeam: boolean;
+  verifiedAt: string | null;
+  // profiles.id of whoever last set/cleared verifiedByTeam, or null.
+  verifiedBy: string | null;
 }
 
 export type AuditAction = "insert" | "update" | "delete";

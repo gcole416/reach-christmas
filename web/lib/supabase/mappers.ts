@@ -145,5 +145,9 @@ export function mapAssignment(row: any): Assignment {
     purchasedAt: row.purchased_at,
     receivedAtChurchAt: row.received_at_church_at,
     deliveredAt: row.delivered_at,
+    volunteerNotes: row.volunteer_notes,
+    verifiedByTeam: row.verified_by_team,
+    verifiedAt: row.verified_at,
+    verifiedBy: row.verified_by,
   };
 }
