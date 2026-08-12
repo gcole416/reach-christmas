@@ -29,7 +29,7 @@ distribution.
 1. **Referral** — A partner school (via its counselor/contact) or a direct/confidential channel identifies a family in need.
 2. **Intake** — A volunteer/staff member enters the family's kids, wishlist, sizes, and needs (or, if we build it later, the school contact enters it directly).
 3. **Match** — A sponsor claims a child (a "card") to buy for.
-4. **Fulfill** — Sponsor buys the gift(s) and drops them at the church; status tracked (pledged → purchased → received at church).
+4. **Fulfill** — Sponsor buys the gift(s) and drops them at the church; status tracked (pledged → purchased → received at church). Once at church, the admin team checks the gift against the wishlist and shops locally for anything a volunteer missed (→ verified), before it's cleared to go out.
 5. **Distribute** — Gifts get to the child either via the partner school or a church pickup event, depending on how that year/school is run (see §7 open question on this — it's varied by year).
 
 ## 4. Data model (draft)
@@ -41,7 +41,7 @@ Grounded in the 2021 master spreadsheet structure, which had ~407 children acros
 - **Family** — belongs to a School (or flagged **Confidential** with no school), a per-school family number (assigned automatically, not chosen by whoever's entering it — see SCHEMA.md's `create_family()`), privacy tier (normal / confidential), a family-level sort tag (see "Color" question below). `Family` is a distribution-day convenience for grouping siblings, not a strict household model — a real household with kids at different schools becomes multiple `Family` records, one per school (see §8).
 - **Child** — belongs to a Family; card number (`{SchoolLetter}{FamilyNumber}.{ChildIndex}`, e.g. `C1.3`), first name, grade, age, sex, wishlist items (up to 3), specific needs, pant/shirt/shoe size, other notes. Only first name + grade are ever shown publicly (see §5).
 - **Sponsor** — name, phone, email. The legacy sheet already captured this per child/card (one sponsor can claim multiple kids across multiple families — confirmed in the data, e.g. one CCHS sponsor claimed 7 different families' kids). We should model Sponsor as its own entity (not just free text per card) so the same person/group is recognizable across kids and across years.
-- **Match/Assignment** — links a Sponsor to a Child (their "card"), status: pledged → purchased → received at church → delivered. The legacy sheet only had two checkboxes (`Received`, `Delivered`); the app should track the fuller lifecycle so staff can see *who hasn't purchased yet*, not just who hasn't been delivered to.
+- **Match/Assignment** — links a Sponsor to a Child (their "card"), status: pledged → purchased → received at church → verified → delivered. The legacy sheet only had two checkboxes (`Received`, `Delivered`); the app should track the fuller lifecycle so staff can see *who hasn't purchased yet*, not just who hasn't been delivered to. A volunteer can attach a free-text note once a card reaches "received at church" (e.g. what's missing from the wishlist); those notes consolidate into a shopping-list view for the admin team until the card is marked verified.
 - **Distribution record** — per child/family: method (school delivery vs. church pickup — configurable per drive and possibly per school, since this has changed year to year), received/delivered checkboxes (mirrors the legacy `Received`/`Delivered` columns)
 - **User account** — staff/volunteer login, role, which drive-year(s) they can access
 - **Audit log** — who created/edited each record and when (important given this is children's PII)
@@ -76,7 +76,8 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 - [x] Staff/volunteer intake of schools, families & kids (this alone replaces the spreadsheet) — `/admin/intake`, plus `/admin/families/[id]` for corrections and adding a sibling later
 - [x] Confidential-tier flag with restricted visibility — any staff member can *create* a confidential referral now (see SCHEMA.md's RLS section), only cleared staff/admins can keep viewing it afterward
 - [x] Public sponsor-facing page to browse and claim kids/wishlist items (no sponsor login required) — `/sponsor`
-- [x] **Sponsor assignment tracking** — who claimed which card, and a real status lifecycle (pledged/purchased/received), not just the old sheet's single received/delivered checkbox — `/admin/fulfillment`
+- [x] **Sponsor assignment tracking** — who claimed which card, and a real status lifecycle (pledged/purchased/received/verified/delivered), not just the old sheet's single received/delivered checkbox — `/admin/fulfillment`
+- [x] **Admin verification + shopping list** — once a gift reaches church, staff can flag what's missing from the wishlist (a note on the card); the admin team checks/tops it up and marks it verified before it moves to delivery. Open notes consolidate into a printable shopping list — `/admin/fulfillment`, `/admin/shopping-list` (see docs/backlog.md US-19)
 - [x] Distribution tracking flexible enough to handle either school delivery or church pickup, decided per drive/school — `/admin/distribution`
 - [x] Printable cards, with the "(1 of 2)" copy notation only ever appearing here — `/admin/print`
 - [x] Drive (year) management — create/open/close a drive, exactly one `open` at a time — `/admin/drives`

@@ -35,7 +35,7 @@ create extension if not exists pgcrypto;
 
 create type drive_status as enum ('draft', 'open', 'closed', 'archived');
 create type distribution_method as enum ('school_dropoff', 'church_pickup');
-create type assignment_status as enum ('pledged', 'purchased', 'received_at_church', 'delivered', 'cancelled');
+create type assignment_status as enum ('pledged', 'purchased', 'received_at_church', 'verified', 'delivered', 'cancelled');
 create type app_role as enum ('admin', 'volunteer');
 ```
 
@@ -363,8 +363,10 @@ create table assignments (
   claimed_at timestamptz not null default now(),
   purchased_at timestamptz,
   received_at_church_at timestamptz,
+  verified_at timestamptz,
   delivered_at timestamptz,
-  notes text
+  notes text,             -- unused/legacy, predates volunteer_notes below
+  volunteer_notes text
 );
 
 -- a card can have historical/cancelled assignments, but only one *active* one at a time
@@ -382,6 +384,19 @@ only claimable by one sponsor at a time. The `cancelled` status matters in pract
 out, their card needs to go back on the public claim page, and the old spreadsheet's single
 `Received`/`Delivered` checkboxes had no way to represent that. `assignments_status_idx` is what powers a
 "which sponsors are overdue" report.
+
+**`verified` stage (added post-launch, see docs/backlog.md US-19):** sits between `received_at_church`
+and `delivered`. The admin team checks a gift against the child's wishlist and shops for anything a
+volunteer missed before it goes out — that's a genuinely sequential step, so it's a real
+`assignment_status` value (with its own `verified_at`, same shape as `purchased_at` etc.) rather than a
+side flag. There's no dedicated `verified_by` column; `audit_log.changed_by` on that status-change row
+already answers "who," matching every other stage transition. `volunteer_notes` is a free-text note a
+volunteer can leave once a card reaches `received_at_church` — e.g. what's missing from the wishlist —
+that feeds a consolidated "shopping list" admin view (every `received_at_church` assignment with a
+non-empty note) until it's advanced to `verified`. Notes are never offered before `received_at_church`
+(nothing to check against the wishlist yet) and are structurally unreachable by sponsors: the anon-facing
+`public_available_cards` view (below) excludes any card with an active assignment at all, and the claim
+flow never reads assignment data back.
 
 ## 11. `audit_log` — who changed what
 
@@ -413,7 +428,8 @@ accidentally skip logging. We'll write the actual trigger function when we scaff
 | `Wish List #1-3` | `wishlist_items` rows |
 | `Specific Needs`, `Pant/Shirt/Shoe Size`, `Other Notes` | `children` columns |
 | `Name` / `Phone Number` / `Email` (sponsor) | `sponsors` columns |
-| `Recieved` / `Delivered` checkboxes | `assignments.status` (with two more stages: pledged, purchased) |
+| `Recieved` / `Delivered` checkboxes | `assignments.status` (with three more stages: pledged, purchased, verified) |
+| *(no equivalent — new)* | `assignments.volunteer_notes` — what a volunteer flags as missing at church intake, feeding the shopping-list view |
 | "Confidential" tab | `families.is_confidential = true`, `drive_school_id = null` |
 | `Color` | `families.sort_tag` (purpose unconfirmed — see below) |
 

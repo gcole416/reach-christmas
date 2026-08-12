@@ -392,6 +392,33 @@ Owner: unassigned
 
 ---
 
+## US-19: Admin verification stage + shopping list for fulfillment
+
+As an admin, I want to check a gift against the child's wishlist once it
+reaches church and shop locally for anything a volunteer missed, so that
+every kid actually gets what they asked for before their gift goes out.
+
+Requested directly by the owner (not a GitLab issue). Two things were needed:
+a way for staff to flag what's short on a card, and a way for the admin team
+to see all of those flags in one place to go shopping against. First pass put
+"verified" as a boolean checkbox alongside the existing pledged/purchased/
+received-at-church/delivered status; the owner's feedback (after trying it
+live) was that staff think of this as a genuine pipeline stage, not a
+side flag, so it was reworked into a real `assignment_status` value.
+
+Acceptance criteria:
+- [x] `assignment_status` gets a new `verified` value between `received_at_church` and `delivered`; `assignments.verified_at` is stamped the same way `purchased_at`/`received_at_church_at`/`delivered_at` already are. No dedicated "verified by" column — `audit_log.changed_by` on that status-change row already answers who, matching every other stage transition.
+- [x] The fulfillment board (`/admin/fulfillment`) shows "Verified" as its own column; advancing into it uses the same "Mark [next status]" button as every other stage, not a separate control.
+- [x] Volunteers can attach a free-text note (`assignments.volunteer_notes`) to a card once — and only once — it reaches "Received at church"; the add/edit control isn't offered before that, since there's nothing to check against the wishlist yet. Notes stay editable through "Verified"; once "Delivered" they're still shown but read-only.
+- [x] New `/admin/shopping-list` page consolidates every card sitting at "Received at church" with a non-empty note — what the admin team still needs to check/buy for. Marking a row verified there advances that assignment's status directly, dropping it off the shopping list.
+- [x] Confirmed sponsors have no path to volunteer notes: `public_available_cards` (the only anon-facing view) excludes any card with an active assignment entirely, and the claim flow never reads assignment data back — no code change was needed to satisfy this, just verification.
+- [x] Manually verified end-to-end by the owner against the dev project: claim → advance to received at church → add a note → note appears on the shopping list → mark verified (from either page) → drops off the shopping list and shows as the new stage on the fulfillment board.
+- [x] `reach-reviewer` pass on the schema/RLS approach — one low-severity note (documented, not a bug): `assignments` has no RLS confidentiality gate of its own, relying entirely on `claim_card()` being the sole insert path and refusing confidential cards. `volunteer_notes` raises the stakes of that invariant (a volunteer could type identifying detail into it); documented explicitly in the migration and in `getShoppingList`'s comments so a future second insert path into `assignments` doesn't silently break it.
+- [ ] Applied to prod (dev-only so far, by design — owner wanted to try it live before shipping to the real drive's data).
+
+Status: In review
+Owner: built this session (schema, data layer, and UI) — see [supabase/migrations/20260812100000_assignment_notes_and_verification.sql](../supabase/migrations/20260812100000_assignment_notes_and_verification.sql), [supabase/migrations/20260812110000_verified_pipeline_stage.sql](../supabase/migrations/20260812110000_verified_pipeline_stage.sql), [web/lib/queries.ts](../web/lib/queries.ts), [web/app/admin/fulfillment/page.tsx](../web/app/admin/fulfillment/page.tsx), [web/app/admin/shopping-list/page.tsx](../web/app/admin/shopping-list/page.tsx)
+
 ---
 
 ## Open questions carried over from DESIGN.md §8
