@@ -10,7 +10,9 @@ documentation of decisions already made.
 
 For the doc map (which file to read for what) see [START_HERE.md](../START_HERE.md);
 for how the agent team itself is set up and driven, see
-[AGENT-TEAM-SETUP.md](../agent_coding_help/AGENT-TEAM-SETUP.md).
+[AGENT-TEAM-SETUP.md](../agent_coding_help/AGENT-TEAM-SETUP.md). Anything
+waiting on an owner decision lives in
+[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) — one page, answer inline.
 
 ---
 
@@ -76,7 +78,7 @@ Acceptance criteria:
 - [x] A child appears in this report if either: fewer physical card copies have been generated than their `target_card_count`, **or** at least one generated card has no `printed_at` timestamp.
 - [x] Shown as a table on the staff dashboard under "Cards to print": child name + card number, target count, generated count, not-yet-printed count.
 - [x] If nothing needs printing, shows "Everything is printed and up to date." instead of an empty table.
-- [x] There is no "mark as printed" action in the UI yet — this report is read-only; printing/marking-printed happens outside the app today.
+- [x] ~~There is no "mark as printed" action in the UI yet — this report is read-only.~~ **Corrected 2026-08-12:** a per-card "Mark printed / Mark not printed" toggle has since shipped on `/admin/print` ([web/app/admin/print/page.tsx:119-125](../web/app/admin/print/page.tsx), `updateCardPrinted` in [web/lib/store.tsx:819-828](../web/lib/store.tsx)). The dashboard report itself is still read-only. (Instance of the drift tracked as GitLab #5 / OPEN_QUESTIONS DOC-5.)
 
 Status: Done
 Owner: (pre-existing — see [web/app/admin/page.tsx:88-122](../web/app/admin/page.tsx), [web/lib/queries.ts:72-87](../web/lib/queries.ts))
@@ -264,7 +266,20 @@ Out of scope (deliberate, not oversights):
 - Wishlist edits don't bump `children.updated_at`, so the wholesale delete+replace of wishlist rows is unversioned. Safe only because every UI path that edits a wishlist also writes the child row through this same function — see the warning in SCHEMA.md before building a wishlist-only editor.
 - Any schema change. If one turns out to be genuinely required, it stops and comes back to the owner first.
 
-Status: In review — code complete, code-reviewer passed with no critical issues, all 5 criteria verified against a stubbed PostgREST. **Blocked on owner** for live verification: the two dev test accounts fail sign-in with "Email not confirmed" and the dev database is empty, so nothing could be run against a real Postgres. Five live tests are committed and ready in `web/tests/e2e/concurrency.spec.ts` (`--grep "US-13"`).
+Status: **Done** — verified live against dev 2026-08-12. The earlier "blocked on
+owner" note is resolved: US-15 confirmed the dev accounts and reseeded the
+database, and qa-tester ran the five committed tests against real Postgres —
+**5/5 pass**, twice, including the `updated_at` microsecond-precision
+round-trip through PostgREST's `.eq()` filter. code-reviewer had already passed
+with no critical issues, and no SQL was run against any project by anyone.
+
+One caveat that belongs to the test suite, not to this story: the tests only
+pass deterministically with `--workers=1`. At the config's default
+`fullyParallel: true`, two of the five fail because a sibling test's `afterAll`
+deletes every `AutoTest`-tagged row project-wide — including the family a
+slower UI test is still using. Tracked as OPEN_QUESTIONS **TST-1**; it affects
+the whole suite, not this feature.
+
 Owner: database-engineer (data layer), frontend-designer (edit-form UI), qa-tester (verification), code-reviewer (gate)
 
 ---
@@ -359,16 +374,54 @@ without an account, so that I can participate in the drive at all.
 Found while regression-testing US-16, unrelated to it — `public_available_cards`
 is untouched by that fix. Querying the view as a genuinely anonymous client
 returns 0 rows; querying the identical view as an authenticated admin returns
-15 rows (5 legitimately available cards with wishlist items). The view is
-deliberately not `security_invoker`, intending to bypass RLS on the base
-tables via the view owner's privileges regardless of caller — that assumption
-doesn't appear to hold in practice. Possibly never exercised against live
-Postgres before, since the dev project was unusable until this session.
+15 rows (5 legitimately available cards with wishlist items).
 
-No acceptance criteria yet — needs root-causing before it can be scoped as a fix.
+**Root-caused 2026-08-12** — reached independently by database-engineer and
+reach-reviewer, same conclusion. `public_available_cards` is correctly *not*
+`security_invoker`, so its own base-table access runs as the view owner. But it
+inner-joins another view, `child_card_numbers`, which **is**
+`security_invoker = true`
+([supabase/migrations/20260708120000_init.sql:175-176](../supabase/migrations/20260708120000_init.sql),
+joined at [:232](../supabase/migrations/20260708120000_init.sql)). Postgres
+applies each view's own `security_invoker` setting to its own base relations —
+the outer view's setting is not inherited by an inner view. So for an anonymous
+caller, the `children`/`families`/`drive_schools` reads *inside*
+`child_card_numbers` are checked against `anon`, which has no grants and no
+policies on those tables, and the inner join collapses the whole result to
+nothing. An authenticated admin passes those same policies, which is exactly why
+the symptom splits by caller. No other hypothesis explains 0-vs-15 — a view-owner
+or BYPASSRLS problem would return 0 rows for *both* callers.
 
-Status: Backlog
-Owner: unassigned
+This is almost certainly **not dev-only**: both views were created in the very
+first migration, so prod has the same bug, and `/sponsor` has likely never
+worked for a real anonymous visitor there either.
+
+Acceptance criteria:
+- [ ] Confirmed live first with two read-only queries (`set local role anon; select count(*) from public_available_cards;` then the same against `child_card_numbers` in isolation), so the fix targets a verified cause rather than the leading theory.
+- [ ] `public_available_cards` no longer depends on any `security_invoker` view: the `child_card_numbers` join is replaced by a direct `left join drive_schools` and the card number is inlined (`coalesce(ds.code,'Z') || f.family_number || '.' || ch.child_index`).
+- [ ] The column whitelist is unchanged, the `not f.is_confidential` predicate stays an **inner** join condition, and the not-already-claimed filter is unchanged. No `select *` anywhere in the view.
+- [ ] `grant select on public_available_cards to anon` is re-issued if the view is dropped rather than replaced (`drop view` discards grants — a granted-but-missing view looks exactly like this bug).
+- [ ] Verified as a genuinely signed-out client, not an admin session: available cards appear, a confidential family's child does not, and a claimed card does not.
+- [ ] `web/tests/e2e/ui-flows.spec.ts:12` (the existing, currently-red anonymous `/sponsor` test) passes.
+- [ ] `claim_card()`'s anonymous path smoke-tested end to end once cards are visible again — it rests on the same RLS-bypass assumption and has plausibly never run live (OPEN_QUESTIONS **SPN-4**).
+- [ ] Applied to prod.
+
+**Guardrails — do not "fix" it any of these ways** (from reach-reviewer, stated
+before any code is written, because several are one-liners that look right):
+- **Never remove `security_invoker` from `child_card_numbers`.** It's the tempting one-line fix and it's the worst option: `authenticated` holds a direct grant on that view, so any logged-in volunteer could then read card numbers and family ids for confidential families they have no clearance for. That is US-16's leak reopened one join further out.
+- **Never grant `anon` SELECT on `families`/`children`/`cards`/`wishlist_items`/`drive_schools`.** It doesn't even work (RLS with no anon policies still returns nothing) and leaves the tables one permissive policy away from a full PII dump.
+- **Never add an anon RLS policy to a base table.** This is the catastrophic one — it converts "sponsors see a hand-picked column whitelist" into "sponsors see whatever the `using` clause allows, on every column, including confidential families." See OPEN_QUESTIONS **DB-2**: `anon` may already hold table-level SELECT via this project's platform defaults, in which case RLS-with-no-anon-policies is the *only* thing holding the line.
+- **Never make `public_available_cards` itself `security_invoker`** — that's the previous item with extra steps.
+- **Don't use `family_is_confidential()` inside the anon view** — `anon` has no EXECUTE on it post-US-16, and function ACLs are checked against the caller. Keep the literal `not f.is_confidential` inline.
+
+**Two decisions needed from the owner before the fix is written** — see
+[OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) **SPN-1** (should the view be limited to
+the *open* drive? today it has no `drives.status` filter at all, so fixing this
+would publish draft and archived drives' children to the public page) and
+**SPN-2** (the card number sponsors see embeds the school's letter code).
+
+Status: Backlog — root-caused and scoped, blocked on SPN-1/SPN-2
+Owner: database-engineer (fix), reach-reviewer (mandatory gate — this is the anon boundary), qa-tester (anon-context verification)
 
 ---
 
@@ -383,12 +436,41 @@ per the saved page snapshot at failure time, is present and the page is
 rendering correctly (redaction itself works — "Z." shown to the volunteer,
 full name to the admin). Ruled out: flakiness (fails identically on repeat),
 timeout length (still fails at 60s), and stale dev-server state (still fails
-after a clean restart). Not yet root-caused.
+after a clean restart).
 
-No acceptance criteria yet — needs root-causing before it can be scoped as a fix.
+**Root-caused 2026-08-12** — reached independently by both qa-tester passes,
+with a DOM dump confirming it. This is a **test bug, not a redaction bug**.
+`FamiliesExplorer.tsx:118-134` wraps the `<select>` *inside* its `<label>`,
+along with all six `<option>` elements. A `<label>` wrapping a form control
+derives its accessible name from **all** descendant text, so the control's name
+computes as:
 
-Status: Backlog
-Owner: unassigned
+```
+"SchoolAll schoolsDemo ElementaryDemo Middle SchoolDemo High SchoolDirect referral (no school)Confidential"
+```
+
+The test uses an *anchored* regex, `getByLabel(/^school$/i)`, which therefore
+matches **zero** elements — not two, which would throw a strict-mode violation
+immediately. Playwright's auto-waiting locator just polls silently until the
+test times out. That is exactly the reported symptom: the element is genuinely
+present and visible in the snapshot; its computed *name* simply never equals the
+anchored pattern. Corroborated by the intake form's analogous
+`getByLabel(/referral source/i)` (unanchored) passing in the same run, and by
+`getByRole("combobox", { name: /^school$/i })` finding the element in one call.
+
+Acceptance criteria:
+- [ ] The two anchored locators at `ui-flows.spec.ts:68` and `:79` are changed to something accessible-name-aware (`getByRole("combobox", { name: ... })`) or de-anchored.
+- [ ] The confidential-redaction test passes against dev, and still genuinely asserts redaction (shows "Z." to a volunteer, full name to an admin) rather than being weakened to pass.
+- [ ] The same anchored-`getByLabel`-against-a-`<select>` pattern is checked for elsewhere in the suite (these two are currently the only instances).
+
+Open question for the owner — **TST-4** in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md):
+fix the test only, or also clean up the underlying markup? The same DOM pattern
+means a screen reader today announces "School All schools Demo Elementary Demo
+Middle School…" for that filter, which is a real if minor accessibility rough
+edge independent of the test.
+
+Status: Backlog — root-caused and scoped, ready to pick up (2-line fix)
+Owner: qa-tester (test fix); frontend-designer only if TST-4 is answered "also fix the markup"
 
 ---
 
@@ -421,14 +503,16 @@ Owner: built this session (schema, data layer, and UI) — see [supabase/migrati
 
 ---
 
-## Open questions carried over from DESIGN.md §8
+## Open questions
 
-These aren't new — they're the unanswered items from DESIGN.md, restated here
-as concrete decisions now that we know exactly what the schema does and
-doesn't support for each:
+**Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
+question across the project (68 as of 2026-08-12), organized by area, with the
+matching GitLab issue where one exists. That file is now the place to answer
+them; this section is just the forwarding address for the five that used to
+live here:
 
-1. `drive_schools.liaison_name/phone/email` exists in the schema but is unused by any current feature — is a real school-liaison contact coming, or does it stay null indefinitely?
-2. `families.sort_tag` (the legacy "Color" field) exists in the schema — what is it actually for?
-3. Is the school list fixed year to year, or does it change enough to need an "inactive school" flag?
-4. Who decides a family is confidential, and who can grant `can_view_confidential` to a volunteer — should that decision be logged (who/why), not just an unaudited boolean? *(Being addressed now — see the volunteer-management story being built.)*
-5. Can a referral ever split siblings across schools/confidential status, or is one referral always the whole family? Schema currently hard-codes per-family.
+1. Is a real school-liaison contact coming, or do `drive_schools.liaison_*` stay null? → **ADM-3**
+2. What is `families.sort_tag` (the legacy "Color" field) actually for? → **ADM-1** (now also a live-data concern — the guess is baked into two intake forms, and the e2e suite uses the same column as a deletion marker)
+3. Is the school list fixed year to year, or does it need an "inactive school" flag? → **DB-24** (DESIGN.md §8 treats this as resolved; confirm and strike)
+4. Should granting `can_view_confidential` be logged with who and why, not just an unaudited boolean? → **DB-22** (the "who decides confidential" half is resolved — see **DB-26**)
+5. Can a referral split siblings across schools/confidential status? → **DB-23** (DESIGN.md §8 treats this as resolved; confirm and strike)

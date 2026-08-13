@@ -14,7 +14,8 @@ that's never optional. Everything else below is read on demand.
 |---|---|---|
 | Any task at all — role model, who sees what | [AGENTS.md](AGENTS.md) | (already loaded) |
 | Starting/continuing a user story | [docs/backlog.md](docs/backlog.md) — status source of truth (GitLab issues track the same open work; syncing is manual — see memory.md) | DESIGN.md, unless you need the *why* behind scope |
-| "Why does this feature work this way" / phasing / open product questions | [DESIGN.md](DESIGN.md) | SCHEMA.md, unless the question is about table shape |
+| "Why does this feature work this way" / phasing | [DESIGN.md](DESIGN.md) | SCHEMA.md, unless the question is about table shape |
+| Blocked on a decision, or about to guess at one | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) — every open question in one place, by area; add to it rather than inventing an answer | DESIGN.md §8 / SCHEMA.md's open-questions section (both folded in there) |
 | Schema, RLS policies, DB functions, migrations | [SCHEMA.md](SCHEMA.md) | DESIGN.md §1-3 (background/workflow, not schema) |
 | Resetting dev data, GitLab issue conventions | [memory.md](memory.md) | — |
 | Spawning or understanding a specialist agent | the matching file in [.claude/agents/](.claude/agents/) | the other five agents' files |
