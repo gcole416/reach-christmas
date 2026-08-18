@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useData } from "@/lib/store";
 import type { ReferralType } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
-import { FormField } from "@/components/FormField";
 import { TextAreaField } from "@/components/TextAreaField";
 import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/ChildFormFields";
 import { AdminNav } from "../AdminNav";
@@ -13,7 +12,6 @@ import { AdminNav } from "../AdminNav";
 export default function IntakePage() {
   const { data, addFamily } = useData();
   const [referralChoice, setReferralChoice] = useState("");
-  const [sortTag, setSortTag] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [children, setChildren] = useState<ChildFormState[]>(() => [emptyChild()]);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +75,6 @@ export default function IntakePage() {
     const result = await addFamily({
       referralType,
       driveSchoolId,
-      sortTag,
       internalNotes,
       children,
     });
@@ -92,7 +89,6 @@ export default function IntakePage() {
     setSuccessMessage(
       `Saved as Family ${result.familyNumber} with ${savedChildCount} ${savedChildCount === 1 ? "child" : "children"}.`
     );
-    setSortTag("");
     setInternalNotes("");
     setChildren([emptyChild()]);
   }
@@ -110,8 +106,8 @@ export default function IntakePage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
           <h2 className="text-sm font-semibold text-ink-primary">Family</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
+          <div className="mt-3">
+            <label className="block text-sm sm:max-w-xs">
               <span className="text-ink-secondary">Referral source</span>
               <select
                 value={referralChoice}
@@ -135,13 +131,6 @@ export default function IntakePage() {
                 <option value="__confidential">Confidential</option>
               </select>
             </label>
-
-            <FormField
-              label="Sort tag (optional)"
-              value={sortTag}
-              onChange={setSortTag}
-              placeholder="e.g. wrapping color"
-            />
           </div>
           <p className="mt-2 text-xs text-ink-muted">
             The family number is assigned automatically once you save — it&apos;ll show up here and on

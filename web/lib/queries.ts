@@ -169,7 +169,6 @@ export interface AdminFamilyRow {
   schoolName: string | null;
   familyNumber: number;
   isConfidential: boolean;
-  sortTag: string | null;
   children: AdminChildRow[];
 }
 
@@ -186,7 +185,6 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
       schoolName: school?.name ?? null,
       familyNumber: family.familyNumber,
       isConfidential: family.isConfidential,
-      sortTag: family.sortTag,
       children: familyChildren.map((child) => {
         const childCards = data.cards.filter((c) => c.childId === child.id);
         return {

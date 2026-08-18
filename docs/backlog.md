@@ -397,13 +397,14 @@ first migration, so prod has the same bug, and `/sponsor` has likely never
 worked for a real anonymous visitor there either.
 
 Acceptance criteria:
-- [ ] Confirmed live first with two read-only queries (`set local role anon; select count(*) from public_available_cards;` then the same against `child_card_numbers` in isolation), so the fix targets a verified cause rather than the leading theory.
-- [ ] `public_available_cards` no longer depends on any `security_invoker` view: the `child_card_numbers` join is replaced by a direct `left join drive_schools` and the card number is inlined (`coalesce(ds.code,'Z') || f.family_number || '.' || ch.child_index`).
-- [ ] The column whitelist is unchanged, the `not f.is_confidential` predicate stays an **inner** join condition, and the not-already-claimed filter is unchanged. No `select *` anywhere in the view.
-- [ ] `grant select on public_available_cards to anon` is re-issued if the view is dropped rather than replaced (`drop view` discards grants — a granted-but-missing view looks exactly like this bug).
-- [ ] Verified as a genuinely signed-out client, not an admin session: available cards appear, a confidential family's child does not, and a claimed card does not.
-- [ ] `web/tests/e2e/ui-flows.spec.ts:12` (the existing, currently-red anonymous `/sponsor` test) passes.
-- [ ] `claim_card()`'s anonymous path smoke-tested end to end once cards are visible again — it rests on the same RLS-bypass assumption and has plausibly never run live (OPEN_QUESTIONS **SPN-4**).
+- [x] Confirmed live first with two read-only queries (`set local role anon; select count(*) from public_available_cards;` then the same against `child_card_numbers` in isolation), so the fix targets a verified cause rather than the leading theory.
+- [x] `public_available_cards` no longer depends on any `security_invoker` view: the `child_card_numbers` join is replaced by a direct `left join drive_schools` and the card number is inlined (`coalesce(ds.code,'Z') || f.family_number || '.' || ch.child_index`).
+- [x] The column whitelist is unchanged, the `not f.is_confidential` predicate stays an **inner** join condition, and the not-already-claimed filter is unchanged. No `select *` anywhere in the view.
+- [x] `grant select on public_available_cards to anon` is re-issued if the view is dropped rather than replaced (`drop view` discards grants — a granted-but-missing view looks exactly like this bug).
+- [x] Verified as a genuinely signed-out client, not an admin session: available cards appear, a confidential family's child does not, and a claimed card does not.
+- [x] `web/tests/e2e/ui-flows.spec.ts:12` (the existing, currently-red anonymous `/sponsor` test) passes.
+- [x] `claim_card()`'s anonymous path smoke-tested end to end once cards are visible again — it rests on the same RLS-bypass assumption and has plausibly never run live (OPEN_QUESTIONS **SPN-4**).
+- [x] SPN-1's open-drive filter (`join drives ... status = 'open'`): live-proven 2026-08-18 — a temporary `draft`-status drive/family/child/card was created in dev, confirmed invisible to an anonymous `public_available_cards` query (both by `card_id` and by a distinctive `first_name`), then deleted; the cascade delete (`drives` → `families` → `children` → `cards`) was confirmed to leave zero trace.
 - [ ] Applied to prod.
 
 **Guardrails — do not "fix" it any of these ways** (from reach-reviewer, stated
@@ -420,8 +421,8 @@ the *open* drive? today it has no `drives.status` filter at all, so fixing this
 would publish draft and archived drives' children to the public page) and
 **SPN-2** (the card number sponsors see embeds the school's letter code).
 
-Status: Backlog — root-caused and scoped, blocked on SPN-1/SPN-2
-Owner: database-engineer (fix), reach-reviewer (mandatory gate — this is the anon boundary), qa-tester (anon-context verification)
+Status: Fixed and fully verified live on dev 2026-08-18 — every acceptance criterion is met except "Applied to prod." Confirmed live against dev: anon caller now gets real rows (was 0, now 15, matching the authenticated-admin count); a confidential family's card and an already-claimed card are both confirmed excluded from the anon result set; a temporary non-open (`draft`) drive's card was confirmed excluded too, then cleanly deleted with no trace, proving the open-drive filter (SPN-1) for real rather than by code inspection alone; `web/tests/e2e/ui-flows.spec.ts:12` (the anonymous `/sponsor` claim/cancel flow) is green for the first time ever; `claim_card()`'s anonymous path (SPN-4) confirmed working live via both the e2e suite and a direct no-auth-header REST call. reach-reviewer's gate passed with no issues on the anon-boundary migration itself (a separate, unrelated finding on the companion ADM-1 migration was fixed the same day — see that migration's header comment).
+Owner: database-engineer (fix — done), reach-reviewer (mandatory gate — done, no issues), qa-tester (anon-context verification — done)
 
 ---
 

@@ -119,7 +119,8 @@ create table families (
   drive_school_id uuid references drive_schools(id),   -- null if confidential / direct referral
   family_number int not null,
   is_confidential boolean not null default false,
-  sort_tag text,                              -- was "Color" in the old sheet — purpose unconfirmed, see below
+  is_test_data boolean not null default false, -- test-infrastructure only, see below — never a UI field
+  is_autotest_data boolean not null default false, -- narrower than is_test_data, see below — never a UI field
   internal_notes text,
   distribution_method_override distribution_method,    -- rare case: differs from the school's default
   scheduled_pickup_at timestamptz,
@@ -159,7 +160,7 @@ create or replace function public.create_family(
   p_drive_id uuid,
   p_drive_school_id uuid,
   p_is_confidential boolean,
-  p_sort_tag text default null,
+  p_is_test_data boolean default false,
   p_internal_notes text default null
 )
 returns families
@@ -181,8 +182,7 @@ begin
   perform pg_advisory_xact_lock(v_lock_key);
 
   if p_is_confidential then
-    select coalesce(max(family_number), 0) + 1 into v_next_number
-    from families where drive_id = p_drive_id and is_confidential;
+    v_next_number := public.next_confidential_family_number(p_drive_id);
   else
     select coalesce(max(family_number), 0) + 1 into v_next_number
     from families
@@ -191,14 +191,37 @@ begin
       and not is_confidential;
   end if;
 
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, internal_notes, created_by)
-  values (p_drive_id, p_drive_school_id, v_next_number, p_is_confidential, p_sort_tag, p_internal_notes, auth.uid())
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, is_autotest_data, internal_notes, created_by)
+  values (p_drive_id, p_drive_school_id, v_next_number, p_is_confidential, p_is_test_data, p_is_test_data, p_internal_notes, auth.uid())
   returning * into v_family;
 
   return v_family;
 end;
 $$;
 ```
+
+**`p_is_test_data`/`is_test_data`/`is_autotest_data`** (added in
+[supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql](supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql),
+replacing the old `p_sort_tag`/`sort_tag`): two-tier marker, split this way
+after reach-reviewer caught a collision in the first draft. `is_test_data` is
+the broad "not real production data" flag — set by `create_family()` whenever
+`p_is_test_data` is true, and set directly by the dev-only
+`demo_seed.sql`/`demo_seed_bulk.sql` scripts too. `is_autotest_data` is
+narrower: `create_family()` sets it to the same value as `p_is_test_data`, but
+since the demo-seed scripts insert directly and never set it, it's `true` only
+on rows the e2e suite created. That's the one
+[web/tests/e2e/helpers/cleanup.ts](web/tests/e2e/helpers/cleanup.ts) deletes
+on after each run — keying cleanup off the narrower flag is what lets a demo
+you just seeded for a walkthrough survive an e2e run against the same dev
+database. **Neither is a user-facing field** — deliberately absent from both
+the intake form and the family-edit form, unlike `sort_tag` before it,
+specifically so a real volunteer's data entry can never collide with the
+test-cleanup marker. Note the confidential branch above also no longer inlines
+its own `select max(...)`
+— see "The same root cause also reached `create_family()`'s confidential-
+numbering read" below for why it's routed through
+`next_confidential_family_number()` instead; this doc block reflects the
+function as it stands after both fixes, not as originally written.
 
 Why an advisory lock rather than just "select max, add one, insert" as two separate statements from the
 client: that's exactly the race described above — nothing stops two concurrent calls from both reading the
@@ -243,7 +266,8 @@ A card's base identifier (`C1.3`) is never stored — it's derived (school code 
 index), so it can't drift out of sync if a school's code ever changes. A view for that base identifier:
 
 ```sql
-create view child_card_numbers as
+create view child_card_numbers
+  with (security_invoker = true) as
 select
   c.id as child_id,
   coalesce(ds.code, 'Z') || f.family_number || '.' || c.child_index as card_number,
@@ -253,6 +277,14 @@ from children c
 join families f on f.id = c.family_id
 left join drive_schools ds on ds.id = f.drive_school_id;
 ```
+
+`security_invoker = true` matters here: this view respects the *querying* user's own RLS, same as
+every other staff-facing view (see §9's RLS table). It is deliberately **not** used by
+`public_available_cards` (§9) — that anon-facing view inlines this same expression directly instead of
+joining this view, precisely because a `security_invoker` view's own base-table reads run as the
+*calling* role, and `anon` has no policies on `children`/`families`/`drive_schools` at all. Joining this
+view from an anon-facing one silently collapses to zero rows (this was US-17); do not reintroduce that
+dependency.
 
 ## 7. `cards` — the physical, claimable gift-slots for a child
 
@@ -285,7 +317,8 @@ by the schema itself.
 The "recommend for printing" report is just a query, not a stored recommendation:
 
 ```sql
-create view cards_needing_print as
+create view cards_needing_print
+  with (security_invoker = true) as
 select
   ch.id as child_id,
   ch.first_name,
@@ -302,7 +335,8 @@ having count(crd.id) < ch.target_card_count            -- fewer cards exist than
 And the full printable label, combining the base card number with the copy count:
 
 ```sql
-create view printable_cards as
+create view printable_cards
+  with (security_invoker = true) as
 select
   crd.id as card_id,
   ccn.card_number || ' (' || crd.copy_number || '/' || crd.total_copies || ')' as display_label,
@@ -431,7 +465,7 @@ accidentally skip logging. We'll write the actual trigger function when we scaff
 | `Recieved` / `Delivered` checkboxes | `assignments.status` (with three more stages: pledged, purchased, verified) |
 | *(no equivalent — new)* | `assignments.volunteer_notes` — what a volunteer flags as missing at church intake, feeding the shopping-list view |
 | "Confidential" tab | `families.is_confidential = true`, `drive_school_id = null` |
-| `Color` | `families.sort_tag` (purpose unconfirmed — see below) |
+| `Color` | *(retired — see [OPEN_QUESTIONS.md ADM-1](docs/OPEN_QUESTIONS.md); was `families.sort_tag`, dropped in [20260818130000_replace_sort_tag_with_is_test_data.sql](supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql))* |
 
 The old sheet assumed one card per child; that assumption is the one thing in this schema that isn't a
 straight port, since it wouldn't support your printing workflow.
@@ -446,7 +480,7 @@ appear as two separate claimable listings), plus a controlled claim action rathe
 create view public_available_cards as
 select
   crd.id as card_id,
-  ccn.card_number as card_number,   -- base identifier only, e.g. "L1.1" — no copy count
+  coalesce(ds.code, 'Z') || f.family_number || '.' || ch.child_index as card_number,
   ch.first_name,
   ch.grade,
   ch.pant_size, ch.shirt_size, ch.shoe_size,
@@ -455,7 +489,8 @@ select
 from cards crd
 join children ch on ch.id = crd.child_id
 join families f on f.id = ch.family_id and not f.is_confidential
-join child_card_numbers ccn on ccn.child_id = ch.id
+join drives d on d.id = f.drive_id and d.status = 'open'
+left join drive_schools ds on ds.id = f.drive_school_id
 left join wishlist_items wi on wi.child_id = ch.id
 where not exists (
   select 1 from assignments a where a.card_id = crd.id and a.status <> 'cancelled'
@@ -467,6 +502,31 @@ deliberately left out of this view. It's print-room information — it tells sta
 grab off the printer — and sponsors have no use for it and shouldn't see it; showing it here read as
 confusing/unnecessary rather than helpful. `printable_cards` (above) is the *only* place that notation
 should appear, since that view exists specifically to drive the print run.
+
+**Second correction (US-19 / docs/backlog.md, fixed in
+[supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql](supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql)):**
+the version above originally joined `child_card_numbers` for the card-number
+expression instead of inlining it. That view is `security_invoker = true`
+(see §6 above), and Postgres applies a view's own `security_invoker` setting
+only to *that view's* base-table reads — not to whatever called it — so for a
+genuinely anonymous caller, `child_card_numbers`' internal
+`children`/`families`/`drive_schools` reads ran as `anon`, which has no RLS
+policies on those tables, and the join silently collapsed to zero rows.
+`public_available_cards` itself was (correctly) never `security_invoker`, so
+this was invisible when tested from an authenticated staff session — only a
+real anonymous caller hit it. Fixed by inlining the identical expression
+(`coalesce(ds.code,'Z') || f.family_number || '.' || ch.child_index`) via a
+direct `left join drive_schools`, so no `security_invoker` view remains
+anywhere in this view's dependency chain. The same migration also adds the
+`join drives ... and d.status = 'open'` filter (OPEN_QUESTIONS.md SPN-1) —
+before this, the view had no drive-status filter at all, so every
+draft/closed/archived drive's children were one bug-fix away from becoming
+publicly listed and claimable. **Never** route `child_card_numbers` back out
+of `security_invoker` to work around this — `authenticated` holds a direct
+grant on it, so that would let any logged-in volunteer read card numbers and
+family ids for confidential families they have no clearance for (US-16's leak
+reopened one join further out). See docs/backlog.md US-17 for the full
+root-cause writeup and guardrails.
 
 Notably absent: `families.*` contact info, `drive_schools.liaison_*`, `children.other_notes`, and anything
 from a confidential family. Claiming a card should go through a `security definer` Postgres function
@@ -557,9 +617,10 @@ newer year. Now the database rejects it outright.
 
 - Who decides `target_card_count` and when — is it obvious at intake time (e.g. "this family always gets
   2 cards per teenager"), or something staff adjust later as wishlists come in?
-- What is `sort_tag` (the old `Color` field) actually for? If it's a wrapping-paper/bin color used for
-  physical sorting at distribution, a free-text column is enough. If it means something else, this may
-  need to change shape.
+- ~~What is `sort_tag` (the old `Color` field) actually for?~~ → **Resolved** (OPEN_QUESTIONS.md ADM-1): it
+  was meant for color-coordinating/sorting gift bags at distribution and is no longer needed. Dropped from
+  `families` entirely — see the `is_test_data` note under §5 above for its replacement as the e2e/demo-seed
+  cleanup marker, which is the one thing it also happened to be doing.
 - Should claiming a card on the public page require confirming an email (e.g. a confirmation link) before
   it counts as `pledged`, to cut down on accidental or prank claims? Doesn't block Phase 1 but affects the
   claim function above.

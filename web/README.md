@@ -77,7 +77,10 @@ npm run test:e2e        # headless, terminal output
 npm run test:e2e:ui     # Playwright's interactive UI mode, useful while writing new tests
 ```
 
-Everything the suite creates is tagged `sort_tag = 'AutoTest'` (children/cards/sponsors namespaced under
-`@autotest.example.com`) and deleted again after each file runs — it shares the dev project with your own
-manual testing and `demo_seed.sql` data, but never touches either. It does need a drive with `status =
-'open'` to exist first, same as the seed scripts.
+Everything the suite creates is tagged `is_autotest_data = true` on `families` (children/cards/sponsors
+namespaced under `@autotest.example.com`) and deleted again after each file runs — it shares the dev
+project with your own manual testing and `demo_seed.sql` data, but never touches either. `demo_seed.sql`
+rows are tagged `is_test_data = true` but *not* `is_autotest_data`, which is what keeps the two from
+colliding: cleanup deletes on `is_autotest_data`, so a demo you just seeded for a walkthrough survives an
+e2e run against the same dev database. It does need a drive with `status = 'open'` to exist first, same as
+the seed scripts.

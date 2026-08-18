@@ -3,7 +3,6 @@
 import { use, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useData } from "@/lib/store";
-import { FormField } from "@/components/FormField";
 import { TextAreaField } from "@/components/TextAreaField";
 import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/ChildFormFields";
 import type { DataBundle } from "@/lib/types";
@@ -102,7 +101,6 @@ function FamilyEditForm({
   const { data, refresh, saveFamilyEdit } = useData();
 
   const family = data?.families.find((f) => f.id === familyId) ?? null;
-  const [sortTag, setSortTag] = useState(() => family?.sortTag ?? "");
   const [internalNotes, setInternalNotes] = useState(() => family?.internalNotes ?? "");
   const [children, setChildren] = useState<ChildFormState[]>(() => (data ? seedChildren(data, familyId) : [emptyChild()]));
   // The row version this form was SEEDED from, captured once at mount and
@@ -209,7 +207,7 @@ function FamilyEditForm({
     setPendingAction(force ? "force" : "save");
     const result = await saveFamilyEdit(
       familyId,
-      { sortTag, internalNotes },
+      { internalNotes },
       children,
       baselineUpdatedAt,
       force ? { force: true } : undefined
@@ -269,17 +267,6 @@ function FamilyEditForm({
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
           <h2 className="text-sm font-semibold text-ink-primary">Family details</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField
-              label="Sort tag"
-              value={sortTag}
-              onChange={(v) => {
-                markDirty();
-                setSortTag(v);
-              }}
-              placeholder="e.g. wrapping color"
-            />
-          </div>
           <div className="mt-3">
             <TextAreaField
               label="Internal notes (staff only)"

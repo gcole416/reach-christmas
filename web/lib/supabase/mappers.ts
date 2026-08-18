@@ -59,7 +59,6 @@ export function mapFamily(row: any): Family {
     driveSchoolId: row.drive_school_id,
     familyNumber: row.family_number,
     isConfidential: row.is_confidential,
-    sortTag: row.sort_tag,
     internalNotes: row.internal_notes,
     distributionMethodOverride: row.distribution_method_override as DistributionMethod | null,
     scheduledPickupAt: row.scheduled_pickup_at,

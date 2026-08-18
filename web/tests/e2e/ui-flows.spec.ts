@@ -39,6 +39,14 @@ test.describe("public claim flow", () => {
     await staffPage.getByPlaceholder(/search/i).fill("Zzautotestclaimable");
     staffPage.once("dialog", (dialog) => dialog.accept());
     await staffPage.getByRole("button", { name: /^cancel$/i }).click();
+    // cancelAssignment() is an async Supabase call fired from the click
+    // handler; closing the context immediately after click() (which only
+    // waits for the click/confirm-dialog itself, not the request it kicks
+    // off) races the in-flight PATCH and can tear the context down before it
+    // lands. Wait for the board to actually reflect the cancellation — the
+    // card drops back to "unassigned" with no active assignment, so its
+    // Cancel button disappears — before closing this context.
+    await expect(staffPage.getByRole("button", { name: /^cancel$/i })).toHaveCount(0);
     await staffContext.close();
 
     // back on the public page once cancelled

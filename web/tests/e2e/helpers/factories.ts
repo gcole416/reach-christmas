@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Every row created through these helpers is tagged so cleanup.ts can find
 // and remove it without ever touching real data or 'Demo'-tagged seed data.
-export const AUTOTEST_SORT_TAG = "AutoTest";
 export const AUTOTEST_EMAIL_DOMAIN = "autotest.example.com";
 
 export interface TestFamily {
@@ -20,7 +19,7 @@ export async function createTestFamily(
       p_drive_id: opts.driveId,
       p_drive_school_id: opts.driveSchoolId ?? null,
       p_is_confidential: opts.isConfidential ?? false,
-      p_sort_tag: AUTOTEST_SORT_TAG,
+      p_is_test_data: true,
       p_internal_notes: null,
     })
     .single();

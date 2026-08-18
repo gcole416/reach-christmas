@@ -37,8 +37,8 @@ begin
     returning id into v_ds_c_id;
 
   -- Family 1 — Demo Elementary, 2 kids: one delivered, one still unclaimed --
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, checked_in_at)
-    values (v_drive_id, v_ds_a_id, 1, false, 'Demo', now() - interval '4 days') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, checked_in_at)
+    values (v_drive_id, v_ds_a_id, 1, false, true, now() - interval '4 days') returning id into v_family_id;
 
   insert into children (family_id, child_index, first_name, grade, age, sex, pant_size, shirt_size, shoe_size, target_card_count)
     values (v_family_id, 1, 'Emma', '3', 8, 'F', '8', 'M', '2', 1) returning id into v_child_id;
@@ -56,8 +56,8 @@ begin
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1); -- unclaimed
 
   -- Family 2 — Demo Elementary, 1 kid, critically overdue pledge -----------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-    values (v_drive_id, v_ds_a_id, 2, false, 'Demo') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+    values (v_drive_id, v_ds_a_id, 2, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Sofia', '5', 10, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -68,8 +68,8 @@ begin
     values (v_card_id, v_sponsor_id, 'pledged', now() - interval '25 days'); -- critical overdue
 
   -- Family 3 — Demo Middle, 1 kid needing 2 cards (multi-sponsor demo) -----
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, scheduled_pickup_at)
-    values (v_drive_id, v_ds_b_id, 1, false, 'Demo', now() + interval '5 days') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, scheduled_pickup_at)
+    values (v_drive_id, v_ds_b_id, 1, false, true, now() + interval '5 days') returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Liam', '7', 12, 'M', 2) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -82,8 +82,8 @@ begin
 
   -- Family 4 — Demo Middle, 2 siblings; one card was cancelled and is back
   -- on the market, demonstrating that flow -----------------------------------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-    values (v_drive_id, v_ds_b_id, 2, false, 'Demo') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+    values (v_drive_id, v_ds_b_id, 2, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Ava', '6', 11, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -100,8 +100,8 @@ begin
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1); -- unclaimed
 
   -- Family 5 — Demo High, 1 kid, received at church (mid-fulfillment) ------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-    values (v_drive_id, v_ds_c_id, 1, false, 'Demo') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+    values (v_drive_id, v_ds_c_id, 1, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Ethan', '10', 16, 'M', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -112,8 +112,8 @@ begin
     values (v_card_id, v_sponsor_id, 'received_at_church', now() - interval '12 days', now() - interval '9 days', now() - interval '3 days');
 
   -- Family 6 — Demo High, 1 kid, pledged a week ago (not yet overdue) ------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-    values (v_drive_id, v_ds_c_id, 2, false, 'Demo') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+    values (v_drive_id, v_ds_c_id, 2, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Isabella', '9', 15, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -123,8 +123,8 @@ begin
   insert into assignments (card_id, sponsor_id, status, claimed_at) values (v_card_id, v_sponsor_id, 'pledged', now() - interval '3 days');
 
   -- Family 7 — direct referral, no school -----------------------------------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, internal_notes)
-    values (v_drive_id, null, 1, false, 'Demo', 'Referred directly by a church member') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, internal_notes)
+    values (v_drive_id, null, 1, false, true, 'Referred directly by a church member') returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Grace', '2', 7, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -132,8 +132,8 @@ begin
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1); -- unclaimed
 
   -- Family 8 — confidential ---------------------------------------------------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag, internal_notes)
-    values (v_drive_id, null, 1, true, 'Demo', 'Demo confidential case — shows the first-initial redaction for non-admins') returning id into v_family_id;
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, internal_notes)
+    values (v_drive_id, null, 1, true, true, 'Demo confidential case — shows the first-initial redaction for non-admins') returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
     values (v_family_id, 1, 'Chloe', '1', 6, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
@@ -144,10 +144,14 @@ end $$;
 
 -- ============================================================================
 -- CLEANUP — run this only when you're done with the demo. Safe: it only
--- touches rows tagged 'Demo' / the fake schools/sponsor emails above, so it
--- won't touch any real families or other test data you've entered in dev.
+-- touches rows tagged is_test_data = true / the fake schools/sponsor emails
+-- above, so it won't touch any real families or other test data you've
+-- entered in dev. Note this also matches rows created by the e2e suite
+-- (web/tests/e2e/helpers/factories.ts sets is_test_data via create_family()'s
+-- p_is_test_data) — fine here since this is a manual, deliberately-run dev
+-- script, not something that runs unattended.
 -- ============================================================================
--- delete from families where sort_tag = 'Demo';
+-- delete from families where is_test_data = true;
 -- delete from sponsors where email like '%@demo.example.com';
 -- delete from drive_schools where school_id in (select id from schools where name like 'Demo %');
 -- delete from schools where name like 'Demo %';

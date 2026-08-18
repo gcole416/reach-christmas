@@ -54,7 +54,6 @@ export interface IntakeChildInput {
 export interface AddFamilyInput {
   referralType: ReferralType;
   driveSchoolId: string | null;
-  sortTag: string;
   internalNotes: string;
   children: IntakeChildInput[];
 }
@@ -92,7 +91,6 @@ export type SaveFamilyEditResult =
   | { ok: false; error: string; conflict?: boolean; partialSave?: boolean };
 
 export interface UpdateFamilyDetailsInput {
-  sortTag: string;
   internalNotes: string;
 }
 
@@ -416,7 +414,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       p_drive_id: data.drive.id,
       p_drive_school_id: driveSchoolId,
       p_is_confidential: isConfidential,
-      p_sort_tag: input.sortTag.trim() || null,
       p_internal_notes: input.internalNotes.trim() || null,
     });
     if (familyError || !familyRow) {
@@ -618,7 +615,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     let familyUpdate = supabase
       .from("families")
       .update({
-        sort_tag: details.sortTag.trim() || null,
         internal_notes: details.internalNotes.trim() || null,
       })
       .eq("id", familyId);

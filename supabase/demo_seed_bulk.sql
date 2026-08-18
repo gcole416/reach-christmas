@@ -7,7 +7,7 @@
 --
 -- Reuses the same "Demo Elementary/Middle/High" schools from demo_seed.sql if
 -- they already exist (creates them if not), and tags every family with
--- sort_tag = 'Demo' — so the cleanup lines at the bottom of demo_seed.sql
+-- is_test_data = true — so the cleanup lines at the bottom of demo_seed.sql
 -- remove this data too. Safe to run whether or not demo_seed.sql has been
 -- run first.
 
@@ -57,10 +57,10 @@ begin
     raise exception 'No open drive found — open one on the Drives page first.';
   end if;
 
-  -- Picks up wherever the last 'Demo' batch left off (starting at 1000 if
+  -- Picks up wherever the last test-data batch left off (starting at 1000 if
   -- this is the first run) so re-running this script — or running it after
   -- demo_seed.sql — can never collide on family_number.
-  select coalesce(max(family_number), 999) + 1 into v_family_num from families where sort_tag = 'Demo';
+  select coalesce(max(family_number), 999) + 1 into v_family_num from families where is_test_data = true;
 
   for i in 1..3 loop
     select id into v_school_id from schools where name = v_school_names[i];
@@ -85,16 +85,16 @@ begin
 
     v_referral_roll := random();
     if v_referral_roll < 0.85 then
-      insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-        values (v_drive_id, v_ds_ids[1 + floor(random() * 3)::int], v_family_num, false, 'Demo')
+      insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+        values (v_drive_id, v_ds_ids[1 + floor(random() * 3)::int], v_family_num, false, true)
         returning id into v_family_id;
     elsif v_referral_roll < 0.95 then
-      insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-        values (v_drive_id, null, v_family_num, false, 'Demo')
+      insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+        values (v_drive_id, null, v_family_num, false, true)
         returning id into v_family_id;
     else
-      insert into families (drive_id, drive_school_id, family_number, is_confidential, sort_tag)
-        values (v_drive_id, null, v_family_num, true, 'Demo')
+      insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+        values (v_drive_id, null, v_family_num, true, true)
         returning id into v_family_id;
     end if;
 

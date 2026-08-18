@@ -42,7 +42,7 @@ Everything an anonymous member of the public can reach. Per
 boundary here, so questions in this section are higher-stakes than their size
 suggests.
 
-### SPN-1 — Should the public sponsor page only show cards from the **open** drive? · **Blocking**
+### ~~SPN-1 — Should the public sponsor page only show cards from the **open** drive?~~ · Resolved
 
 `public_available_cards` has no filter on `drives.status` at all. It's invisible
 today only because the view returns nothing to anonymous visitors (SPN-2). The
@@ -58,14 +58,15 @@ This is the highest-consequence side effect of fixing US-17 and needs an answer
 - Raised by: reach-reviewer
 - GitLab: none yet — belongs on [#20](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/20)
 
-### SPN-2 — Is it OK that the card number sponsors see embeds the school's letter code? · **Blocking**
+Answer: There should be a filter to only show "Open" drives on the main page.
 
-`card_number` renders as e.g. `C1.3`, where `C` is `drive_schools.code`.
-[DESIGN.md §5](../DESIGN.md#5-privacy--security-important--this-holds-kids-names-ages-schools-and-sponsor-contact-info--no-home-addresses-are-collected)
-says sponsors never see a school. It's probably fine (the code is printed on the
-physical card anyway, and a single letter isn't a school name), but whoever
-fixes US-17 will be inlining that exact expression, so decide now rather than
-inherit it.
+Implemented, applied to dev, and fully proven live 2026-08-18 (supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql — `join drives d on d.id = f.drive_id and d.status = 'open'`). A temporary `draft`-status drive/family/child/card was created in dev, confirmed invisible to an anonymous `public_available_cards` query, then deleted with the cascade delete confirmed to leave zero trace.
+
+### ~~SPN-2 — Is it OK that the card number sponsors see embeds the school's letter code?~~ · Resolved
+
+Answer: The card number is ok to have on the main page, but should definitely be visible on the staff side. Fine to leave the IDs with a single letter identifier.
+
+Implemented in the US-17 fix (supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql) — the inlined card-number expression is unchanged from what `child_card_numbers` already produced.
 
 - Code: [supabase/migrations/20260708120000_init.sql:223](../supabase/migrations/20260708120000_init.sql#L223), [DESIGN.md:52](../DESIGN.md#L52)
 - Raised by: reach-reviewer
@@ -79,6 +80,8 @@ it's cheaper to decide before the season than after.
 
 - Code: [supabase/migrations/20260708120000_init.sql:537-589](../supabase/migrations/20260708120000_init.sql#L537), [web/app/sponsor/SponsorBrowser.tsx:208-278](../web/app/sponsor/SponsorBrowser.tsx#L208)
 - GitLab: [issue #12](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/12)
+
+Answer: Yes the emails should be verified before being able to claim cards. I don't know the best way to do this though. Thougths?
 
 ### SPN-4 — Has `claim_card()`'s anonymous path ever actually run against live Postgres? · Soon
 
@@ -101,6 +104,8 @@ testing of any kind (`playwright.config.ts` defines no device projects).
 - Code: [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx), [web/playwright.config.ts](../web/playwright.config.ts)
 - Raised by: qa-tester
 
+Answer: Absolutely this should be optimized for phone usage. 
+
 ### SPN-6 — Do sponsors get anything after claiming — a confirmation email, a receipt, a reminder? · Soon
 
 Today the only follow-up mechanism is the "Sponsors running late" table on the
@@ -111,16 +116,14 @@ this season.
 
 - Code: [web/app/admin/page.tsx:44-86](../web/app/admin/page.tsx#L44), [DESIGN.md:97](../DESIGN.md#L97)
 
-### SPN-7 — Should sponsor contact details be visible to every volunteer, or only to admins? · Whenever
+Answer: I need to help define an email workflow. Right now I'm imagining a flow like 1. Thanks for signing up, here's who you volunteered to buy for 2. Reminder 1 week until due 3. Reminder 1 day out 4. if overdue, emails should go out again. but I don't know the best way to do this, and am open to suggestions. 
 
-`sponsors` (name/phone/email of outside members of the public) is readable *and*
-writable by every authenticated staff account with `using (true)` — no policy
-predicate at all. It's the one table of non-staff PII with no gate, and it has
-never been explicitly signed off.
+### ~~SPN-7 — Should sponsor contact details be visible to every volunteer, or only to admins?~~ · Resolved
+
+Answer: This is ok. Most sponsors are within our church organization, so little PII protection is needed for them. Their details should remain editable by any staff as needed. No RLS change needed — current `using (true)` policy is the intended behavior, not an oversight.
 
 - Code: [supabase/migrations/20260708120000_init.sql:394-396](../supabase/migrations/20260708120000_init.sql#L394)
 - Raised by: reach-reviewer
-
 ---
 
 ## Database & data integrity
@@ -138,6 +141,8 @@ Related: should we add a `schema_migrations` table, or at minimum a checked-in
 
 - Code: [web/README.md:34-38](../web/README.md#L34), [docs/backlog.md:347](backlog.md#L347), [supabase/migrations/20260708140000_confidential_referral_access.sql:18](../supabase/migrations/20260708140000_confidential_referral_access.sql#L18)
 - Raised by: reach-reviewer, database-engineer
+
+Answer: I have no idea, I haven't done a good job keeping up with what is in prod. I assume everything has been on dev only. I'm kind of waiting for a prod push before my demo next week to sync things up. 
 
 ### DB-2 — Does `anon` already hold table-level SELECT on the base tables via Supabase's platform default privileges? · **Blocking**
 
@@ -158,6 +163,8 @@ settings), not from the CLI config file.
 - Code: [supabase/config.toml:19-24](../supabase/config.toml#L19), [supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql:13-22](../supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql#L13), [supabase/migrations/20260708120000_init.sql:423-432](../supabase/migrations/20260708120000_init.sql#L423)
 - Raised by: reach-reviewer, database-engineer (independently)
 
+Answer: I have no idea what you're asking for. Please reword in more simple language. 
+
 ### DB-3 — Should `assignments` get the same confidentiality gate the other child tables have? · **Blocking**
 
 `assignments` is the only table hanging off `families` with no confidentiality
@@ -173,6 +180,8 @@ could type identifying detail into, readable by every volunteer.
 
 - Code: [supabase/migrations/20260708120000_init.sql:399-402](../supabase/migrations/20260708120000_init.sql#L399), [supabase/migrations/20260812100000_assignment_notes_and_verification.sql:20-32](../supabase/migrations/20260812100000_assignment_notes_and_verification.sql#L20)
 - Raised by: reach-reviewer, database-engineer (independently)
+
+Answer: Please reword this question to ask what you actually need me to answer? I'm not sure what the problem really is here. 
 
 ### DB-4 — Should a `before insert` trigger on `assignments` enforce "no assignments against confidential cards"? · Soon
 
@@ -285,14 +294,12 @@ one. A count, not PII — but it should be a decision, not an inheritance.
 - Code: [supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql:28-35](../supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql#L28), [:45](../supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql#L45)
 - Raised by: reach-reviewer
 
-### DB-14 — `SCHEMA.md` documents `child_card_numbers` *without* `security_invoker`; the migration has it · **Blocking**
+### ~~DB-14 — `SCHEMA.md` documents `child_card_numbers` *without* `security_invoker`; the migration has it~~ · Resolved
 
-The canonical schema doc and the actual database disagree at precisely the line
-that causes US-17. Anyone reasoning from the doc will mis-diagnose the bug — or
-"fix" it in the dangerous direction (see the guardrails in
-[backlog.md](backlog.md)'s US-17 entry). The doc needs correcting either way;
-the question is only whether anything else in SCHEMA.md has drifted the same
-way.
+Fixed 2026-08-18 — and the drift was worse than scoped: `cards_needing_print` and `printable_cards` had
+the same `security_invoker` omission in SCHEMA.md (migration has it on both; a diff against
+`20260708120000_init.sql` found all three). All three SCHEMA.md code blocks now match the migration, with
+a note on `child_card_numbers` explaining why `public_available_cards` can't join it.
 
 - Code: [SCHEMA.md:246](../SCHEMA.md#L246), [supabase/migrations/20260708120000_init.sql:175-176](../supabase/migrations/20260708120000_init.sql#L175)
 - Raised by: reach-reviewer
@@ -425,7 +432,7 @@ half of the same topic.
 
 ## Admin / staff UI
 
-### ADM-1 — What is `sort_tag` (the legacy "Color" field) actually for? · **Blocking**
+### ~~ADM-1 — What is `sort_tag` (the legacy "Color" field) actually for?~~ · Resolved
 
 The long-standing guess is "a per-family wrapping-paper or bin color used to
 sort physical gifts back together at distribution." That guess is no longer
@@ -445,6 +452,10 @@ by the next test run.
 - Raised by: frontend-designer (the live placeholder), qa-tester (the AutoTest collision)
 - GitLab: [issue #10](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/10)
 
+Answer: Sort tag was supposed to be a way to color coordinate/sort bags for students out but I don't think this is needed anymore. Clean up the tag from database and UI where needed.
+
+Implemented and applied to dev 2026-08-18 (supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql) — drops `sort_tag`, and (since it doubled as the e2e cleanup marker, the hazard described above) replaces it with two non-UI-exposed booleans set only via `create_family()`'s `p_is_test_data` param: `is_test_data` (broad "not real data" flag, shared with `demo_seed*.sql`) and `is_autotest_data` (narrower — true only on e2e-created rows). reach-reviewer caught that a first draft pointed both the e2e suite and `demo_seed*.sql` at the same flag, which would have made an e2e run silently delete a demo you'd just seeded for a walkthrough; cleanup.ts was repointed at `is_autotest_data` before this ever went live. UI fields removed from the intake and family-edit forms; `npm run lint`/`tsc --noEmit` clean. **Verified end to end against dev**: full e2e suite run confirms `cleanupAutoTestData()` runs with no errors against the new column and leaves zero `is_autotest_data`/`@autotest.example.com` rows behind afterward, with demo-seeded data (if any) untouched since it only ever carries `is_test_data`.
+
 ### ADM-2 — Who sets `target_card_count`, and when? · Soon
 
 Is it obvious at intake time ("this family always gets 2 cards per teenager"),
@@ -454,6 +465,8 @@ raised.
 
 - Code: [SCHEMA.md:558-559](../SCHEMA.md#L558), [web/lib/store.tsx:196-205](../web/lib/store.tsx#L196)
 - GitLab: [issue #11](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/11)
+
+Answer: there is no longer a need to have more than one family sign up for one card. There will only ever be one sponsor per child. 
 
 ### ADM-3 — Is there a real school referral liaison contact, or is it informal? · Soon
 
@@ -467,6 +480,8 @@ school" feature would want to know.
 - Code: [web/app/admin/schools/page.tsx:102-104](../web/app/admin/schools/page.tsx#L102), [:136-138](../web/app/admin/schools/page.tsx#L136), [SCHEMA.md:109](../SCHEMA.md#L109), [DESIGN.md:117](../DESIGN.md#L117)
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #1
 - GitLab: [issue #9](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/9)
+
+Answer: There isn't yet, but we definitely do want to have this data stored. Since we at the church can't contact families directly, the contact at the school is our sole go between for all gifts/students. The school liason should be inherited from a school.
 
 ### ADM-4 — Edit a school, or also deactivate it? · Soon
 
@@ -617,6 +632,8 @@ stay deferred much longer.
 - Code: [DESIGN.md:137-138](../DESIGN.md#L137), [web/README.md:46-54](../web/README.md#L46)
 - GitLab: [issue #15](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/15)
 
+Answer: Yes we will be deploying soon, but I'm keeping things local until I'm ready to test with the team in one week.
+
 ### DOC-2 — How does distribution actually run this year — church pickup, school drop-offs, or a mix? · Soon
 
 Confirmed genuinely undecided as of 2026-07. No code depends on it (the
@@ -635,6 +652,8 @@ record of a live drive — worth five minutes in the Supabase dashboard to confi
 what the retention actually is on the current plan.
 
 - Code: [DESIGN.md:55](../DESIGN.md#L55)
+
+Answer; I'm not sure how to do this but we should do it soon.
 
 ### DOC-4 — Should GitLab issue #17 be closed? · Whenever
 

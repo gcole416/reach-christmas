@@ -45,7 +45,6 @@ export interface Family {
   driveSchoolId: string | null;
   familyNumber: number;
   isConfidential: boolean;
-  sortTag: string | null;
   internalNotes: string | null;
   distributionMethodOverride: DistributionMethod | null;
   scheduledPickupAt: string | null;
