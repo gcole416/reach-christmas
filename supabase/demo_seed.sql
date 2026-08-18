@@ -3,13 +3,18 @@
 -- `insert into drives (...) values (..., 'open')` you ran).
 -- Everything created here is tagged for easy cleanup — see the cleanup
 -- script at the bottom (run it only when you're done demoing).
+--
+-- Elementary-only by design: two elementary schools (K-5), so school-based
+-- features (card letter codes, per-school filtering, liaison contacts) still
+-- have two real school records to differentiate between, but every kid and
+-- every school is elementary-level. No middle/high grades or schools appear
+-- anywhere in this file or in demo_seed_bulk.sql.
 
 do $$
 declare
   v_drive_id uuid;
   v_school_a_id uuid; v_ds_a_id uuid;
   v_school_b_id uuid; v_ds_b_id uuid;
-  v_school_c_id uuid; v_ds_c_id uuid;
   v_family_id uuid;
   v_child_id uuid;
   v_card_id uuid;
@@ -21,22 +26,17 @@ begin
   end if;
 
   -- Schools (obviously-fake names, safe to find/delete later) ---------------
-  insert into schools (name) values ('Demo Elementary') returning id into v_school_a_id;
+  insert into schools (name) values ('Demo Elementary North') returning id into v_school_a_id;
   insert into drive_schools (drive_id, school_id, code, liaison_name, liaison_phone, liaison_email, distribution_method)
-    values (v_drive_id, v_school_a_id, 'L', 'Pat Rivera', '555-0101', 'privera@demo.example.com', 'school_dropoff')
+    values (v_drive_id, v_school_a_id, 'N', 'Pat Rivera', '555-0101', 'privera@demo.example.com', 'school_dropoff')
     returning id into v_ds_a_id;
 
-  insert into schools (name) values ('Demo Middle School') returning id into v_school_b_id;
-  insert into drive_schools (drive_id, school_id, code, liaison_name, liaison_phone, liaison_email)
-    values (v_drive_id, v_school_b_id, 'C', 'Jamie Chen', '555-0102', 'jchen@demo.example.com')
+  insert into schools (name) values ('Demo Elementary South') returning id into v_school_b_id;
+  insert into drive_schools (drive_id, school_id, code, liaison_name, liaison_phone, liaison_email, distribution_method)
+    values (v_drive_id, v_school_b_id, 'S', 'Jamie Chen', '555-0102', 'jchen@demo.example.com', 'church_pickup')
     returning id into v_ds_b_id;
 
-  insert into schools (name) values ('Demo High School') returning id into v_school_c_id;
-  insert into drive_schools (drive_id, school_id, code, distribution_method)
-    values (v_drive_id, v_school_c_id, 'R', 'church_pickup')
-    returning id into v_ds_c_id;
-
-  -- Family 1 — Demo Elementary, 2 kids: one delivered, one still unclaimed --
+  -- Family 1 — Demo Elementary North, 2 kids: one delivered, one still unclaimed --
   insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, checked_in_at)
     values (v_drive_id, v_ds_a_id, 1, false, true, now() - interval '4 days') returning id into v_family_id;
 
@@ -55,7 +55,7 @@ begin
     (v_child_id, 1, 'Dinosaur toys'), (v_child_id, 2, 'Puzzle'), (v_child_id, 3, 'Winter coat');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1); -- unclaimed
 
-  -- Family 2 — Demo Elementary, 1 kid, critically overdue pledge -----------
+  -- Family 2 — Demo Elementary North, 1 kid, critically overdue pledge -----
   insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
     values (v_drive_id, v_ds_a_id, 2, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
@@ -67,11 +67,23 @@ begin
   insert into assignments (card_id, sponsor_id, status, claimed_at)
     values (v_card_id, v_sponsor_id, 'pledged', now() - interval '25 days'); -- critical overdue
 
-  -- Family 3 — Demo Middle, 1 kid needing 2 cards (multi-sponsor demo) -----
+  -- Family 3 — Demo Elementary North, 1 kid, received at church (mid-fulfillment) --
+  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
+    values (v_drive_id, v_ds_a_id, 3, false, true) returning id into v_family_id;
+  insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
+    values (v_family_id, 1, 'Ethan', '1', 6, 'M', 1) returning id into v_child_id;
+  insert into wishlist_items (child_id, position, description) values
+    (v_child_id, 1, 'Building blocks'), (v_child_id, 2, 'Picture books'), (v_child_id, 3, 'Winter coat, size 6');
+  insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1) returning id into v_card_id;
+  insert into sponsors (name, email, phone) values ('Downtown Rotary Club', 'contact@demo.example.com', '555-0303') returning id into v_sponsor_id;
+  insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at)
+    values (v_card_id, v_sponsor_id, 'received_at_church', now() - interval '12 days', now() - interval '9 days', now() - interval '3 days');
+
+  -- Family 4 — Demo Elementary South, 1 kid needing 2 cards (multi-sponsor demo) --
   insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data, scheduled_pickup_at)
     values (v_drive_id, v_ds_b_id, 1, false, true, now() + interval '5 days') returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
-    values (v_family_id, 1, 'Liam', '7', 12, 'M', 2) returning id into v_child_id;
+    values (v_family_id, 1, 'Liam', '4', 9, 'M', 2) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
     (v_child_id, 1, 'Basketball'), (v_child_id, 2, 'Video game'), (v_child_id, 3, 'Hoodie, size M');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 2) returning id into v_card_id;
@@ -80,14 +92,14 @@ begin
     values (v_card_id, v_sponsor_id, 'purchased', now() - interval '6 days', now() - interval '2 days');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 2, 2); -- 2nd copy still unclaimed
 
-  -- Family 4 — Demo Middle, 2 siblings; one card was cancelled and is back
-  -- on the market, demonstrating that flow -----------------------------------
+  -- Family 5 — Demo Elementary South, 2 siblings; one card was cancelled and
+  -- is back on the market, demonstrating that flow ---------------------------
   insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
     values (v_drive_id, v_ds_b_id, 2, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
-    values (v_family_id, 1, 'Ava', '6', 11, 'F', 1) returning id into v_child_id;
+    values (v_family_id, 1, 'Ava', '2', 7, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
-    (v_child_id, 1, 'Nail art kit'), (v_child_id, 2, 'Journal'), (v_child_id, 3, 'Earbuds');
+    (v_child_id, 1, 'Play jewelry kit'), (v_child_id, 2, 'Sticker book'), (v_child_id, 3, 'Stuffed animal');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1) returning id into v_card_id;
   insert into sponsors (name, email, phone) values ('Early Bird', 'earlybird@demo.example.com', null) returning id into v_sponsor_id;
   insert into assignments (card_id, sponsor_id, status, claimed_at) values (v_card_id, v_sponsor_id, 'cancelled', now() - interval '25 days');
@@ -99,25 +111,13 @@ begin
     (v_child_id, 1, 'Remote control car'), (v_child_id, 2, 'Legos'), (v_child_id, 3, 'Winter gloves');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1); -- unclaimed
 
-  -- Family 5 — Demo High, 1 kid, received at church (mid-fulfillment) ------
+  -- Family 6 — Demo Elementary South, 1 kid, pledged a week ago (not yet overdue) --
   insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
-    values (v_drive_id, v_ds_c_id, 1, false, true) returning id into v_family_id;
+    values (v_drive_id, v_ds_b_id, 3, false, true) returning id into v_family_id;
   insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
-    values (v_family_id, 1, 'Ethan', '10', 16, 'M', 1) returning id into v_child_id;
+    values (v_family_id, 1, 'Isabella', '3', 8, 'F', 1) returning id into v_child_id;
   insert into wishlist_items (child_id, position, description) values
-    (v_child_id, 1, 'Gift card'), (v_child_id, 2, 'Bluetooth speaker'), (v_child_id, 3, 'Jeans, size 32');
-  insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1) returning id into v_card_id;
-  insert into sponsors (name, email, phone) values ('Downtown Rotary Club', 'contact@demo.example.com', '555-0303') returning id into v_sponsor_id;
-  insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at)
-    values (v_card_id, v_sponsor_id, 'received_at_church', now() - interval '12 days', now() - interval '9 days', now() - interval '3 days');
-
-  -- Family 6 — Demo High, 1 kid, pledged a week ago (not yet overdue) ------
-  insert into families (drive_id, drive_school_id, family_number, is_confidential, is_test_data)
-    values (v_drive_id, v_ds_c_id, 2, false, true) returning id into v_family_id;
-  insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
-    values (v_family_id, 1, 'Isabella', '9', 15, 'F', 1) returning id into v_child_id;
-  insert into wishlist_items (child_id, position, description) values
-    (v_child_id, 1, 'Makeup set'), (v_child_id, 2, 'Hair straightener'), (v_child_id, 3, 'Hoodie, size S');
+    (v_child_id, 1, 'Craft kit'), (v_child_id, 2, 'Board game'), (v_child_id, 3, 'Sneakers, size 1');
   insert into cards (child_id, copy_number, total_copies) values (v_child_id, 1, 1) returning id into v_card_id;
   insert into sponsors (name, email, phone) values ('Sam Okafor', 'sam.o@demo.example.com', '555-0304') returning id into v_sponsor_id;
   insert into assignments (card_id, sponsor_id, status, claimed_at) values (v_card_id, v_sponsor_id, 'pledged', now() - interval '3 days');
