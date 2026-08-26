@@ -256,6 +256,10 @@ test.describe("SPN-3: email-verified claim RPC boundary", () => {
     const { data, error } = await anonClient().rpc("claim_card_with_code", {
       p_card_id: card.id,
       p_code: "123456",
+      // No pending verification exists for this card at all, so the function
+      // returns before ever reaching the session_token check below -- any
+      // value here is fine, it's just required to match the signature.
+      p_session_token: null,
     });
 
     expect(error, "the four expected/retryable failure reasons must not raise").toBeNull();
@@ -277,6 +281,9 @@ test.describe("SPN-3: email-verified claim RPC boundary", () => {
     const { data, error } = await anonClient().rpc("claim_card_with_code", {
       p_card_id: card.id,
       p_code: "",
+      // The blank-code guard fires before the row lookup/session_token check,
+      // so any value here is fine -- just required to match the signature.
+      p_session_token: null,
     });
 
     expect(error).toBeNull();

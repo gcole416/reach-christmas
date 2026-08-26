@@ -147,14 +147,18 @@ Alternative considered: self-hosting on church infrastructure — more control, 
   migration in
   [supabase/migrations/20260818160000_email_verified_claims.sql](supabase/migrations/20260818160000_email_verified_claims.sql)
   (see SCHEMA.md's `card_claim_verifications` section) and the two-step send-code/enter-code UI in
-  [web/app/sponsor/SponsorBrowser.tsx](web/app/sponsor/SponsorBrowser.tsx). Not yet applied to any live
-  database, and not yet fully testable end to end — needs a Resend API key from Grant, stored in Supabase
-  Vault.
+  [web/app/sponsor/SponsorBrowser.tsx](web/app/sponsor/SponsorBrowser.tsx). Applied to dev and confirmed
+  working live 2026-08-19 (a Resend key is stored in dev's Supabase Vault; two follow-up migrations fixed
+  bugs only reachable once real email-sending was exercised — see
+  [supabase/migrations/20260818170000_fix_pgcrypto_schema_qualification.sql](supabase/migrations/20260818170000_fix_pgcrypto_schema_qualification.sql)
+  and
+  [supabase/migrations/20260818180000_fix_attempt_cap_off_by_one.sql](supabase/migrations/20260818180000_fix_attempt_cap_off_by_one.sql)).
+  Not yet applied to prod.
 - [ ] How will distribution actually run this year (one church pickup event, school drop-offs, or a mix)? —
   confirmed still genuinely undecided as of 2026-07; revisit closer to the date. No code depends on this
   being answered — the distribution page already supports any combination per-family.
-- [ ] Deployment (Vercel now vs. staying local) — explicitly deferred at your request; not re-asking
-  proactively, but flagging it's still on the list whenever you want to revisit it.
+- [x] ~~Deployment (Vercel now vs. staying local)~~ → Grant asked for a deploy guide 2026-08-19 — see
+  [docs/DEPLOY.md](docs/DEPLOY.md). Not yet executed; that doc is the runbook for whenever it happens.
 
 ## 9. Next steps
 

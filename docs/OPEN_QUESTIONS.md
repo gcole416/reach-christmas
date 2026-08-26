@@ -470,6 +470,36 @@ half of the same topic.
 
 - Code: [supabase/migrations/20260708140000_confidential_referral_access.sql](../supabase/migrations/20260708140000_confidential_referral_access.sql)
 
+### DB-27 — `anon` can still call the old `claim_card()` RPC on dev, even after the revoke and a schema-cache reload · **Blocking**
+
+`20260818160000_email_verified_claims.sql` (SPN-3) revokes `claim_card`'s
+`anon`/`authenticated` execute grant specifically so the unverified one-step
+claim path can't be used anymore — `claim_card_with_code` is meant to be the
+only way left to actually pledge a card. Confirmed on dev 2026-08-19: it isn't
+working. `select has_function_privilege('anon', 'public.claim_card(uuid,text,text,text)', 'execute');`
+still returns `true` even after `notify pgrst, 'reload schema';` (which ruled
+out the obvious "PostgREST just hasn't refreshed its cache" explanation — that
+was the first guess, it's wrong). Whatever is holding this grant open, the
+practical effect right now is that SPN-3's whole point — no claim without a
+verified email — can be bypassed by anyone who calls the old function directly
+instead of going through the app's UI. Grant asked to flag this and defer
+digging in for now; needs a real answer before this ships to real sponsors, not
+just before prod.
+
+Worth checking once picked back up: whether the revoke statement actually ran
+(re-paste and re-run just that one `revoke execute on function
+public.claim_card(uuid, text, text, text) from anon, authenticated;` line and
+see if the error, if any, explains it), whether there's a role-membership
+subtlety (e.g. `anon` inheriting execute via a group role something else was
+granted to, rather than a direct grant this revoke would catch), or whether
+Supabase's platform-default-privilege mechanism (the same one DB-2 found
+auto-grants execute to anon/authenticated on every new function at `CREATE`
+time) also silently reasserts itself on existing functions under some
+condition not yet understood.
+
+- Code: [supabase/migrations/20260818160000_email_verified_claims.sql:394](../supabase/migrations/20260818160000_email_verified_claims.sql)
+- Raised by: Grant, live on dev 2026-08-19
+
 ---
 
 ## Admin / staff UI
@@ -699,6 +729,12 @@ stay deferred much longer.
 - GitLab: [issue #15](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/15)
 
 Answer: Yes we will be deploying soon, but I'm keeping things local until I'm ready to test with the team in one week.
+
+Runbook written 2026-08-19: [docs/DEPLOY.md](DEPLOY.md) — full Vercel deploy
+guide, written for an agent with no prior context to actually execute. Its
+Phase 0 is a manual prod-schema-audit procedure standing in for the still-open
+DB-1/DB-25 migration-ledger gap; worth resolving that gap for real before this
+becomes a yearly chore. Not yet executed.
 
 ### DOC-2 — How does distribution actually run this year — church pickup, school drop-offs, or a mix? · Soon
 

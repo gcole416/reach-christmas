@@ -456,7 +456,7 @@ to re-collect anything.
 ```sql
 create table card_claim_verifications (
   card_id uuid primary key references cards(id) on delete cascade,
-  code_hash text not null,                    -- crypt()/gen_salt('bf'), never the raw code
+  code_hash text not null,                    -- extensions.crypt()/extensions.gen_salt('bf'), never the raw code
   session_token uuid not null default gen_random_uuid(),  -- see below
   sponsor_name text not null,
   sponsor_email text not null,
@@ -483,6 +483,19 @@ anon, authenticated;`) — `net.http_post` (below) persists every submitted
 request, including the Resend API key and each sponsor's plaintext code, in
 those tables, and DB-2 already found Supabase auto-grants `anon`/
 `authenticated` SELECT on new tables regardless of a migration's own grants.
+
+**`crypt()`/`gen_salt()` calls are schema-qualified as `extensions.crypt()`/
+`extensions.gen_salt()`**, fixed in
+[supabase/migrations/20260818170000_fix_pgcrypto_schema_qualification.sql](supabase/migrations/20260818170000_fix_pgcrypto_schema_qualification.sql)
+after qa-tester's first live run against dev hit `42883: function gen_salt(unknown)
+does not exist` — `request_claim_code()`'s and `claim_card_with_code()`'s
+`set search_path = public` doesn't include the schema pgcrypto's functions
+actually live in on Supabase Cloud (`extensions`, per Supabase's documented
+convention — not empirically confirmed independently of this bug before the
+fix was written, same "no live DB access" caveat as everything else written
+this session; qa-tester verified it live before this reached Grant). Fixed by
+qualifying every call site explicitly rather than widening `search_path` to
+a guessed schema name.
 
 **`session_token`** exists because `card_id` alone is public (it's on the
 `/sponsor` page): without it, a second `request_claim_code()` call for the

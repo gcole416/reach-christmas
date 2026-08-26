@@ -33,52 +33,64 @@ test.describe("concurrency safety", () => {
   // "the legacy claim_card RPC is no longer directly callable" test in
   // security.spec.ts for that boundary instead.
   //
-  // The real analogue of this race now lives inside claim_card_with_code (two
-  // sponsors confirming the same card's code at once), but reaching it requires
-  // a genuine pending card_claim_verifications row, which request_claim_code
-  // only creates AFTER a successful Resend send. Dev has no Resend API key in
-  // Supabase Vault yet (see the migration's header comment and SPN-4 in
-  // docs/OPEN_QUESTIONS.md), so request_claim_code raises
-  // "Email delivery is not configured yet" before writing anything, and
-  // there is no sanctioned way to insert a row into card_claim_verifications
-  // directly (RLS + table grants lock it to the two security-definer
-  // functions only — no policies at all, and this project permanently bans
-  // the service_role key that could bypass that). So the true
-  // claim_card_with_code race is NOT exercisable today; this is the closest
-  // concurrency property that IS exercisable without that key.
+  // History: this test used to assert both concurrent calls fail with
+  // "not configured", because dev had no Resend key in Vault yet and
+  // request_claim_code raised before writing anything. That was itself
+  // standing in for the real bug it caught earlier: an older version of the
+  // function inserted the verification row BEFORE checking for the Vault
+  // key, so a missing-key raise left a row behind despite the caller seeing
+  // a failure. Dev now has a real Resend key configured (and that ordering
+  // bug is fixed — the key check runs before any insert, see the migration's
+  // comment above it), so both concurrent calls now genuinely succeed:
+  // there's nothing left to raise on in this path, and the "not configured"
+  // assertion no longer matches reality. Direct inspection of
+  // card_claim_verifications to count rows is still not possible (RLS with
+  // zero policies + revoked table grants, confirmed as Postgres error 42501
+  // in ui-flows.spec.ts) and pg_net's `net` schema is equally locked down
+  // (PGRST106, same test), so "exactly one row, no duplicates" can't be
+  // verified by reading the table either.
   //
-  // What this proves instead: request_claim_code's raise-on-missing-vault-key
-  // happens BEFORE the insert (a real bug, fixed earlier today per the
-  // migration comments — an earlier version inserted first and raised after,
-  // silently leaving a row behind despite the caller seeing an error). Two
-  // concurrent requests for a card that has never been requested before must
-  // both fail with the SAME "not configured" error, not one succeeding at
-  // writing a row that then makes an immediate follow-up call hit the
-  // unrelated 60-second abuse-guard error instead. That would only happen if
-  // a row silently survived a raised exception under concurrent execution.
-  test("two concurrent request_claim_code calls for the same card don't leave a dangling verification row behind", async () => {
+  // What this proves instead: both concurrent request_claim_code calls hit
+  // the SAME `insert ... on conflict (card_id) do update` upsert for the
+  // same card_id at (as close to) the same instant as Promise.all gives us.
+  // Postgres resolves that via row-level locking on the conflicting insert —
+  // one writer waits for the other's row lock rather than erroring or
+  // deadlocking — so this is still a real, meaningful concurrency property:
+  // both calls must return a session_token with no error, not one winning
+  // and the other blowing up. Then, since card_id is the table's primary
+  // key, a genuine duplicate/dangling row for the same card is physically
+  // impossible regardless of write ordering — so the observable proof that
+  // the upsert left the row in a single coherent state is the function's own
+  // 60-second abuse guard: an immediate follow-up request for the same card
+  // must see exactly one row with a fresh created_at and hit the cooldown,
+  // not silently succeed (no row) or error some other way (a corrupt row).
+  test("two concurrent request_claim_code calls for the same card both succeed, and the on-conflict upsert leaves the row in a sane state", async () => {
     const admin = await signInAs("admin");
     const driveId = await getOpenDriveId(admin);
     const family = await createTestFamily(admin, { driveId });
     const child = await createTestChild(admin, family.id);
     const card = await createTestCard(admin, child.id);
 
-    const request = () =>
+    // Real emails are genuinely sent here (dev's Resend key is configured) —
+    // stick to the @autotest.example.com convention, never a real address.
+    const request = (label: string) =>
       anonClient().rpc("request_claim_code", {
         p_card_id: card.id,
-        p_sponsor_name: "AutoTest Race Sponsor",
-        p_sponsor_email: `race-${Date.now()}@${AUTOTEST_EMAIL_DOMAIN}`,
+        p_sponsor_name: `AutoTest Race Sponsor ${label}`,
+        p_sponsor_email: `race-${label}-${Date.now()}@${AUTOTEST_EMAIL_DOMAIN}`,
       });
 
-    const [first, second] = await Promise.all([request(), request()]);
-    expect(first.error?.message ?? "").toMatch(/not configured/i);
-    expect(second.error?.message ?? "").toMatch(/not configured/i);
+    const [first, second] = await Promise.all([request("a"), request("b")]);
+    expect(first.error, first.error?.message).toBeNull();
+    expect(second.error, second.error?.message).toBeNull();
+    expect(first.data, "request_claim_code must return a session_token").toBeTruthy();
+    expect(second.data, "request_claim_code must return a session_token").toBeTruthy();
 
-    // If either concurrent call had left a row behind, this follow-up call
-    // would see it and fail with the 60-second abuse-guard message instead.
-    const followUp = await request();
-    expect(followUp.error?.message ?? "").toMatch(/not configured/i);
-    expect(followUp.error?.message ?? "").not.toMatch(/just sent/i);
+    // Proves the upsert left a single, coherent row behind (not zero, not a
+    // duplicate/corrupt state that would surface as some other error) —
+    // see the comment above.
+    const followUp = await request("followup");
+    expect(followUp.error?.message ?? "").toMatch(/just sent/i);
   });
 });
 

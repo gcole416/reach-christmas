@@ -17,6 +17,7 @@ that's never optional. Everything else below is read on demand.
 | "Why does this feature work this way" / phasing | [DESIGN.md](DESIGN.md) | SCHEMA.md, unless the question is about table shape |
 | Blocked on a decision, or about to guess at one | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) — every open question in one place, by area; add to it rather than inventing an answer | DESIGN.md §8 / SCHEMA.md's open-questions section (both folded in there) |
 | Schema, RLS policies, DB functions, migrations | [SCHEMA.md](SCHEMA.md) | DESIGN.md §1-3 (background/workflow, not schema) |
+| Deploying to Vercel, or checking prod's DB is ready to | [docs/DEPLOY.md](docs/DEPLOY.md) — full runbook, written for an agent with no prior context | — |
 | Resetting dev data, GitLab issue conventions | [memory.md](memory.md) | — |
 | Spawning or understanding a specialist agent | the matching file in [.claude/agents/](.claude/agents/) | the other five agents' files |
 | Setting up or troubleshooting the agent team itself | [agent_coding_help/AGENT-TEAM-SETUP.md](agent_coding_help/AGENT-TEAM-SETUP.md) | — |
