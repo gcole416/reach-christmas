@@ -39,9 +39,8 @@ export default function PrintPage() {
       <div className="print:hidden">
         <h1 className="text-3xl font-semibold text-ink-primary">Printable cards</h1>
         <p className="mt-2 text-ink-secondary">
-          The physical card for each sponsor slot — this is the one place the &quot;(1 of 2)&quot;-style
-          copy count shows up, since it&apos;s print-room information sponsors never see. Mark a card
-          printed once it&apos;s off the printer so it drops out of this list.
+          The physical card for each child. Mark a card printed once it&apos;s off the printer so it drops
+          out of this list.
         </p>
 
         <AdminNav />
@@ -107,8 +106,8 @@ export default function PrintPage() {
               </dl>
               {card.wishlist.length > 0 ? (
                 <ul className="mt-4 list-disc space-y-1 pl-4 text-sm text-ink-secondary print:text-black">
-                  {card.wishlist.map((item) => (
-                    <li key={item}>{item}</li>
+                  {card.wishlist.map((item, idx) => (
+                    <li key={idx}>{item}</li>
                   ))}
                 </ul>
               ) : null}

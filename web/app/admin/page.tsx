@@ -89,33 +89,25 @@ export default function AdminPage() {
 
       <section className="mt-12">
         <h2 className="text-xl font-semibold text-ink-primary">Cards to print</h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Children whose target card count isn&apos;t fully generated yet, or who have generated cards
-          still waiting to be printed.
-        </p>
+        <p className="mt-1 text-sm text-ink-secondary">Children whose card hasn&apos;t been printed yet.</p>
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           {needsPrint.length === 0 ? (
             <div className="p-6 text-center text-sm text-ink-secondary">Everything is printed and up to date.</div>
           ) : (
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="w-full min-w-[420px] text-left text-sm">
               <thead className="bg-ink-muted/5 text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-4 py-3 font-medium">Child</th>
-                  <th className="px-4 py-3 font-medium">Target</th>
-                  <th className="px-4 py-3 font-medium">Generated</th>
-                  <th className="px-4 py-3 font-medium">Not yet printed</th>
+                  <th className="px-4 py-3 font-medium">Card</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {needsPrint.map((row) => (
                   <tr key={row.childId}>
                     <td className="px-4 py-3 text-ink-primary">
-                      {displayFirstName(row.firstName, row.isConfidential, isAdmin)}{" "}
-                      <span className="text-ink-muted">({row.cardNumber})</span>
+                      {displayFirstName(row.firstName, row.isConfidential, isAdmin)}
                     </td>
-                    <td className="px-4 py-3 text-ink-secondary">{row.targetCardCount}</td>
-                    <td className="px-4 py-3 text-ink-secondary">{row.cardsGenerated}</td>
-                    <td className="px-4 py-3 text-ink-primary">{row.cardsNotYetPrinted}</td>
+                    <td className="px-4 py-3 text-ink-secondary">{row.cardNumber}</td>
                   </tr>
                 ))}
               </tbody>

@@ -41,7 +41,6 @@ function seedChildren(data: DataBundle, familyId: string): ChildFormState[] {
       shirtSize: c.shirtSize ?? "",
       shoeSize: c.shoeSize ?? "",
       otherNotes: c.otherNotes ?? "",
-      targetCardCount: String(c.targetCardCount),
       wishlistItems: wishlist.length > 0 ? wishlist : ["", "", ""],
     };
   });
@@ -302,11 +301,6 @@ function FamilyEditForm({
         >
           + Add another child
         </button>
-        <p className="text-xs text-ink-muted">
-          Raising a child&apos;s sponsor slots here generates the new card(s) immediately. Lowering it is a
-          no-op — a card that might already be claimed is never auto-removed; that stays a deliberate,
-          separate decision.
-        </p>
 
         {failure?.conflict ? (
           <div

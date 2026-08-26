@@ -1,3 +1,5 @@
+import type { HTMLAttributes } from "react";
+
 export function FormField({
   label,
   value,
@@ -6,6 +8,9 @@ export function FormField({
   required,
   maxLength,
   placeholder,
+  inputMode,
+  pattern,
+  autoFocus,
 }: {
   label: string;
   value: string;
@@ -14,6 +19,9 @@ export function FormField({
   required?: boolean;
   maxLength?: number;
   placeholder?: string;
+  inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
+  pattern?: string;
+  autoFocus?: boolean;
 }) {
   return (
     <label className="block text-sm">
@@ -24,6 +32,9 @@ export function FormField({
         maxLength={maxLength}
         value={value}
         placeholder={placeholder}
+        inputMode={inputMode}
+        pattern={pattern}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-lg border border-border bg-surface px-3 py-2 text-ink-primary placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-cat-blue"
       />

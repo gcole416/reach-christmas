@@ -79,7 +79,9 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 - [x] **Sponsor assignment tracking** — who claimed which card, and a real status lifecycle (pledged/purchased/received/verified/delivered), not just the old sheet's single received/delivered checkbox — `/admin/fulfillment`
 - [x] **Admin verification + shopping list** — once a gift reaches church, staff can flag what's missing from the wishlist (a note on the card); the admin team checks/tops it up and marks it verified before it moves to delivery. Open notes consolidate into a printable shopping list — `/admin/fulfillment`, `/admin/shopping-list` (see docs/backlog.md US-19)
 - [x] Distribution tracking flexible enough to handle either school delivery or church pickup, decided per drive/school — `/admin/distribution`
-- [x] Printable cards, with the "(1 of 2)" copy notation only ever appearing here — `/admin/print`
+- [x] Printable cards — `/admin/print`. (Originally had a "(1 of 2)" copy notation for children with
+  multiple sponsor slots; removed along with that whole mechanism per ADM-2, 2026-08-18 — one card per
+  child, always, so there's nothing left to number.)
 - [x] Drive (year) management — create/open/close a drive, exactly one `open` at a time — `/admin/drives`
 - [x] Staff/permission management — promote/demote role, toggle confidential access — `/admin/staff`
 - [x] Basic reporting: how many kids registered, how many matched, how many fulfilled, which sponsors are overdue — dashboard stat tiles
@@ -92,7 +94,9 @@ Alternative considered: self-hosting on church infrastructure — more control, 
   label sheet product/dimensions being used before building the CSS grid for it.
 
 **Phase 2**
-- Pin wishlist items to a specific card copy (see [SCHEMA.md](SCHEMA.md#8-wishlist_items--was-3-fixed-columns-opened-up)) so multi-sponsor children can't have the same gift bought twice
+- ~~Pin wishlist items to a specific card copy so multi-sponsor children can't have the same gift bought
+  twice~~ — moot as of ADM-2 (2026-08-18): there is no longer any such thing as a multi-sponsor child, one
+  card per child, always. See [SCHEMA.md §8](SCHEMA.md#8-wishlist_items--was-3-fixed-columns-opened-up).
 - Sponsor accounts (so returning sponsors can see their history across years)
 - Email/text notifications (reminders to sponsors, confirmation to school contacts)
 - Dashboards for staff (progress toward goals, unmatched kids alerts)
@@ -114,7 +118,13 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 - [x] ~~Should the sponsor-facing claim page require login?~~ → No login for sponsors. But admins need visibility into which sponsor is assigned to which child, plus status, so they can follow up on late sponsors — this is now a Phase 1 feature (§7).
 - [x] ~~Is distribution one event day or scheduled pickups?~~ → Varies by year — some years drop gifts off at schools, some years have families/kids come to the church. Not decided yet for this year. **Design decision**: build distribution method as a per-drive (possibly per-school) setting rather than hardcoding one flow, so this doesn't force a redesign whichever way it goes this year.
 - [x] ~~Do sponsors capture a name/email when they claim a card?~~ → Yes — confirmed the legacy sheet's `Name`/`Phone Number`/`Email` columns are the **sponsor's** contact info (I'd initially misread this as a school counselor's — corrected in §2). Sponsor tracking already existed in spirit; it just needs a proper status lifecycle instead of one checkbox.
-- [ ] Now that `Name`/`Phone`/`Email` = sponsor, is there any separate contact tracked for the **school referral liaison** (e.g. a counselor who submits the family list to the church), or is that relationship handled informally/outside the spreadsheet entirely?
+- [x] ~~Now that `Name`/`Phone`/`Email` = sponsor, is there any separate contact tracked for the **school
+  referral liaison** (e.g. a counselor who submits the family list to the church), or is that relationship
+  handled informally/outside the spreadsheet entirely?~~ → **Resolved** (OPEN_QUESTIONS.md ADM-3,
+  2026-08-18): a real liaison workflow is confirmed wanted — schools are the church's sole go-between for
+  confidential/direct-referral-less families — and "the school liaison should be inherited from a school."
+  The `liaison_*` columns moved from `drive_schools` to `schools` accordingly; see
+  [SCHEMA.md §3/§4](SCHEMA.md#3-schools--reusable-year-over-year).
 - [ ] What is the **"Color"** field in the old spreadsheet actually for? Best guess: a per-family wrapping-paper/bin color code used to sort physical gifts back together at distribution. Worth confirming since it may or may not be relevant to a digital-first version.
 - [x] ~~Is the school list fixed year to year, or does it change each drive?~~ → Changes year to year, though some schools may repeat. Confirmed OK to just rebuild the school list from scratch each drive via "Add school" — no import/carry-forward needed, matching how `schools`/`drive_schools` already separates "the school exists" from "the school is in this year's drive."
 - [x] ~~For "Confidential" families — who decides a family goes in that tier, and who specifically should be allowed to view them?~~ → Resolved during the fresh-eyes review: any staff member can *create* a confidential referral (they already know the details firsthand — that's not new exposure), but only admins/cleared staff can go on *viewing* it afterward, plus the original creator for their own submission. See SCHEMA.md's RLS section for the mechanism.
@@ -128,9 +138,18 @@ Alternative considered: self-hosting on church infrastructure — more control, 
   household model — so this is an accepted, known limitation rather than something the schema needs to
   solve.
 - [x] ~~Should sponsor email be optional or required when claiming a card?~~ → Keep it required (confirmed,
-  no change) — it's the reliable way staff follow up on overdue pledges. The `claim_card` function still
-  accepts email as an optional parameter at the database level; the requirement is enforced in the
-  sponsor-facing form, not the schema.
+  no change) — it's the reliable way staff follow up on overdue pledges. The old `claim_card` function
+  still accepts email as an optional parameter at the database level, but it's no longer the path a
+  sponsor's claim goes through (see SPN-3 below) — `request_claim_code()`, the function that now starts a
+  claim, requires it: there's nothing to send a verification code to without one.
+- [x] ~~SPN-3: should claiming a card require confirming an email before it counts as `pledged`?~~ → Yes, via
+  a 6-digit code typed back on the same claiming page (Grant, 2026-08-18). Implemented end to end —
+  migration in
+  [supabase/migrations/20260818160000_email_verified_claims.sql](supabase/migrations/20260818160000_email_verified_claims.sql)
+  (see SCHEMA.md's `card_claim_verifications` section) and the two-step send-code/enter-code UI in
+  [web/app/sponsor/SponsorBrowser.tsx](web/app/sponsor/SponsorBrowser.tsx). Not yet applied to any live
+  database, and not yet fully testable end to end — needs a Resend API key from Grant, stored in Supabase
+  Vault.
 - [ ] How will distribution actually run this year (one church pickup event, school drop-offs, or a mix)? —
   confirmed still genuinely undecided as of 2026-07; revisit closer to the date. No code depends on this
   being answered — the distribution page already supports any combination per-family.

@@ -23,9 +23,15 @@ export interface Drive {
   defaultDistributionMethod: DistributionMethod | null;
 }
 
+// Liaison contact lives on the school itself (ADM-2 answer, 2026-08-18: "the
+// school liaison should be inherited from a school"), not re-entered per
+// drive — see supabase/migrations/20260818150000_school_liaison_on_schools.sql.
 export interface School {
   id: string;
   name: string;
+  liaisonName: string | null;
+  liaisonPhone: string | null;
+  liaisonEmail: string | null;
 }
 
 export interface DriveSchool {
@@ -33,9 +39,6 @@ export interface DriveSchool {
   driveId: string;
   schoolId: string;
   code: string;
-  liaisonName: string | null;
-  liaisonPhone: string | null;
-  liaisonEmail: string | null;
   distributionMethod: DistributionMethod | null;
 }
 
@@ -74,7 +77,6 @@ export interface Child {
   shirtSize: string | null;
   shoeSize: string | null;
   otherNotes: string | null;
-  targetCardCount: number;
   // `children.updated_at` — same trigger, same row-version role, and the same
   // "opaque string, pass it back untouched" rule as Family.updatedAt above.
   updatedAt: string;
@@ -107,11 +109,13 @@ export interface Sponsor {
   email: string | null;
 }
 
+// One card per child, always (ADM-2 answer, 2026-08-18: "there is no longer
+// a need to have more than one family sign up for one card"), enforced by a
+// unique(child_id) constraint on `cards` — see
+// supabase/migrations/20260818140000_one_card_per_child.sql.
 export interface CardRecord {
   id: string;
   childId: string;
-  copyNumber: number;
-  totalCopies: number;
   printedAt: string | null;
 }
 

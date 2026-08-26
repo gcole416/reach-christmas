@@ -38,7 +38,6 @@ export async function createTestChild(
       family_id: familyId,
       child_index: 1,
       first_name: "AutoTest Child",
-      target_card_count: 1,
       ...overrides,
     })
     .select()
@@ -47,12 +46,11 @@ export async function createTestChild(
   return data;
 }
 
-export async function createTestCard(client: SupabaseClient, childId: string, copyNumber = 1, totalCopies = 1) {
-  const { data, error } = await client
-    .from("cards")
-    .insert({ child_id: childId, copy_number: copyNumber, total_copies: totalCopies })
-    .select()
-    .single();
+// One card per child, always (ADM-2, 2026-08-18) — enforced by a
+// unique(child_id) constraint on `cards`, so this no longer takes a copy
+// number/total.
+export async function createTestCard(client: SupabaseClient, childId: string) {
+  const { data, error } = await client.from("cards").insert({ child_id: childId }).select().single();
   if (error || !data) throw new Error(error?.message ?? "insert into cards returned no row");
   return data;
 }

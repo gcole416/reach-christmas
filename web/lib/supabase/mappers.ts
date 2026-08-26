@@ -36,7 +36,13 @@ export function mapDrive(row: any): Drive {
 }
 
 export function mapSchool(row: any): School {
-  return { id: row.id, name: row.name };
+  return {
+    id: row.id,
+    name: row.name,
+    liaisonName: row.liaison_name,
+    liaisonPhone: row.liaison_phone,
+    liaisonEmail: row.liaison_email,
+  };
 }
 
 export function mapDriveSchool(row: any): DriveSchool {
@@ -45,9 +51,6 @@ export function mapDriveSchool(row: any): DriveSchool {
     driveId: row.drive_id,
     schoolId: row.school_id,
     code: row.code,
-    liaisonName: row.liaison_name,
-    liaisonPhone: row.liaison_phone,
-    liaisonEmail: row.liaison_email,
     distributionMethod: row.distribution_method as DistributionMethod | null,
   };
 }
@@ -87,7 +90,6 @@ export function mapChild(row: any): Child {
     shirtSize: row.shirt_size,
     shoeSize: row.shoe_size,
     otherNotes: row.other_notes,
-    targetCardCount: row.target_card_count,
     // Verbatim, same reasoning as mapFamily's updatedAt above.
     updatedAt: row.updated_at,
   };
@@ -116,8 +118,6 @@ export function mapCard(row: any): CardRecord {
   return {
     id: row.id,
     childId: row.child_id,
-    copyNumber: row.copy_number,
-    totalCopies: row.total_copies,
     printedAt: row.printed_at,
   };
 }

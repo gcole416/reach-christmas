@@ -34,7 +34,7 @@ function getDriveSchool(data: DataBundle, driveSchoolId: string | null) {
   return data.driveSchools.find((ds) => ds.id === driveSchoolId) ?? null;
 }
 
-/** Mirrors the `child_card_numbers` view: base identifier like "B1.2" — no copy count. */
+/** Mirrors the `child_card_numbers` view: base identifier like "B1.2". */
 export function getChildCardNumber(data: DataBundle, child: Child): string {
   const family = getFamily(data, child.familyId);
   const driveSchool = getDriveSchool(data, family.driveSchoolId);
@@ -43,15 +43,15 @@ export function getChildCardNumber(data: DataBundle, child: Child): string {
 }
 
 /**
- * Mirrors `printable_cards`: the full label including copy count, e.g. "B1.2 (1/2)".
- * Print-room use only — this is deliberately NOT used on the sponsor page or
- * the general admin views. See SCHEMA.md's "Public (sponsor-facing) access"
- * section for why: sponsors and most admin views have no use for which
- * physical copy a card is, and showing it there is confusing, not helpful.
+ * Mirrors `printable_cards`: the print-room label for a card. As of ADM-2
+ * (2026-08-18, one card per child, always) this is just the base card
+ * number — the old "(1/2)" copy-count suffix no longer applies, since there's
+ * nothing left to count. Kept as its own function (rather than inlined at
+ * the one call site) so print-layout code has a single, stable name to call
+ * regardless of how the label is computed.
  */
 export function getPrintableCardLabel(data: DataBundle, card: CardRecord, child: Child): string {
-  const base = getChildCardNumber(data, child);
-  return card.totalCopies > 1 ? `${base} (${card.copyNumber}/${card.totalCopies})` : base;
+  return getChildCardNumber(data, child);
 }
 
 /** The one active (non-cancelled) assignment for a card, if any. */
@@ -81,28 +81,26 @@ export interface CardsNeedingPrintRow {
   firstName: string;
   isConfidential: boolean;
   cardNumber: string;
-  targetCardCount: number;
-  cardsGenerated: number;
-  cardsNotYetPrinted: number;
 }
 
-/** Mirrors `cards_needing_print`: the "recommend cards to print" report. */
+/**
+ * Mirrors `cards_needing_print`: the "recommend cards to print" report. As of
+ * ADM-2 (2026-08-18, one card per child, always) this is just "children whose
+ * one card isn't printed yet" — there's no generated-vs-target comparison
+ * left to make.
+ */
 export function getCardsNeedingPrint(data: DataBundle): CardsNeedingPrintRow[] {
   return data.children
-    .map((child) => {
-      const childCards = data.cards.filter((c) => c.childId === child.id);
-      const cardsNotYetPrinted = childCards.filter((c) => !c.printedAt).length;
-      return {
-        childId: child.id,
-        firstName: child.firstName,
-        isConfidential: getFamily(data, child.familyId).isConfidential,
-        cardNumber: getChildCardNumber(data, child),
-        targetCardCount: child.targetCardCount,
-        cardsGenerated: childCards.length,
-        cardsNotYetPrinted,
-      };
+    .filter((child) => {
+      const card = data.cards.find((c) => c.childId === child.id);
+      return card ? !card.printedAt : false;
     })
-    .filter((row) => row.cardsGenerated < row.targetCardCount || row.cardsNotYetPrinted > 0);
+    .map((child) => ({
+      childId: child.id,
+      firstName: child.firstName,
+      isConfidential: getFamily(data, child.familyId).isConfidential,
+      cardNumber: getChildCardNumber(data, child),
+    }));
 }
 
 export type OverdueSeverity = "warning" | "critical";
@@ -245,7 +243,13 @@ export interface SchoolRow {
   familyCount: number;
 }
 
-/** Schools participating in the current drive, with a family count for context. */
+/**
+ * Schools participating in the current drive, with a family count for
+ * context. Liaison contact info is sourced from the `schools` row, not
+ * `drive_schools` (ADM-3, 2026-08-18: the liaison belongs to the school and
+ * is inherited across drives, not re-entered per year — see
+ * supabase/migrations/20260818150000_school_liaison_on_schools.sql).
+ */
 export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
   return data.driveSchools
     .filter((ds) => ds.driveId === data.drive.id)
@@ -257,9 +261,9 @@ export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
         schoolId: school.id,
         name: school.name,
         code: ds.code,
-        liaisonName: ds.liaisonName,
-        liaisonPhone: ds.liaisonPhone,
-        liaisonEmail: ds.liaisonEmail,
+        liaisonName: school.liaisonName,
+        liaisonPhone: school.liaisonPhone,
+        liaisonEmail: school.liaisonEmail,
         distributionMethod: ds.distributionMethod,
         familyCount,
       };

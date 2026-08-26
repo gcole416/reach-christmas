@@ -25,10 +25,14 @@ Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--re
   showed messy real-world values (e.g. sizes like `"32-34"` or `"Girls 6"`) that don't fit a clean type.
 - `profiles` is the staff/volunteer accounts table — named to match Supabase's common convention of
   pairing a `profiles` table with its built-in `auth.users`.
-- A **child** is a person; a **card** is a printable, claimable gift-slot for that child. Most children
-  have exactly one card, but a child can have several when it's easier to split their gifts across
-  multiple sponsors (see §7) — this is the one place the schema deliberately separates "who" from
-  "what gets claimed."
+- A **child** is a person; a **card** is a printable, claimable gift-slot for that child. Every child has
+  exactly **one** card, always — a `unique (child_id)` constraint on `cards` enforces this, not just app
+  convention. (Prior to [supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql),
+  a child could have several cards to split gifts across multiple sponsors; answered and removed per
+  [OPEN_QUESTIONS.md ADM-2](docs/OPEN_QUESTIONS.md) — "there is no longer a need to have more than one
+  family sign up for one card. There will only ever be one sponsor per child." `cards` and `children`
+  remain separate tables anyway, since a card is still a distinct claimable/printable thing with its own
+  lifecycle (`printed_at`) from the child it belongs to.)
 
 ```sql
 create extension if not exists pgcrypto;
@@ -76,20 +80,28 @@ Kept separate from any one drive, since a school might participate in multiple y
 (name) shouldn't be re-entered each time. Answers the open question "is the school list fixed year to
 year" by not forcing an answer — schools can be added anytime, and each drive picks who's in via `drive_schools`.
 
+The liaison contact (`liaison_name`/`liaison_phone`/`liaison_email`) lives here too, not on
+`drive_schools` — see the "Open question... resolved" note below §4 for why.
+
 ```sql
 create table schools (
   id uuid primary key default gen_random_uuid(),
   name text not null,                     -- e.g. "Clear Creek High School"
   notes text,
+  liaison_name text,                      -- school contact/counselor for referrals — see below
+  liaison_phone text,
+  liaison_email text,
   created_at timestamptz not null default now()
 );
 ```
 
 ## 4. `drive_schools` — a school's participation in one specific drive
 
-This is where the single-letter card code (`C`, `T`, etc.), that year's referral liaison contact, and
-that year's distribution method all live — because any of these could change year to year even if the
-school itself doesn't.
+This is where the single-letter card code (`C`, `T`, etc.) and that year's distribution method live —
+because either could change year to year even if the school itself doesn't. The referral liaison contact
+does **not** live here (moved to `schools` in
+[supabase/migrations/20260818150000_school_liaison_on_schools.sql](supabase/migrations/20260818150000_school_liaison_on_schools.sql)
+— see the resolved open question just below).
 
 ```sql
 create table drive_schools (
@@ -97,18 +109,23 @@ create table drive_schools (
   drive_id uuid not null references drives(id) on delete cascade,
   school_id uuid not null references schools(id),
   code text not null,                                -- e.g. 'C' — used in that year's card numbers
-  liaison_name text,                                 -- school contact/counselor for referrals
-  liaison_phone text,
-  liaison_email text,
   distribution_method distribution_method,           -- overrides drives.default_distribution_method
   unique (drive_id, school_id),
   unique (drive_id, code)
 );
 ```
 
-*Open question carried over from [DESIGN.md §8](DESIGN.md#8-open-questions): is `liaison_*` actually
-tracked anywhere today, or does that relationship happen informally? If it's informal, these columns
-just stay null — no harm either way.*
+**Open question carried over from [DESIGN.md §8](DESIGN.md#8-open-questions), now resolved** (ADM-3,
+2026-08-18): is `liaison_*` actually tracked anywhere, or does that relationship happen informally? A real
+liaison workflow is confirmed wanted — schools are the church's sole go-between for confidential/
+direct-referral-less families, since `families` itself carries no phone/email of its own (see DB-19). And
+per Grant's answer, "the school liaison should be inherited from a school" — i.e. it's a property of the
+school, not something re-typed every year that school participates, which is why the columns above moved
+from `drive_schools` to `schools`. Note this is a pure data-model relocation for now: `web/lib/store.tsx`'s
+`addSchool` still always creates a brand-new `schools` row alongside the `drive_schools` row every time —
+there's no "add an existing school (with its already-known liaison) to this drive" picker yet. That picker,
+if built, is what will actually make "inherited" visible day to day; it's out of scope here (ADM-4
+territory).
 
 ## 5. `families` — the referral unit (may be confidential, may have no school)
 
@@ -249,7 +266,6 @@ create table children (
   shirt_size text,
   shoe_size text,
   other_notes text,
-  target_card_count int not null default 1,   -- how many printable cards this child should have — see §7
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (family_id, child_index)
@@ -258,9 +274,13 @@ create table children (
 create index children_family_id_idx on children (family_id);
 ```
 
-`target_card_count` is the input side of the "recommend cards for printing" workflow: staff bump it up
-(e.g. to 2) when a child's wishlist is big or varied enough that splitting it across two sponsors makes
-sense. `cards` (below) is the output side — the actual rows that get printed and claimed.
+**`target_card_count` — removed** in
+[supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql)
+(ADM-2, 2026-08-18). It used to be the input side of a "recommend cards for printing" workflow where staff
+bumped it up (e.g. to 2) to split a child's wishlist across two sponsors. Answered directly: "there is no
+longer a need to have more than one family sign up for one card. There will only ever be one sponsor per
+child." Do not re-add a column like this without re-opening that decision — see §7 below for the
+replacement "one card, always" model.
 
 A card's base identifier (`C1.3`) is never stored — it's derived (school code + family number + child
 index), so it can't drift out of sync if a school's code ever changes. A view for that base identifier:
@@ -286,35 +306,31 @@ joining this view, precisely because a `security_invoker` view's own base-table 
 view from an anon-facing one silently collapses to zero rows (this was US-17); do not reintroduce that
 dependency.
 
-## 7. `cards` — the physical, claimable gift-slots for a child
+## 7. `cards` — the physical, claimable gift-slot for a child
 
-This is the table your note added. A child normally has one card, but when it's easier to split their
-gifts across multiple sponsors, a child gets multiple card *copies* — e.g. "Emma C1.3 (1 of 2)" and
-"Emma C1.3 (2 of 2)" — each independently printable and independently claimable. **Claiming/assignments
-attach to a card, not directly to a child** (see §9), which is what actually allows two different
-sponsors to each take one gift for the same kid.
+**One card per child, always** — enforced by `unique (child_id)` below, not just app convention. Answered
+(ADM-2, 2026-08-18): "there is no longer a need to have more than one family sign up for one card. There
+will only ever be one sponsor per child." **Claiming/assignments attach to a card, not directly to a
+child** (see §9) — that indirection stays even with a 1:1 relationship, since a card is still a distinct
+claimable/printable thing with its own lifecycle (`printed_at`) from the child it belongs to.
+
+*Prior to [supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql),
+a child could have several card **copies** — e.g. "Emma C1.3 (1 of 2)" and "Emma C1.3 (2 of 2)" — to split
+gifts across multiple sponsors, tracked via `copy_number`/`total_copies` and a `children.target_card_count`
+input. All of that is gone now; don't re-add it without re-opening ADM-2.*
 
 ```sql
 create table cards (
   id uuid primary key default gen_random_uuid(),
   child_id uuid not null references children(id) on delete cascade,
-  copy_number int not null,           -- 1-based, e.g. 1 of 2
-  total_copies int not null,          -- copy of children.target_card_count at the time this row was made
   printed_at timestamptz,             -- set once someone has actually printed this card
   created_at timestamptz not null default now(),
-  unique (child_id, copy_number)
+  unique (child_id)
 );
-
-create index cards_child_id_idx on cards (child_id);
 ```
 
-`total_copies` is a small, deliberate denormalization: it's copied from `children.target_card_count`
-when cards are generated so the UI can show "1 of 2" without a join back to `children` every time. If
-staff raise `target_card_count` after the fact, generating the new card row(s) also updates
-`total_copies` on the existing sibling rows — that reconciliation is app logic, not something enforced
-by the schema itself.
-
-The "recommend for printing" report is just a query, not a stored recommendation:
+The "recommend for printing" report is just a query, not a stored recommendation — now simply "which
+children's one card isn't printed yet," with no generated-vs-target comparison to make:
 
 ```sql
 create view cards_needing_print
@@ -322,24 +338,21 @@ create view cards_needing_print
 select
   ch.id as child_id,
   ch.first_name,
-  ch.target_card_count,
-  count(crd.id) as cards_generated,
-  count(crd.id) filter (where crd.printed_at is null) as cards_not_yet_printed
+  crd.id as card_id
 from children ch
-left join cards crd on crd.child_id = ch.id
-group by ch.id, ch.first_name, ch.target_card_count
-having count(crd.id) < ch.target_card_count            -- fewer cards exist than the target
-    or count(crd.id) filter (where crd.printed_at is null) > 0;  -- or some exist but aren't printed yet
+join cards crd on crd.child_id = ch.id
+where crd.printed_at is null;
 ```
 
-And the full printable label, combining the base card number with the copy count:
+And the printable label — just the base card number now; the "(1/2)" copy-count suffix this view used to
+add is gone along with `copy_number`/`total_copies`:
 
 ```sql
 create view printable_cards
   with (security_invoker = true) as
 select
   crd.id as card_id,
-  ccn.card_number || ' (' || crd.copy_number || '/' || crd.total_copies || ')' as display_label,
+  ccn.card_number as display_label,
   ch.first_name,
   ch.grade,
   crd.printed_at,
@@ -362,13 +375,12 @@ create table wishlist_items (
 );
 ```
 
-Wishlist items stay attached to the **child**, not to an individual card — for now, every copy of a
-child's card shows the same full wishlist. **Known gap, committed for Phase 2 (see [DESIGN.md §7](DESIGN.md#7-phased-scope)):**
-this means two sponsors could unknowingly buy the same item for a multi-card child. The fix is to let a
-card optionally pin to specific `wishlist_items` (e.g. an `assigned_card_id` column on `wishlist_items`,
-nullable for "any card can cover this"), so each copy can show only its share of the list. Not solved now
-because it's not needed until a child actually has multiple cards in practice — but it should not be
-forgotten once that starts happening.
+Wishlist items stay attached to the **child**, not to an individual card — with exactly one card per
+child (§7), that's simply the correct model, not a simplification. *Moot as of ADM-2 (2026-08-18): this
+section used to flag a Phase-2 gap where two sponsors could unknowingly buy the same item for a
+multi-card child, with a proposed fix of letting a card pin to specific `wishlist_items`. There is no
+longer any such thing as a multi-card child, so that gap and its proposed fix no longer apply — not
+re-solved, just no longer a real scenario.*
 
 ## 9. `sponsors`
 
@@ -432,6 +444,169 @@ non-empty note) until it's advanced to `verified`. Notes are never offered befor
 `public_available_cards` view (below) excludes any card with an active assignment at all, and the claim
 flow never reads assignment data back.
 
+## `card_claim_verifications` — pending email verification for a claim
+
+Added in [supabase/migrations/20260818160000_email_verified_claims.sql](supabase/migrations/20260818160000_email_verified_claims.sql)
+for SPN-3 (docs/OPEN_QUESTIONS.md): a sponsor must prove they control the
+email address they typed in before a claim counts as `pledged`. One row per
+card holds the pending, *unconfirmed* claim — the sponsor details stashed at
+request time plus a hashed one-time code — so the confirm step doesn't need
+to re-collect anything.
+
+```sql
+create table card_claim_verifications (
+  card_id uuid primary key references cards(id) on delete cascade,
+  code_hash text not null,                    -- crypt()/gen_salt('bf'), never the raw code
+  session_token uuid not null default gen_random_uuid(),  -- see below
+  sponsor_name text not null,
+  sponsor_email text not null,
+  sponsor_phone text,
+  expires_at timestamptz not null,            -- ~15 minutes from request
+  attempts int not null default 0,            -- locked out at 5 wrong guesses
+  created_at timestamptz not null default now()
+);
+```
+
+`card_id` is the primary key, not a separate `id` — there is at most one
+pending verification per card by design: a new code request replaces
+(`on conflict (card_id) do update`) any prior unconfirmed one for that card,
+resetting `attempts` back to `0`. Nothing outside the two functions below
+ever reads or writes this table directly: RLS is enabled with **zero**
+policies (not even a staff-read one — this holds raw, unconfirmed sponsor
+PII with no confidentiality gate of its own), and table-level grants to
+`anon`/`authenticated` are explicitly revoked rather than just omitted, per
+the hardening [OPEN_QUESTIONS.md DB-2](docs/OPEN_QUESTIONS.md) flagged as
+optional for the base tables — applied here proactively since this table has
+no other protection layer. The same DB-2-precedent revoke is also applied to
+pg_net's own internal tables (`revoke all on all tables in schema net from
+anon, authenticated;`) — `net.http_post` (below) persists every submitted
+request, including the Resend API key and each sponsor's plaintext code, in
+those tables, and DB-2 already found Supabase auto-grants `anon`/
+`authenticated` SELECT on new tables regardless of a migration's own grants.
+
+**`session_token`** exists because `card_id` alone is public (it's on the
+`/sponsor` page): without it, a second `request_claim_code()` call for the
+same card — anyone's, including the original sponsor's own resend from a
+second tab — would silently overwrite the pending row (the upsert above) and
+orphan whoever was already holding a valid, correct code, who'd then get a
+confusing "wrong code" error instead of a clear explanation. Each
+`request_claim_code()` call returns a fresh token; `claim_card_with_code()`
+requires it back and treats a mismatch as its own distinct, non-attempt-
+counting error. A fresh request always wins — see below.
+
+```sql
+create or replace function public.request_claim_code(
+  p_card_id uuid,
+  p_sponsor_name text,
+  p_sponsor_email text,
+  p_sponsor_phone text default null
+)
+returns uuid  -- the new row's session_token
+language plpgsql
+security definer
+set search_path = public
+as $$ ... $$;
+
+grant execute on function public.request_claim_code(uuid, text, text, text) to anon, authenticated;
+```
+
+Re-runs `claim_card`'s original pre-checks (card not already claimed, family
+not confidential, name required) so a sponsor can't get a code sent for an
+invalid claim attempt, plus a new one: email is *required* here (unlike
+`claim_card`'s optional email param — see the note under §9/DESIGN.md), since
+there's nothing to verify control of without one. Generates a random 6-digit
+code, hashes it, upserts the pending row (with a freshly generated
+`session_token`, returned to the caller), and sends the email via
+[pg_net](https://supabase.com/docs/guides/database/extensions/pg_net)
+(`net.http_post` to `https://api.resend.com/emails`, `Authorization: Bearer
+<key>`, `from: onboarding@resend.dev` — a placeholder sender, swap once a
+real domain is verified in Resend). The API key is pulled from
+[Supabase Vault](https://supabase.com/docs/guides/database/vault)
+(`vault.decrypted_secrets`, secret named `resend_api_key`), never hardcoded
+or passed from the client. `pg_net.http_post` is fire-and-forget by design —
+it queues the request and returns immediately, not the HTTP response — so if
+Resend delivery fails, the sponsor just doesn't get an email and can retry;
+nothing here waits on or checks the outcome. A repeat request for the same
+card within 60 seconds of the last one raises a friendly error rather than
+silently no-opping or sending a second email — a basic abuse guard against
+hammering the send button. The Vault-secret check runs *before* the
+upsert — an earlier draft checked it after, so a missing key rolled the
+insert back anyway (a `raise exception` aborts the whole function call,
+undoing any write earlier in that same call); checking first avoids writing
+a row at all when there's nothing to send it with.
+
+```sql
+create or replace function public.claim_card_with_code(
+  p_card_id uuid,
+  p_code text,
+  p_session_token uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$ ... $$;
+
+grant execute on function public.claim_card_with_code(uuid, text, uuid) to anon, authenticated;
+```
+
+The confirm step, and now the *only* way a sponsor pledge actually gets
+created. Looks up the pending row for `p_card_id`, checks it exists, checks
+`p_session_token` matches the row's current `session_token`, hasn't expired,
+and the hashed code matches (`crypt(p_code, code_hash) = code_hash`) before
+the attempt cap (5) is reached.
+
+**`p_session_token` must match the row's `session_token`.** If it doesn't
+(including `p_session_token is null`), that means a newer `request_claim_code()`
+call for this same card issued a different token — the pending verification
+this token was for is no longer the active one, regardless of whether
+`p_code` itself is correct. This returns its own distinct `{"ok": false,
+"error": "This code request is no longer active..."}` message and does
+**not** increment `attempts` — a stale session isn't a wrong-code guess, and
+counting it against the cap would burn a sponsor's attempt for something
+that was never actually wrong on their end.
+
+**Returns `jsonb`, not a bare `uuid`** — `{"ok": true, "sponsor_id": "..."}`
+on success, `{"ok": false, "error": "..."}` on any of four *expected,
+retryable* failure modes: no pending verification, expired code, attempt cap
+reached, or wrong code. Those four `return` a value rather than `raise`,
+because a `raise exception` aborts the entire calling transaction —
+including any write earlier in that same function call. The wrong-code path
+specifically needs its `attempts = attempts + 1` write to survive: an
+earlier draft of this function raised there instead, which silently
+discarded every attempt-count increment (the row's `attempts` stayed `0`
+forever) and meant the 5-attempt cap never actually engaged — a full
+brute-force bypass of every possible 6-digit code within a code's 15-minute
+window, caught in review before this shipped. A second bug fixed in the same
+pass: the wrong-code comparison had no guard against `p_code` being SQL
+`NULL` — `crypt(NULL, code_hash)` evaluates to `NULL`, `code_hash <> NULL` is
+`NULL`, and `if NULL then` is false in PL/pgSQL, so a `NULL` code fell
+straight through the mismatch check to the success path unverified. Fixed
+with an explicit `p_code is null or btrim(p_code) = ''` guard at the top of
+the function, before anything else runs.
+
+The remaining failure modes — already-claimed (the real guarantee is still
+the `one_active_assignment_per_card` unique index; this is just for a
+friendlier message), confidential-card, and the `unique_violation` catch
+around the `assignments` insert — still `raise`, matching what `claim_card`
+always did: these are genuine race conditions with no attempt-counter or
+other bookkeeping that needs to outlive a rollback, so raising (and letting
+the earlier `sponsors` insert roll back with it, avoiding an orphaned
+sponsor row for a claim that didn't actually succeed) is correct there. On
+a verified code with no race lost, it does exactly what `claim_card` used to
+do in one step — insert `sponsors` from the stashed name/email/phone, insert
+`assignments` with `status = 'pledged'` — then deletes the verification row
+and returns `{"ok": true, "sponsor_id": <the new sponsor's id>}`.
+
+**`claim_card` itself is no longer callable by `anon`/`authenticated`** —
+`revoke execute on function public.claim_card(uuid, text, text, text) from
+anon, authenticated;` in the same migration. Leaving that grant in place
+would let anyone skip verification entirely by calling the old one-shot
+function directly, defeating the point of this feature. The function is left
+defined (harmless, unreachable) rather than dropped, since
+`20260708120000_init.sql` is an already-applied migration this project never
+edits in place.
+
 ## 11. `audit_log` — who changed what
 
 ```sql
@@ -457,7 +632,7 @@ accidentally skip logging. We'll write the actual trigger function when we scaff
 | `School Letter` | `drive_schools.code` |
 | `Family Number` | `families.family_number` |
 | Card Number (`C1.3`) | derived via `child_card_numbers` view, not stored |
-| *(no equivalent — new)* | `cards` — printable copies per child, so gifts can split across sponsors |
+| *(no equivalent — new)* | `cards` — the printable, claimable slot for each child (one per child, always — see §7) |
 | `First Name`, `Grade`, `Age`, `Sex` | `children` columns |
 | `Wish List #1-3` | `wishlist_items` rows |
 | `Specific Needs`, `Pant/Shirt/Shoe Size`, `Other Notes` | `children` columns |
@@ -467,8 +642,10 @@ accidentally skip logging. We'll write the actual trigger function when we scaff
 | "Confidential" tab | `families.is_confidential = true`, `drive_school_id = null` |
 | `Color` | *(retired — see [OPEN_QUESTIONS.md ADM-1](docs/OPEN_QUESTIONS.md); was `families.sort_tag`, dropped in [20260818130000_replace_sort_tag_with_is_test_data.sql](supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql))* |
 
-The old sheet assumed one card per child; that assumption is the one thing in this schema that isn't a
-straight port, since it wouldn't support your printing workflow.
+The old sheet assumed one card per child. This schema briefly diverged from that (a child could have
+multiple card *copies* to split gifts across sponsors), but ADM-2 (2026-08-18) confirmed the old
+assumption was right after all — "there will only ever be one sponsor per child" — so `cards` is back to
+a straight one-per-child port; see §7 above.
 
 ## Public (sponsor-facing) access — concept
 
@@ -497,11 +674,14 @@ where not exists (
 );
 ```
 
-**Correction:** the copy count (`crd.copy_number`/`crd.total_copies`, the "1 of 2" notation) is
-deliberately left out of this view. It's print-room information — it tells staff which physical card to
-grab off the printer — and sponsors have no use for it and shouldn't see it; showing it here read as
-confusing/unnecessary rather than helpful. `printable_cards` (above) is the *only* place that notation
-should appear, since that view exists specifically to drive the print run.
+**Correction:** the copy count (`crd.copy_number`/`crd.total_copies`, the "1 of 2" notation) was
+deliberately left out of this view. It was print-room information — it told staff which physical card to
+grab off the printer — and sponsors had no use for it and shouldn't see it; showing it here read as
+confusing/unnecessary rather than helpful. `printable_cards` (above) was the *only* place that notation
+appeared, since that view existed specifically to drive the print run. **Now moot rather than just
+correct:** `copy_number`/`total_copies` were dropped from `cards` entirely in
+[supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql)
+(ADM-2) — every child has exactly one card, so there's no copy count left to leave out of anything.
 
 **Second correction (US-19 / docs/backlog.md, fixed in
 [supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql](supabase/migrations/20260818120000_fix_public_available_cards_anon_bug.sql)):**
@@ -528,11 +708,17 @@ family ids for confidential families they have no clearance for (US-16's leak
 reopened one join further out). See docs/backlog.md US-17 for the full
 root-cause writeup and guardrails.
 
-Notably absent: `families.*` contact info, `drive_schools.liaison_*`, `children.other_notes`, and anything
-from a confidential family. Claiming a card should go through a `security definer` Postgres function
-(e.g. `claim_card(card_id, sponsor_name, sponsor_phone, sponsor_email)`) instead of a raw insert policy,
-so we can enforce "not already claimed" and basic validation in one controlled place rather than relying
-on RLS alone to prevent race conditions or abuse.
+Notably absent: `families.*` contact info, `schools.liaison_*`, `children.other_notes`, and anything
+from a confidential family. Claiming a card goes through `security definer` Postgres functions instead of
+a raw insert policy, so "not already claimed" and basic validation live in one controlled place rather
+than relying on RLS alone to prevent race conditions or abuse.
+
+**Claiming is now two steps, not one (SPN-3, 2026-08-18).** The original single `claim_card(card_id,
+sponsor_name, sponsor_phone, sponsor_email)` function still exists but is no longer callable by
+`anon`/`authenticated` — see the `card_claim_verifications` section above. A sponsor now calls
+`request_claim_code()` (sends a 6-digit code to the email they typed in) and then `claim_card_with_code()`
+(confirms the code and only then does what `claim_card` used to do in one shot: insert `sponsors`, insert
+`assignments` with `status = 'pledged'`).
 
 ## Row Level Security — who sees what
 
@@ -541,7 +727,8 @@ on RLS alone to prevent race conditions or abuse.
 | `drives`, `schools`, `drive_schools` | no direct access | read | read/write |
 | `families`, `children`, `cards` (non-confidential) | no direct access (only via `public_available_cards`) | read/write | read/write |
 | `families`, `children`, `cards` (confidential) | no access | **create only** (see below); read/edit own submission | read/write |
-| `sponsors`, `assignments` | write only via claim function | read/write | read/write |
+| `sponsors`, `assignments` | write only via `claim_card_with_code()` (see `card_claim_verifications` above) | read/write | read/write |
+| `card_claim_verifications` | no access at all (not even the two functions' own callers — everything routes through `security definer`) | no access at all | no access at all |
 | `profiles` | no access | own row only | read/write |
 | `audit_log` | no access | no access | read |
 
@@ -615,15 +802,25 @@ newer year. Now the database rejects it outright.
 
 ## Open schema questions
 
-- Who decides `target_card_count` and when — is it obvious at intake time (e.g. "this family always gets
-  2 cards per teenager"), or something staff adjust later as wishlists come in?
+- ~~Who decides `target_card_count` and when — is it obvious at intake time (e.g. "this family always gets
+  2 cards per teenager"), or something staff adjust later as wishlists come in?~~ → **Resolved**
+  (OPEN_QUESTIONS.md ADM-2, 2026-08-18): "there is no longer a need to have more than one family sign up
+  for one card. There will only ever be one sponsor per child." The whole `target_card_count` mechanism —
+  the column, `cards.copy_number`/`total_copies`, and the app-side "raise the count" reconciliation logic —
+  is removed, not just re-decided; see §7 above and
+  [supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql).
+  Don't re-add any of it without re-opening this decision.
 - ~~What is `sort_tag` (the old `Color` field) actually for?~~ → **Resolved** (OPEN_QUESTIONS.md ADM-1): it
   was meant for color-coordinating/sorting gift bags at distribution and is no longer needed. Dropped from
   `families` entirely — see the `is_test_data` note under §5 above for its replacement as the e2e/demo-seed
   cleanup marker, which is the one thing it also happened to be doing.
-- Should claiming a card on the public page require confirming an email (e.g. a confirmation link) before
-  it counts as `pledged`, to cut down on accidental or prank claims? Doesn't block Phase 1 but affects the
-  claim function above.
+- ~~Should claiming a card on the public page require confirming an email before it counts as
+  `pledged`?~~ → **Resolved** (OPEN_QUESTIONS.md SPN-3, 2026-08-18): yes, via a 6-digit code typed back on
+  the same claiming page. Implemented in
+  [supabase/migrations/20260818160000_email_verified_claims.sql](supabase/migrations/20260818160000_email_verified_claims.sql)
+  — see the `card_claim_verifications` section above. Not yet applied to any live database (written and
+  waiting for the usual manual apply step); the sponsor-page UI to actually collect/submit the code is
+  frontend-designer's follow-up, not built as part of this change.
 - Is one `scheduled_pickup_at` per family enough, or do we need multiple distinct distribution events
   (e.g. different pickup days per school)? If the latter, we'll want a `distribution_events` table rather
   than a single timestamp on `families`. Low cost to add later if it turns out to be needed.

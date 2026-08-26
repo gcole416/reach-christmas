@@ -25,27 +25,60 @@ test.describe("concurrency safety", () => {
     expect(a.family_number).not.toBe(b.family_number);
   });
 
-  test("claiming the same card twice at once lets exactly one sponsor through", async () => {
+  // SPN-3 replaced the one-shot claim_card RPC with request_claim_code +
+  // claim_card_with_code (supabase/migrations/20260818160000_email_verified_claims.sql).
+  // claim_card itself is still defined but its anon/authenticated execute grant
+  // was revoked, so the *original* version of this test (two concurrent
+  // claim_card calls, exactly one wins) can no longer run — see the
+  // "the legacy claim_card RPC is no longer directly callable" test in
+  // security.spec.ts for that boundary instead.
+  //
+  // The real analogue of this race now lives inside claim_card_with_code (two
+  // sponsors confirming the same card's code at once), but reaching it requires
+  // a genuine pending card_claim_verifications row, which request_claim_code
+  // only creates AFTER a successful Resend send. Dev has no Resend API key in
+  // Supabase Vault yet (see the migration's header comment and SPN-4 in
+  // docs/OPEN_QUESTIONS.md), so request_claim_code raises
+  // "Email delivery is not configured yet" before writing anything, and
+  // there is no sanctioned way to insert a row into card_claim_verifications
+  // directly (RLS + table grants lock it to the two security-definer
+  // functions only — no policies at all, and this project permanently bans
+  // the service_role key that could bypass that). So the true
+  // claim_card_with_code race is NOT exercisable today; this is the closest
+  // concurrency property that IS exercisable without that key.
+  //
+  // What this proves instead: request_claim_code's raise-on-missing-vault-key
+  // happens BEFORE the insert (a real bug, fixed earlier today per the
+  // migration comments — an earlier version inserted first and raised after,
+  // silently leaving a row behind despite the caller seeing an error). Two
+  // concurrent requests for a card that has never been requested before must
+  // both fail with the SAME "not configured" error, not one succeeding at
+  // writing a row that then makes an immediate follow-up call hit the
+  // unrelated 60-second abuse-guard error instead. That would only happen if
+  // a row silently survived a raised exception under concurrent execution.
+  test("two concurrent request_claim_code calls for the same card don't leave a dangling verification row behind", async () => {
     const admin = await signInAs("admin");
     const driveId = await getOpenDriveId(admin);
     const family = await createTestFamily(admin, { driveId });
     const child = await createTestChild(admin, family.id);
     const card = await createTestCard(admin, child.id);
 
-    const claim = () =>
-      anonClient().rpc("claim_card", {
+    const request = () =>
+      anonClient().rpc("request_claim_code", {
         p_card_id: card.id,
         p_sponsor_name: "AutoTest Race Sponsor",
         p_sponsor_email: `race-${Date.now()}@${AUTOTEST_EMAIL_DOMAIN}`,
       });
 
-    const results = await Promise.all([claim(), claim()]);
-    const succeeded = results.filter((r) => !r.error);
-    const failed = results.filter((r) => r.error);
+    const [first, second] = await Promise.all([request(), request()]);
+    expect(first.error?.message ?? "").toMatch(/not configured/i);
+    expect(second.error?.message ?? "").toMatch(/not configured/i);
 
-    expect(succeeded).toHaveLength(1);
-    expect(failed).toHaveLength(1);
-    expect(failed[0].error?.message ?? "").toMatch(/claimed/i);
+    // If either concurrent call had left a row behind, this follow-up call
+    // would see it and fail with the 60-second abuse-guard message instead.
+    const followUp = await request();
+    expect(followUp.error?.message ?? "").toMatch(/not configured/i);
+    expect(followUp.error?.message ?? "").not.toMatch(/just sent/i);
   });
 });
 

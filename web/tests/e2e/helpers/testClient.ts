@@ -13,7 +13,7 @@ function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
-/** A fresh, signed-out client — for anonymous/public-page actions like claim_card. */
+/** A fresh, signed-out client — for anonymous/public-page actions like request_claim_code/claim_card_with_code. */
 export function anonClient(): SupabaseClient {
   return createClient(requireEnv("NEXT_PUBLIC_SUPABASE_URL", SUPABASE_URL), requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", SUPABASE_ANON_KEY));
 }

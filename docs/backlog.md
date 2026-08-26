@@ -75,8 +75,8 @@ generated or printed, so that I know what to prep before an event or
 school drop-off.
 
 Acceptance criteria:
-- [x] A child appears in this report if either: fewer physical card copies have been generated than their `target_card_count`, **or** at least one generated card has no `printed_at` timestamp.
-- [x] Shown as a table on the staff dashboard under "Cards to print": child name + card number, target count, generated count, not-yet-printed count.
+- [x] ~~A child appears in this report if either: fewer physical card copies have been generated than their `target_card_count`, **or** at least one generated card has no `printed_at` timestamp.~~ **Superseded 2026-08-18 (ADM-2):** one card per child, always, now — `target_card_count`/`copy_number`/`total_copies` are gone from the schema entirely, so there's no generated-vs-target comparison left to make. `getCardsNeedingPrint` (`web/lib/queries.ts`) now surfaces a child if their one card has no `printed_at` timestamp, and the dashboard table (`web/app/admin/page.tsx`) has been adapted to match — Child + Card, no more target/generated/not-yet-printed counts. See [SCHEMA.md §7](../SCHEMA.md#7-cards--the-physical-claimable-gift-slot-for-a-child).
+- [x] ~~Shown as a table on the staff dashboard under "Cards to print": child name + card number, target count, generated count, not-yet-printed count.~~ **Superseded 2026-08-18:** see the note above — target/generated/not-yet-printed counts no longer exist to show.
 - [x] If nothing needs printing, shows "Everything is printed and up to date." instead of an empty table.
 - [x] ~~There is no "mark as printed" action in the UI yet — this report is read-only.~~ **Corrected 2026-08-12:** a per-card "Mark printed / Mark not printed" toggle has since shipped on `/admin/print` ([web/app/admin/print/page.tsx:119-125](../web/app/admin/print/page.tsx), `updateCardPrinted` in [web/lib/store.tsx:819-828](../web/lib/store.tsx)). The dashboard report itself is still read-only. (Instance of the drift tracked as GitLab #5 / OPEN_QUESTIONS DOC-5.)
 
@@ -512,7 +512,9 @@ matching GitLab issue where one exists. That file is now the place to answer
 them; this section is just the forwarding address for the five that used to
 live here:
 
-1. Is a real school-liaison contact coming, or do `drive_schools.liaison_*` stay null? → **ADM-3**
+1. ~~Is a real school-liaison contact coming, or do `drive_schools.liaison_*` stay null?~~ → **ADM-3**,
+   answered 2026-08-18: yes, and the liaison belongs to the school, not the per-drive membership —
+   `liaison_*` moved from `drive_schools` to `schools` accordingly.
 2. What is `families.sort_tag` (the legacy "Color" field) actually for? → **ADM-1** (now also a live-data concern — the guess is baked into two intake forms, and the e2e suite uses the same column as a deletion marker)
 3. Is the school list fixed year to year, or does it need an "inactive school" flag? → **DB-24** (DESIGN.md §8 treats this as resolved; confirm and strike)
 4. Should granting `can_view_confidential` be logged with who and why, not just an unaudited boolean? → **DB-22** (the "who decides confidential" half is resolved — see **DB-26**)

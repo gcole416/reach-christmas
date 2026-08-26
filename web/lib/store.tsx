@@ -47,7 +47,6 @@ export interface IntakeChildInput {
   shirtSize: string;
   shoeSize: string;
   otherNotes: string;
-  targetCardCount: string;
   wishlistItems: string[];
 }
 
@@ -181,34 +180,6 @@ async function fetchDataBundle(): Promise<DataBundle> {
   };
 }
 
-// Only handles the "raise target_card_count" direction (see SCHEMA.md §7) —
-// generates the missing card row(s) and syncs total_copies on every sibling
-// card for that child. Lowering the count is deliberately a no-op: a card
-// that's already been claimed can't be safely un-generated from here, so
-// shrinking stays a manual/admin decision rather than something a save
-// button does silently.
-async function reconcileCardsForChild(
-  supabase: ReturnType<typeof createClient>,
-  childId: string,
-  targetCardCount: number,
-  existingCardCount: number
-): Promise<{ error: string | null }> {
-  if (targetCardCount <= existingCardCount) return { error: null };
-
-  const newRows = Array.from({ length: targetCardCount - existingCardCount }, (_, i) => ({
-    child_id: childId,
-    copy_number: existingCardCount + i + 1,
-    total_copies: targetCardCount,
-  }));
-  const { error: insertError } = await supabase.from("cards").insert(newRows);
-  if (insertError) return { error: insertError.message };
-
-  const { error: updateError } = await supabase.from("cards").update({ total_copies: targetCardCount }).eq("child_id", childId);
-  if (updateError) return { error: updateError.message };
-
-  return { error: null };
-}
-
 // Deliberately NOT part of fetchDataBundle / DataContext: audit_log can grow
 // large (a row per insert/update/delete across 10 tables) and its `diff`
 // column carries full row contents for families/children, i.e. real kids'
@@ -247,6 +218,122 @@ export async function fetchAuditLog(options?: {
   if (error) throw new Error(error.message);
 
   return (data ?? []).map(mapAuditLogEntry);
+}
+
+// ---------------------------------------------------------------------------
+// Email-verified claiming (SPN-3, supabase/migrations/20260818160000_email_verified_claims.sql)
+//
+// Deliberately standalone exports, like fetchAuditLog above, rather than
+// DataContext methods: the anonymous /sponsor page (web/app/sponsor) has no
+// DataProvider wrapping it and no DataBundle to act on — these two just wrap
+// their one RPC call each, same shape as the RPCs themselves.
+//
+// claim_card (the old one-shot claim) is no longer callable by anon/
+// authenticated as of that migration — claimCardWithCode below is now the
+// only way a sponsor pledge actually gets created. The flow is:
+//   1. requestClaimCode() — sends a 6-digit code to the sponsor's email, and
+//      returns a sessionToken the caller must hold onto (in memory only —
+//      it does not need to survive a page reload; a reload is an acceptable
+//      "start over" case).
+//   2. claimCardWithCode() — the sponsor types the code back in; called with
+//      that same sessionToken, this is what actually creates the sponsor +
+//      assignment rows (what claim_card used to do in one step).
+//
+// The sessionToken exists because the card id alone is public: without it, a
+// second requestClaimCode() call for the same card (anyone's — including the
+// same sponsor re-requesting from another tab) would silently invalidate an
+// already-issued, still-correct code with no way for the holder to tell why.
+// A stale token comes back from claimCardWithCode as its own distinct error,
+// not a generic "wrong code" — see ClaimCardWithCodeResponse below.
+// ---------------------------------------------------------------------------
+
+export interface RequestClaimCodeInput {
+  cardId: string;
+  sponsorName: string;
+  sponsorEmail: string;
+  sponsorPhone?: string;
+}
+
+export type RequestClaimCodeResult = { ok: true; sessionToken: string } | { ok: false; error: string };
+
+/**
+ * Sends a 6-digit verification code to `sponsorEmail` for this card. Re-runs
+ * the same "not already claimed" / "not confidential" checks claim_card
+ * always did, server-side, so a bad card id can't get a code sent for
+ * nothing. Calling this again for the same card within ~60 seconds returns
+ * `ok: false` (the database's abuse guard, not a client-side debounce) —
+ * show that message as-is rather than retrying automatically.
+ *
+ * On success, `sessionToken` MUST be passed to claimCardWithCode below — hold
+ * it in component state between the two calls. Calling this again (e.g. a
+ * "resend code" button) returns a NEW sessionToken and silently invalidates
+ * any previous one for this card; always use the token from the most recent
+ * requestClaimCode call.
+ */
+export async function requestClaimCode(input: RequestClaimCodeInput): Promise<RequestClaimCodeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("request_claim_code", {
+    p_card_id: input.cardId,
+    p_sponsor_name: input.sponsorName,
+    p_sponsor_email: input.sponsorEmail,
+    p_sponsor_phone: input.sponsorPhone?.trim() || null,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, sessionToken: data as string };
+}
+
+export type ClaimCardWithCodeResult = { ok: true; sponsorId: string } | { ok: false; error: string };
+
+// Raw shape of claim_card_with_code's jsonb return value — see the migration
+// and SCHEMA.md for why it's jsonb rather than a bare uuid.
+interface ClaimCardWithCodeResponse {
+  ok: boolean;
+  sponsor_id?: string;
+  error?: string;
+}
+
+/**
+ * Confirms the code sent by requestClaimCode and, on a match, creates the
+ * sponsor + assignment rows — same net result (a new sponsor id) as the old
+ * one-shot claim_card RPC, but two distinct failure shapes to handle, both
+ * safe to show to the sponsor as-is:
+ *  - A genuine Postgres error (`error` below) for the race-condition paths
+ *    claim_card_with_code still `raise`s on — already claimed, confidential,
+ *    lost the insert race.
+ *  - A normal `{ ok: false, error }` payload in `data` for the expected/
+ *    retryable failures (no pending verification, expired code, too many
+ *    attempts, wrong code, or `sessionToken` no longer matching — that last
+ *    one means a newer requestClaimCode call replaced this one, e.g. a
+ *    resend from another tab, and should prompt the sponsor to request a
+ *    fresh code rather than retry the same one) — those `return` instead of
+ *    `raise` on purpose, so the wrong-code path's attempt-count increment
+ *    actually commits instead of rolling back with the rest of the
+ *    transaction.
+ *
+ * `sessionToken` is whatever requestClaimCode most recently returned for this
+ * card — see that function's docstring.
+ */
+export async function claimCardWithCode(
+  cardId: string,
+  code: string,
+  sessionToken: string
+): Promise<ClaimCardWithCodeResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("claim_card_with_code", {
+    p_card_id: cardId,
+    p_code: code,
+    p_session_token: sessionToken,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  const result = data as ClaimCardWithCodeResponse | null;
+  if (!result?.ok || !result.sponsor_id) {
+    return {
+      ok: false,
+      error: result?.error ?? "Something went wrong confirming that code. Please try again.",
+    };
+  }
+  return { ok: true, sponsorId: result.sponsor_id };
 }
 
 // Sane plain-language defaults. The edit page owns the final wording of the
@@ -347,9 +434,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const supabase = createClient();
 
+    // Liaison contact is a property of the school itself (ADM-3, 2026-08-18:
+    // "the school liaison should be inherited from a school"), not the
+    // per-drive membership — see
+    // supabase/migrations/20260818150000_school_liaison_on_schools.sql. Note
+    // this always creates a brand-new `schools` row alongside the
+    // `drive_schools` row — there's no "add an existing school to this
+    // drive" flow yet, so a liaison typed here can't yet be inherited from a
+    // prior year in practice; that's a future reuse-across-years picker
+    // (ADM-4 territory), not something this change builds.
     const { data: schoolRow, error: schoolError } = await supabase
       .from("schools")
-      .insert({ name: trimmedName })
+      .insert({
+        name: trimmedName,
+        liaison_name: input.liaisonName.trim() || null,
+        liaison_phone: input.liaisonPhone.trim() || null,
+        liaison_email: input.liaisonEmail.trim() || null,
+      })
       .select()
       .single();
     if (schoolError || !schoolRow) {
@@ -360,9 +461,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       drive_id: data.drive.id,
       school_id: schoolRow.id,
       code: trimmedCode,
-      liaison_name: input.liaisonName.trim() || null,
-      liaison_phone: input.liaisonPhone.trim() || null,
-      liaison_email: input.liaisonEmail.trim() || null,
       distribution_method: input.distributionMethod === "inherit" ? null : input.distributionMethod,
     });
     if (driveSchoolError) {
@@ -422,7 +520,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     for (let i = 0; i < validChildren.length; i++) {
       const child = validChildren[i];
-      const targetCardCount = Math.max(1, Number(child.targetCardCount) || 1);
 
       const { data: childRow, error: childError } = await supabase
         .from("children")
@@ -438,7 +535,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
           shirt_size: child.shirtSize.trim() || null,
           shoe_size: child.shoeSize.trim() || null,
           other_notes: child.otherNotes.trim() || null,
-          target_card_count: targetCardCount,
         })
         .select()
         .single();
@@ -466,12 +562,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      const cardRows = Array.from({ length: targetCardCount }, (_, idx) => ({
-        child_id: childRow.id,
-        copy_number: idx + 1,
-        total_copies: targetCardCount,
-      }));
-      const { error: cardError } = await supabase.from("cards").insert(cardRows);
+      // Exactly one card per child, created once here and never touched
+      // again (ADM-2, 2026-08-18: "there is no longer a need to have more
+      // than one family sign up for one card").
+      const { error: cardError } = await supabase.from("cards").insert({ child_id: childRow.id });
       if (cardError) {
         await refresh();
         return {
@@ -648,7 +742,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       currentChildren.length > 0 ? Math.max(...currentChildren.map((row) => row.child_index)) + 1 : 1;
 
     for (const child of validChildren) {
-      const targetCardCount = Math.max(1, Number(child.targetCardCount) || 1);
       let childId = child.id;
 
       const childFields = {
@@ -661,7 +754,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         shirt_size: child.shirtSize.trim() || null,
         shoe_size: child.shoeSize.trim() || null,
         other_notes: child.otherNotes.trim() || null,
-        target_card_count: targetCardCount,
       };
 
       if (childId) {
@@ -725,6 +817,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         childId = childRow.id;
         nextChildIndex += 1;
         wroteSomething = true;
+
+        // Exactly one card per child, created once here and never touched
+        // again (ADM-2, 2026-08-18: "there is no longer a need to have more
+        // than one family sign up for one card"). Existing children (the
+        // `if (childId)` branch above) never hit this — their card was
+        // already created when they were, and there's nothing left to
+        // reconcile now that a child can only ever have one.
+        const { error: cardError } = await supabase.from("cards").insert({ child_id: childId });
+        if (cardError) {
+          await refresh();
+          return {
+            ok: false,
+            error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Other changes on this page may already be saved.`,
+            partialSave: wroteSomething,
+          };
+        }
       }
 
       if (!childId) {
@@ -760,17 +868,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             partialSave: wroteSomething,
           };
         }
-      }
-
-      const existingCardCount = data.cards.filter((c) => c.childId === child.id).length;
-      const { error: cardError } = await reconcileCardsForChild(supabase, childId, targetCardCount, existingCardCount);
-      if (cardError) {
-        await refresh();
-        return {
-          ok: false,
-          error: `Couldn't generate cards for ${child.firstName}: ${cardError}.`,
-          partialSave: wroteSomething,
-        };
       }
     }
 

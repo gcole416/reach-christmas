@@ -32,7 +32,6 @@ export function emptyChild(): ChildFormState {
     shirtSize: "",
     shoeSize: "",
     otherNotes: "",
-    targetCardCount: "1",
     wishlistItems: ["", "", ""],
   };
 }
@@ -86,17 +85,7 @@ export function ChildFormFields({
         <FormField label="Pant size" value={child.pantSize} onChange={(v) => onChange({ pantSize: v })} />
         <FormField label="Shirt size" value={child.shirtSize} onChange={(v) => onChange({ shirtSize: v })} />
         <FormField label="Shoe size" value={child.shoeSize} onChange={(v) => onChange({ shoeSize: v })} />
-        <FormField
-          label="Sponsor slots"
-          value={child.targetCardCount}
-          onChange={(v) => onChange({ targetCardCount: v })}
-          type="number"
-        />
       </div>
-      <p className="mt-1 text-xs text-ink-muted">
-        Sponsor slots: how many separate sponsors this child can have (splits their wishlist across that
-        many printed cards). Most kids only need 1.
-      </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextAreaField

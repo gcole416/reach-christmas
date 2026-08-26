@@ -72,28 +72,69 @@ Implemented in the US-17 fix (supabase/migrations/20260818120000_fix_public_avai
 - Raised by: reach-reviewer
 - GitLab: none yet — belongs on [#20](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/20)
 
-### SPN-3 — Should claiming a card require confirming an email before it counts as `pledged`? · Soon
+### ~~SPN-3 — Should claiming a card require confirming an email before it counts as `pledged`?~~ · Resolved, implemented
 
-Would cut down accidental and prank claims, at the cost of a confirmation step
-on a page designed to be frictionless. Changes `claim_card()`'s shape if yes, so
-it's cheaper to decide before the season than after.
+Answer (2026-08-18): Yes, emails should be verified before a claim counts. Method
+picked after discussion: a 6-digit code typed on the same claiming page (not a
+confirmation link, not skipped). Sending provider: Resend, chosen over the
+church's own email since there's no Google Workspace/Microsoft 365 account to
+send through — just a plain personal Gmail address, which isn't a good fit for
+programmatic sending.
 
-- Code: [supabase/migrations/20260708120000_init.sql:537-589](../supabase/migrations/20260708120000_init.sql#L537), [web/app/sponsor/SponsorBrowser.tsx:208-278](../web/app/sponsor/SponsorBrowser.tsx#L208)
-- GitLab: [issue #12](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/12)
+Implemented 2026-08-18, not yet applied to any live database (same pending-apply
+note as ADM-2/ADM-3 above), and not yet fully testable end to end — Grant still
+needs to create a free Resend account and hand over an API key, which gets
+stored in Supabase Vault (never in this repo, never the app itself), one time,
+via the SQL editor. `claim_card()` is no longer callable by anon/authenticated
+(grant revoked) — it's replaced by two new functions,
+`request_claim_code()` (sends the code) and `claim_card_with_code()` (verifies
+it and only then creates the sponsor + assignment, same as `claim_card()` used
+to do in one step). Two real bugs were caught and fixed in review before this
+shipped: the wrong-code attempt counter wasn't actually persisting (a Postgres
+transaction-rollback quirk, would have let someone brute-force all 1,000,000
+possible codes unimpeded), and a NULL code input could skip verification
+entirely. Both fixed — see the migration's comments for the detail.
+`web/app/sponsor/SponsorBrowser.tsx`'s claim modal is now a two-step wizard
+(send code → enter code → confirm) rather than one form. Two more issues
+surfaced in reach-reviewer's pass and were fixed the same day: `pg_net`'s own
+internal tables could have exposed the Resend API key and every pending
+plaintext code to any signed-in volunteer (same DB-2 platform-grant risk,
+closed with an explicit revoke), and a second code request for the same card
+could silently orphan an earlier one (closed with a per-request session token —
+see the migration's comments). One low-priority gap left deliberately unfixed:
+there's no per-email/per-caller throttle on `request_claim_code`, only a
+per-card one — a script could request codes for many different cards addressed
+to the same arbitrary email, which could spam a stranger's inbox or burn the
+Resend sending quota. Low risk at this app's scale; worth a look if abuse shows
+up in practice.
 
-Answer: Yes the emails should be verified before being able to claim cards. I don't know the best way to do this though. Thougths?
+- Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql), [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx), [SCHEMA.md](../SCHEMA.md)
+- GitLab: [issue #12](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/12) — worth closing once applied and confirmed live
 
-### SPN-4 — Has `claim_card()`'s anonymous path ever actually run against live Postgres? · Soon
+### SPN-4 — Has the anonymous claim path ever actually run against live Postgres? · **Blocking**
 
-It relies on the same "security definer bypasses RLS" assumption that
-`public_available_cards` relies on — and that assumption just turned out not to
-hold there. Since no anonymous visitor has ever been able to *see* a card to
-click "Sponsor this gift", it's plausible the anon claim path has never been
-exercised end to end. Needs a deliberate live smoke test once US-17 is fixed,
-not an assumption that it's fine by association.
+Originally about `claim_card()`; that function is superseded by
+`request_claim_code()`/`claim_card_with_code()` as of SPN-3 (2026-08-18), so the
+question now applies to those two instead. Still open, and now worse: qa-tester
+tried to answer it today (2026-08-18) and hit a harder blocker than the
+Vault/Resend-key gap SPN-3 already knew about — **both Supabase projects (dev
+`thvyntrxmahygesltgft` and prod `mpiueduyrmplrueviupl`) are currently
+unreachable.** Independently confirmed via two public DNS resolvers: both
+project hostnames return NXDOMAIN, while `supabase.co` itself resolves fine —
+this is specific to Grant's two projects, not a general Supabase outage.
+Every single e2e test failed identically at sign-in today, not just
+claim-related ones. **Grant needs to check the Supabase dashboard** — paused
+project, billing issue, or a deleted/recreated project are the likely causes.
+Nothing can be applied, tested, or demoed against either database until this is
+resolved, which makes this more urgent than "Soon."
 
-- Code: [supabase/migrations/20260708120000_init.sql:537-589](../supabase/migrations/20260708120000_init.sql#L537)
-- Raised by: database-engineer
+Once dev is reachable again: `request_claim_code()`/`claim_card_with_code()`
+still can't be smoke-tested past the "not configured yet" error until Grant
+also provides a Resend API key (see SPN-3 above) and it's stored in Supabase
+Vault.
+
+- Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql)
+- Raised by: database-engineer; DNS outage found by qa-tester
 
 ### SPN-5 — Is `/sponsor` expected to work well on a phone? · Soon
 
@@ -144,50 +185,52 @@ Related: should we add a `schema_migrations` table, or at minimum a checked-in
 
 Answer: I have no idea, I haven't done a good job keeping up with what is in prod. I assume everything has been on dev only. I'm kind of waiting for a prod push before my demo next week to sync things up. 
 
-### DB-2 — Does `anon` already hold table-level SELECT on the base tables via Supabase's platform default privileges? · **Blocking**
+### ~~DB-2 — Does `anon` already hold table-level SELECT on the base tables via Supabase's platform default privileges?~~ · Resolved (confirmed real, hardening optional)
 
-Two sources in this repo directly contradict each other.
-[config.toml](../supabase/config.toml) documents the modern cloud default (new
-objects are *not* auto-exposed); the US-16 follow-up migration records that the
-team checked `pg_proc.proacl` live and found the **opposite** for this project —
-Supabase auto-grants EXECUTE to `anon`/`authenticated` on every new function at
-`CREATE` time regardless of what the migration says.
+Plain-language version: your family/kid data is protected by two layers in theory —
+(1) "can this anonymous website visitor even query this table at all" and (2)
+"if so, which rows does RLS let them see." We only ever verified layer 2. This
+question was "is layer 1 actually there, or is RLS silently doing 100% of the
+work alone?"
 
-If that also applies to tables, then RLS-with-no-anon-policies is the *only*
-thing standing between an anonymous visitor and `children.other_notes` /
-`families.internal_notes` — not the belt-and-braces the schema doc implies. It
-also means any future permissive anon policy is instantly a full-table leak, not
-a scoped one. Needs checking in the Supabase dashboard (Database → API
-settings), not from the CLI config file.
+Checked live against **dev** 2026-08-18 (database-engineer, read-only, anon key
+only): layer 1 is **not** there. Supabase's platform auto-grants `anon` SELECT on
+every base table — `children`, `families`, `assignments`, `cards`,
+`wishlist_items` — regardless of what the `init` migration's grant lines say.
+Today this is **not an active leak**: those tables have no anon-permissive RLS
+policy, so anon queries against them correctly return zero rows. But it does mean
+RLS is the *sole* barrier, exactly as feared — if anyone ever adds a permissive
+anon policy to one of these tables without realizing the table-level grant is
+already silently present, the leak is instant and full-table, not scoped. Same
+platform behavior already confirmed for functions in the US-16 follow-up
+migration.
+
+Optional hardening available if wanted: an explicit `revoke select on children,
+families, assignments, cards, wishlist_items from anon;` migration would restore
+the two-layer model with zero functional change (RLS already blocks anon on
+these tables today). Not applied — flag if you want it done.
 
 - Code: [supabase/config.toml:19-24](../supabase/config.toml#L19), [supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql:13-22](../supabase/migrations/20260812090000_restrict_confidential_helper_grants.sql#L13), [supabase/migrations/20260708120000_init.sql:423-432](../supabase/migrations/20260708120000_init.sql#L423)
 - Raised by: reach-reviewer, database-engineer (independently)
 
-Answer: I have no idea what you're asking for. Please reword in more simple language. 
+### ~~DB-3 — Should `assignments` get the same confidentiality gate the other child tables have?~~ · Resolved
 
-### DB-3 — Should `assignments` get the same confidentiality gate the other child tables have? · **Blocking**
+Plain-language version: any logged-in staff/volunteer account could technically
+attach a sponsor-assignment or a note to a confidential family's gift card by
+going around the normal "claim a card" button (e.g. a bug, or a bad API call) —
+the database itself doesn't block this today, only the app's normal click-path
+does.
 
-`assignments` is the only table hanging off `families` with no confidentiality
-predicate — `using (true)` for read *and* update. Safe today only because
-`claim_card()` is the sole insert path and it refuses confidential cards. But
-that invariant is held by convention, not by the database: `staff insert
-assignments ... with check (true)` plus a table-wide insert grant means any
-authenticated staff session can POST an assignment row for any card, including a
-confidential family's, without going near `claim_card()`.
-
-`volunteer_notes` (new in US-19) raises the stakes — it's free text a volunteer
-could type identifying detail into, readable by every volunteer.
+Answer (2026-08-18): No DB-level lock needed — current app-level protection is
+fine.
 
 - Code: [supabase/migrations/20260708120000_init.sql:399-402](../supabase/migrations/20260708120000_init.sql#L399), [supabase/migrations/20260812100000_assignment_notes_and_verification.sql:20-32](../supabase/migrations/20260812100000_assignment_notes_and_verification.sql#L20)
 - Raised by: reach-reviewer, database-engineer (independently)
 
-Answer: Please reword this question to ask what you actually need me to answer? I'm not sure what the problem really is here. 
+### ~~DB-4 — Should a `before insert` trigger on `assignments` enforce "no assignments against confidential cards"?~~ · Moot
 
-### DB-4 — Should a `before insert` trigger on `assignments` enforce "no assignments against confidential cards"? · Soon
-
-DB-3 stated as a constraint. A partial unique index can't express it, but a
-trigger calling the existing confidential helper could — turning today's
-convention into an actual guarantee.
+Was the concrete implementation of DB-3's lock. DB-3 was answered "no DB-level
+lock needed" (2026-08-18), so there's nothing to build here.
 
 - Code: [supabase/migrations/20260708120000_init.sql:565-572](../supabase/migrations/20260708120000_init.sql#L565)
 - Raised by: reach-reviewer
@@ -239,14 +282,13 @@ claims it's collision-proof; it only handles staleness, not concurrency.
 - Code: [web/lib/store.tsx:651-652](../web/lib/store.tsx#L651), [web/lib/store.tsx:716](../web/lib/store.tsx#L716)
 - Raised by: reach-reviewer
 
-### DB-9 — Same question for `cards.copy_number`, where the count comes from the browser's cached bundle · Soon
+### ~~DB-9 — Same question for `cards.copy_number`, where the count comes from the browser's cached bundle~~ · Moot
 
-`reconcileCardsForChild` computes copy numbers from `data.cards.filter(...)` off
-the in-memory bundle — not even a fresh read. Two staff raising
-`target_card_count` for the same child, or one staff member with a stale tab,
-collide on `unique (child_id, copy_number)`.
+`reconcileCardsForChild` (the function this race lived in) and `copy_number`
+itself are both gone as of ADM-2 (2026-08-18) — every child gets exactly one
+card, created once, never reconciled against a count. Nothing left to race on.
 
-- Code: [web/lib/store.tsx:196-205](../web/lib/store.tsx#L196), [web/lib/store.tsx:769](../web/lib/store.tsx#L769)
+- Code: [supabase/migrations/20260818140000_one_card_per_child.sql](../supabase/migrations/20260818140000_one_card_per_child.sql)
 - Raised by: reach-reviewer
 
 ### DB-10 — Is it acceptable that saving a wishlist deletes every item before inserting the replacements, in two separate transactions? · Soon
@@ -456,32 +498,54 @@ Answer: Sort tag was supposed to be a way to color coordinate/sort bags for stud
 
 Implemented and applied to dev 2026-08-18 (supabase/migrations/20260818130000_replace_sort_tag_with_is_test_data.sql) — drops `sort_tag`, and (since it doubled as the e2e cleanup marker, the hazard described above) replaces it with two non-UI-exposed booleans set only via `create_family()`'s `p_is_test_data` param: `is_test_data` (broad "not real data" flag, shared with `demo_seed*.sql`) and `is_autotest_data` (narrower — true only on e2e-created rows). reach-reviewer caught that a first draft pointed both the e2e suite and `demo_seed*.sql` at the same flag, which would have made an e2e run silently delete a demo you'd just seeded for a walkthrough; cleanup.ts was repointed at `is_autotest_data` before this ever went live. UI fields removed from the intake and family-edit forms; `npm run lint`/`tsc --noEmit` clean. **Verified end to end against dev**: full e2e suite run confirms `cleanupAutoTestData()` runs with no errors against the new column and leaves zero `is_autotest_data`/`@autotest.example.com` rows behind afterward, with demo-seeded data (if any) untouched since it only ever carries `is_test_data`.
 
-### ADM-2 — Who sets `target_card_count`, and when? · Soon
+### ~~ADM-2 — Who sets `target_card_count`, and when?~~ · Resolved, implemented
 
-Is it obvious at intake time ("this family always gets 2 cards per teenager"),
-or something staff adjust later as wishlists come in? Affects whether the intake
-form should ask for it at all, and it silently generates real card rows when
-raised.
+Answer (2026-08-18): there is no longer a need to have more than one family sign up
+for one card. There will only ever be one sponsor per child.
 
-- Code: [SCHEMA.md:558-559](../SCHEMA.md#L558), [web/lib/store.tsx:196-205](../web/lib/store.tsx#L196)
-- GitLab: [issue #11](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/11)
+Implemented 2026-08-18, not yet applied to any live database — the migration
+below is written and waiting for the usual manual apply-to-dev-then-prod step
+(see [web/README.md](../web/README.md#database-changes)).
+`children.target_card_count`, `cards.copy_number`, and `cards.total_copies` are
+gone; `cards` now has `unique (child_id)` instead of `unique (child_id,
+copy_number)` — one card per child is a database guarantee, not a UI convention.
+`cards_needing_print` is now just "children whose one card isn't printed yet";
+`printable_cards.display_label` dropped the "(1 of 2)"-style suffix. The
+"Sponsor slots" input is gone from the intake/edit child form, and the "Cards to
+print" dashboard table dropped its Target/Generated columns down to just Child +
+Card. This also makes DB-9 and the "raising sponsor slots" half of TST-6 moot —
+struck below.
 
-Answer: there is no longer a need to have more than one family sign up for one card. There will only ever be one sponsor per child. 
+- Code: [supabase/migrations/20260818140000_one_card_per_child.sql](../supabase/migrations/20260818140000_one_card_per_child.sql), [SCHEMA.md](../SCHEMA.md)
+- GitLab: [issue #11](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/11) — worth closing
 
-### ADM-3 — Is there a real school referral liaison contact, or is it informal? · Soon
+### ~~ADM-3 — Is there a real school referral liaison contact, or is it informal?~~ · Resolved, implemented
 
-`drive_schools.liaison_name/phone/email` are captured by the Add School form and
-displayed in the schools table, and that's it — nothing uses them. Either a real
-liaison workflow is coming (in which case they need more than plain text), or
-they stay decorative indefinitely (in which case say so, and stop asking
-volunteers to fill them in). Worth answering before ADM-4, since an "edit
-school" feature would want to know.
+Answer (2026-08-18): There isn't a real liaison workflow yet, but the church
+definitely wants this data stored — the school is the church's sole go-between
+for referred families, since families themselves generally aren't contacted
+directly. The school liaison should be inherited from a school.
 
-- Code: [web/app/admin/schools/page.tsx:102-104](../web/app/admin/schools/page.tsx#L102), [:136-138](../web/app/admin/schools/page.tsx#L136), [SCHEMA.md:109](../SCHEMA.md#L109), [DESIGN.md:117](../DESIGN.md#L117)
+Implemented 2026-08-18, not yet applied to any live database (same pending-apply
+note as ADM-2 above). `liaison_name`/`liaison_phone`/`liaison_email` moved from
+`drive_schools` (the per-drive membership row) to `schools` (the school itself),
+with existing data backfilled. This is a data-model correction, not a new UI —
+"Add School" still always creates a brand-new `schools` row today (there's no
+"reuse an existing school in a new drive" picker yet), so the liaison doesn't
+yet visibly carry across years in practice. That picker is ADM-4 territory; this
+just makes sure the data is sitting in the right place for when it ships.
+
+One pre-prod check flagged by reach-reviewer: the migration's backfill (copying
+`liaison_*` from `drive_schools` to `schools`) picks an arbitrary row when a
+school has more than one `drive_schools` row with non-null liaison info (e.g.
+participated in multiple past drives with different contacts) — silent, not an
+error. Fine on dev; before pasting into prod, run
+`select school_id, count(*) from drive_schools where liaison_name is not null group by school_id having count(*) > 1;`
+first and manually check any school it flags.
+
+- Code: [supabase/migrations/20260818150000_school_liaison_on_schools.sql](../supabase/migrations/20260818150000_school_liaison_on_schools.sql), [SCHEMA.md](../SCHEMA.md)
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #1
-- GitLab: [issue #9](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/9)
-
-Answer: There isn't yet, but we definitely do want to have this data stored. Since we at the church can't contact families directly, the contact at the school is our sole go between for all gifts/students. The school liason should be inherited from a school.
+- GitLab: [issue #9](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/9) — worth closing
 
 ### ADM-4 — Edit a school, or also deactivate it? · Soon
 
@@ -527,6 +591,8 @@ single most consequential responsive question in the app.
 
 - Code: [web/app/admin/distribution/page.tsx:128](../web/app/admin/distribution/page.tsx#L128)
 - Raised by: frontend-designer
+
+Answer (2026-08-18): Not sure yet — hold off on distribution-day responsive work until this is confirmed.
 
 ### ADM-8 — Is the fulfillment board ever worked from a phone? · Soon
 
@@ -653,7 +719,17 @@ what the retention actually is on the current plan.
 
 - Code: [DESIGN.md:55](../DESIGN.md#L55)
 
-Answer; I'm not sure how to do this but we should do it soon.
+Answer: I'm not sure how to do this but we should do it soon.
+
+Steps to check (2026-08-18, written up per Grant's request — do this when you have
+five minutes, for **both** the dev and prod projects since they're separate
+Supabase projects with independent settings):
+
+1. Log into [supabase.com/dashboard](https://supabase.com/dashboard) and select the project (see [web/README.md](../web/README.md)'s "Two Supabase projects" section for which project is which).
+2. Left sidebar → **Database** → **Backups**.
+3. That page shows whether backups are currently running, on what schedule, and how long they're retained. Note it down here or in a follow-up commit once checked.
+4. If it says backups aren't enabled (common on free-tier projects — daily backups are typically a paid-plan feature), the options are: upgrade the plan, or stand up an external backup (e.g. a scheduled `pg_dump` of the prod project via a GitHub Action or cron job, stored somewhere outside Supabase).
+5. Either way, write the answer here (what's enabled, what plan, retention window) so this stops being a guess — this table holds real children's PII and is the only record of a live drive once it starts.
 
 ### DOC-4 — Should GitLab issue #17 be closed? · Whenever
 
@@ -741,23 +817,13 @@ their absence shows up this season.
 
 ## Testing
 
-### TST-1 — Should the e2e suite be forced to `workers: 1`? · **Blocking**
+### ~~TST-1 — Should the e2e suite be forced to `workers: 1`?~~ · Resolved
 
-The suite is unsafe at its own documented default parallelism, for two
-independently confirmed reasons: Supabase Auth rate-limits the two shared test
-accounts when several workers sign in at once, and every `describe`'s `afterAll`
-calls a blanket "delete everything tagged AutoTest" that wipes rows still in use
-by a *different worker's* test.
+Implemented 2026-08-18 — `web/playwright.config.ts` now sets `fullyParallel: false` and
+`workers: 1`, with a comment pointing back to this entry. No user decision needed; the fix
+was the one already recommended here.
 
-Measured today: default settings gave 3/5 then 13/18 failures; `--workers=1`
-gave a clean, repeatable 5/5 and 16/18 (the two remaining failures being US-17
-and US-18 only). This matters beyond tidiness — a contributor following the
-README literally would conclude most of the app is broken when only two stories
-actually are. Simplest fix is `workers: 1` in the config (the suite runs in
-under a minute serially); the alternative is per-run unique tags plus serialized
-describes.
-
-- Code: [web/playwright.config.ts:14](../web/playwright.config.ts#L14), [web/tests/e2e/helpers/cleanup.ts:12-18](../web/tests/e2e/helpers/cleanup.ts#L12), [web/README.md:76](../web/README.md#L76)
+- Code: [web/playwright.config.ts:12-17](../web/playwright.config.ts#L12), [web/tests/e2e/helpers/cleanup.ts:12-18](../web/tests/e2e/helpers/cleanup.ts#L12), [web/README.md:76](../web/README.md#L76)
 - Raised by: qa-tester (both passes, independently)
 
 ### TST-2 — Raise the dev project's auth rate limit, or switch the tests to a cached session? · Soon
@@ -808,10 +874,12 @@ all — and any fix to it without these tests is a fix nobody can prove.
 
 Known gaps, all confirmed by grep today: the school duplicate-code race has
 **zero** coverage; the family edit flow is exercised only through the "Internal
-notes" field (not `sort_tag`, adding a child, wishlist edits, or raising sponsor
-slots — which silently generates real cards); US-19's whole verification and
-shopping-list feature has no automated coverage at all, only your one manual
-pass; and there is no mobile-viewport project anywhere.
+notes" field (not `sort_tag`, adding a child, or wishlist edits); US-19's whole
+verification and shopping-list feature has no automated coverage at all, only
+your one manual pass; and there is no mobile-viewport project anywhere. (The
+"raising sponsor slots" gap this originally listed is gone along with the
+feature itself — see ADM-2, resolved 2026-08-18. Checked: no existing e2e test
+covered that race, so nothing needs updating there, just one fewer gap to close.)
 
 - Code: [web/tests/e2e/concurrency.spec.ts:143-191](../web/tests/e2e/concurrency.spec.ts#L143), [web/lib/store.tsx:131-170](../web/lib/store.tsx#L131), [web/app/admin/families/[familyId]/page.tsx](../web/app/admin/families/%5BfamilyId%5D/page.tsx)
 - Raised by: qa-tester

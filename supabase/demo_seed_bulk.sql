@@ -11,6 +11,9 @@
 -- family with is_test_data = true — so the cleanup lines at the bottom of
 -- demo_seed.sql remove this data too. Safe to run whether or not
 -- demo_seed.sql has been run first.
+--
+-- One card per child, always (ADM-2, 2026-08-18) — every kid below gets
+-- exactly one `cards` row, no copy_number/total_copies/multi-card spread.
 
 do $$
 declare
@@ -47,8 +50,6 @@ declare
   v_kids_created int := 0;
   v_family_num int;
   v_kids_in_family int;
-  v_target_count int;
-  v_copy int;
   v_referral_roll numeric;
   v_status_roll numeric;
   v_days_ago int;
@@ -100,16 +101,13 @@ begin
     end if;
 
     for i in 1..v_kids_in_family loop
-      v_target_count := case when random() < 0.9 then 1 else 2 end;
-
-      insert into children (family_id, child_index, first_name, grade, age, sex, target_card_count)
+      insert into children (family_id, child_index, first_name, grade, age, sex)
         values (
           v_family_id, i,
           v_first_names[1 + floor(random() * array_length(v_first_names, 1))::int],
           v_grades[1 + floor(random() * array_length(v_grades, 1))::int],
           5 + floor(random() * 7)::int, -- elementary-appropriate spread, ~5-11
-          case when random() < 0.5 then 'F' else 'M' end,
-          v_target_count
+          case when random() < 0.5 then 'F' else 'M' end
         )
         returning id into v_child_id;
 
@@ -118,57 +116,55 @@ begin
         (v_child_id, 2, v_wishlist[1 + floor(random() * array_length(v_wishlist, 1))::int]),
         (v_child_id, 3, v_wishlist[1 + floor(random() * array_length(v_wishlist, 1))::int]);
 
-      for v_copy in 1..v_target_count loop
-        insert into cards (child_id, copy_number, total_copies) values (v_child_id, v_copy, v_target_count)
-          returning id into v_card_id;
+      -- One card per child, always (ADM-2) — no more copy-count loop.
+      insert into cards (child_id) values (v_child_id) returning id into v_card_id;
 
-        v_status_roll := random();
-        if v_status_roll >= 0.35 then
-          insert into sponsors (name, email, phone) values (
-            'Demo Sponsor ' || floor(random() * 10000)::text,
-            'sponsor' || floor(random() * 1000000)::text || '@demo.example.com',
-            null
-          ) returning id into v_sponsor_id;
+      v_status_roll := random();
+      if v_status_roll >= 0.35 then
+        insert into sponsors (name, email, phone) values (
+          'Demo Sponsor ' || floor(random() * 10000)::text,
+          'sponsor' || floor(random() * 1000000)::text || '@demo.example.com',
+          null
+        ) returning id into v_sponsor_id;
 
-          if v_status_roll < 0.55 then
-            v_days_ago := 1 + floor(random() * 30)::int;
-            insert into assignments (card_id, sponsor_id, status, claimed_at)
-              values (v_card_id, v_sponsor_id, 'pledged', now() - (v_days_ago || ' days')::interval);
-          elsif v_status_roll < 0.70 then
-            v_days_ago := 1 + floor(random() * 20)::int;
-            insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at)
-              values (
-                v_card_id, v_sponsor_id, 'purchased',
-                now() - ((v_days_ago + 3) || ' days')::interval,
-                now() - (v_days_ago || ' days')::interval
-              );
-          elsif v_status_roll < 0.85 then
-            v_days_ago := 1 + floor(random() * 15)::int;
-            insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at)
-              values (
-                v_card_id, v_sponsor_id, 'received_at_church',
-                now() - ((v_days_ago + 8) || ' days')::interval,
-                now() - ((v_days_ago + 4) || ' days')::interval,
-                now() - (v_days_ago || ' days')::interval
-              );
-          elsif v_status_roll < 0.95 then
-            v_days_ago := 1 + floor(random() * 10)::int;
-            insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at, delivered_at)
-              values (
-                v_card_id, v_sponsor_id, 'delivered',
-                now() - ((v_days_ago + 15) || ' days')::interval,
-                now() - ((v_days_ago + 10) || ' days')::interval,
-                now() - ((v_days_ago + 5) || ' days')::interval,
-                now() - (v_days_ago || ' days')::interval
-              );
-          else
-            v_days_ago := 1 + floor(random() * 20)::int;
-            insert into assignments (card_id, sponsor_id, status, claimed_at)
-              values (v_card_id, v_sponsor_id, 'cancelled', now() - (v_days_ago || ' days')::interval);
-          end if;
+        if v_status_roll < 0.55 then
+          v_days_ago := 1 + floor(random() * 30)::int;
+          insert into assignments (card_id, sponsor_id, status, claimed_at)
+            values (v_card_id, v_sponsor_id, 'pledged', now() - (v_days_ago || ' days')::interval);
+        elsif v_status_roll < 0.70 then
+          v_days_ago := 1 + floor(random() * 20)::int;
+          insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at)
+            values (
+              v_card_id, v_sponsor_id, 'purchased',
+              now() - ((v_days_ago + 3) || ' days')::interval,
+              now() - (v_days_ago || ' days')::interval
+            );
+        elsif v_status_roll < 0.85 then
+          v_days_ago := 1 + floor(random() * 15)::int;
+          insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at)
+            values (
+              v_card_id, v_sponsor_id, 'received_at_church',
+              now() - ((v_days_ago + 8) || ' days')::interval,
+              now() - ((v_days_ago + 4) || ' days')::interval,
+              now() - (v_days_ago || ' days')::interval
+            );
+        elsif v_status_roll < 0.95 then
+          v_days_ago := 1 + floor(random() * 10)::int;
+          insert into assignments (card_id, sponsor_id, status, claimed_at, purchased_at, received_at_church_at, delivered_at)
+            values (
+              v_card_id, v_sponsor_id, 'delivered',
+              now() - ((v_days_ago + 15) || ' days')::interval,
+              now() - ((v_days_ago + 10) || ' days')::interval,
+              now() - ((v_days_ago + 5) || ' days')::interval,
+              now() - (v_days_ago || ' days')::interval
+            );
+        else
+          v_days_ago := 1 + floor(random() * 20)::int;
+          insert into assignments (card_id, sponsor_id, status, claimed_at)
+            values (v_card_id, v_sponsor_id, 'cancelled', now() - (v_days_ago || ' days')::interval);
         end if;
-        -- v_status_roll < 0.35: no assignment at all — card stays unassigned
-      end loop;
+      end if;
+      -- v_status_roll < 0.35: no assignment at all — card stays unassigned
     end loop;
 
     v_kids_created := v_kids_created + v_kids_in_family;
