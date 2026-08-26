@@ -11,7 +11,12 @@ dotenv.config({ path: ".env.test.local", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  fullyParallel: true,
+  // Forced serial: the two shared test accounts hit Supabase Auth's rate limit under
+  // parallel sign-in, and every describe's afterAll deletes all AutoTest-tagged rows,
+  // which wipes data still in use by a different worker's test. See OPEN_QUESTIONS.md TST-1 —
+  // measured 3/5 then 13/18 failures at default parallelism, clean 5/5 and 16/18 at workers: 1.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [["list"]],
