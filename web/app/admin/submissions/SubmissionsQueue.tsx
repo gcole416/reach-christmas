@@ -4,8 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useData } from "@/lib/store";
 import {
+  listDriveFormVersions,
   listFormLinks,
   listSubmissions,
+  type DriveFormVersionRecord,
   type FormLinkRecord,
   type SubmissionRecord,
 } from "@/lib/intake";
@@ -28,13 +30,15 @@ export function SubmissionsQueue() {
 
   const [submissions, setSubmissions] = useState<SubmissionRecord[] | null>(null);
   const [links, setLinks] = useState<FormLinkRecord[]>([]);
+  const [formVersions, setFormVersions] = useState<DriveFormVersionRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!driveId) return;
-    const [subs, formLinks] = await Promise.all([
+    const [subs, formLinks, versions] = await Promise.all([
       listSubmissions(driveId),
       listFormLinks(driveId),
+      listDriveFormVersions(driveId),
     ]);
     if (!subs.ok) {
       setError(subs.error);
@@ -44,6 +48,7 @@ export function SubmissionsQueue() {
     setError(null);
     setSubmissions(subs.items);
     setLinks(formLinks.ok ? formLinks.items : []);
+    setFormVersions(versions.ok ? versions.items : []);
   }, [driveId]);
 
   useEffect(() => {
@@ -137,7 +142,12 @@ export function SubmissionsQueue() {
         </>
       )}
 
-      <FormLinkPanel data={data} links={links} />
+      <FormLinkPanel
+        data={data}
+        links={links}
+        formVersions={formVersions}
+        onChanged={load}
+      />
     </div>
   );
 }

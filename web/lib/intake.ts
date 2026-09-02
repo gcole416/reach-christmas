@@ -588,23 +588,182 @@ export async function listFormLinks(driveId: string): Promise<ListResult<FormLin
     .order("created_at", { ascending: true });
 
   if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []).map(mapFormLinkRow) };
+}
+
+// The columns every form_links read/write in this file projects. Kept in one
+// place so listFormLinks and createFormLink can't drift apart.
+const FORM_LINK_COLUMNS =
+  "id, drive_id, drive_school_id, token, label, locale, channel, opens_at, expires_at, " +
+  "revoked_at, max_submissions, submission_count";
+
+// =============================================================================
+// Staff link management — create / revoke (ADM-24)
+// =============================================================================
+//
+// Ordinary RLS-gated table writes, exactly like the staff family CRUD in
+// store.tsx. `authenticated` holds insert/update on form_links, and the
+// "admin insert/update form_links" policies additionally require is_admin() —
+// a volunteer calling these gets a Postgres RLS error, not a link.
+//
+// Two things are deliberately NOT reachable from this UI, both from the US-20
+// review:
+//   * channel is always 'family'. A 'counselor'/'staff' link auto-verifies at
+//     submit and its plaintext token is readable by every signed-in user, so
+//     issuing one lets a volunteer file submissions that skip the counselor
+//     entirely (ADM-20). Not creatable here.
+//   * drive_school_id is always set — school links only. The confidential
+//     channel (null school) stays SQL-only: creating one is rare, and its RLS
+//     insert policy already gates on can_view_confidential().
+
+/** A published questionnaire a new link can be pinned to. */
+export interface DriveFormVersionRecord {
+  formVersionId: string;
+  formName: string;
+  version: number;
+  /** The definition's own locale — the link inherits it. */
+  locale: string;
+  publishedAt: string | null;
+}
+
+/**
+ * The published form versions for a drive, newest first. A link must pin one
+ * (`form_links.form_version_id` is NOT NULL), and a drive with no published
+ * version can't have links created for it through the UI — the questionnaire
+ * has to be published first (SQL, for Phase 1).
+ */
+export async function listDriveFormVersions(
+  driveId: string
+): Promise<ListResult<DriveFormVersionRecord>> {
+  const supabase = createClient();
+
+  const { data: forms, error: formsError } = await supabase
+    .from("forms")
+    .select("id, name")
+    .eq("drive_id", driveId);
+  if (formsError) return { ok: false, error: formsError.message };
+
+  const formNames = new Map<string, string>(
+    (forms ?? []).map((f: any) => [f.id as string, (f.name as string) ?? "Registration form"])
+  );
+  if (formNames.size === 0) return { ok: true, items: [] };
+
+  const { data, error } = await supabase
+    .from("form_versions")
+    .select("id, form_id, version, published_at, definition")
+    .in("form_id", Array.from(formNames.keys()))
+    .not("published_at", "is", null)
+    .order("version", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+
   return {
     ok: true,
     items: (data ?? []).map((row: any) => ({
-      id: row.id,
-      driveId: row.drive_id,
-      driveSchoolId: row.drive_school_id ?? null,
-      token: row.token,
-      label: row.label ?? null,
-      locale: row.locale ?? "en",
-      channel: row.channel as SubmissionChannel,
-      opensAt: row.opens_at ?? null,
-      expiresAt: row.expires_at ?? null,
-      revokedAt: row.revoked_at ?? null,
-      maxSubmissions: row.max_submissions ?? null,
-      submissionCount: row.submission_count ?? 0,
+      formVersionId: row.id,
+      formName: formNames.get(row.form_id) ?? "Registration form",
+      version: row.version,
+      locale:
+        typeof row.definition?.locale === "string" && row.definition.locale.trim()
+          ? row.definition.locale
+          : "en",
+      publishedAt: row.published_at ?? null,
     })),
   };
+}
+
+export interface CreateFormLinkInput {
+  driveId: string;
+  /** School links only — never null through this path (see the note above). */
+  driveSchoolId: string;
+  formVersionId: string;
+  /** Inherited from the chosen version's definition; stored on the link. */
+  locale: string;
+  label?: string | null;
+  /** ISO strings, or null for "no bound". `expiresAt` should always be set
+   *  (INTAKE_FORMS §11) — the UI makes it a required field. */
+  opensAt?: string | null;
+  expiresAt?: string | null;
+  maxSubmissions?: number | null;
+}
+
+export type CreateFormLinkResult =
+  | { ok: true; link: FormLinkRecord }
+  | { ok: false; error: string };
+
+/**
+ * A url-safe token with 32 bytes of entropy (INTAKE_FORMS §5.3 asks for
+ * ">= 32 bytes"; the DB check only enforces >= 16 chars). base64url, unpadded.
+ */
+function newLinkToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Creates a school registration link. Admin-only (enforced by RLS, not here).
+ *
+ * The token is generated client-side and never shown until the row comes back —
+ * a collision on the unique index is a ~2^-256 event, and the retry only exists
+ * so that if it somehow happened the staff member would see a fresh link rather
+ * than a raw `23505`.
+ */
+export async function createFormLink(input: CreateFormLinkInput): Promise<CreateFormLinkResult> {
+  const supabase = createClient();
+  const { data: userData } = await supabase.auth.getUser();
+
+  const maxSubmissions =
+    typeof input.maxSubmissions === "number" && Number.isFinite(input.maxSubmissions)
+      ? input.maxSubmissions
+      : null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data, error } = await supabase
+      .from("form_links")
+      .insert({
+        drive_id: input.driveId,
+        drive_school_id: input.driveSchoolId,
+        form_version_id: input.formVersionId,
+        token: newLinkToken(),
+        label: input.label?.trim() || null,
+        locale: input.locale || "en",
+        channel: "family",
+        opens_at: input.opensAt ?? null,
+        expires_at: input.expiresAt ?? null,
+        max_submissions: maxSubmissions,
+        created_by: userData.user?.id ?? null,
+      })
+      .select(FORM_LINK_COLUMNS)
+      .single();
+
+    if (!error && data) return { ok: true, link: mapFormLinkRow(data) };
+    if (error?.code === "23505" && attempt < 2) continue;
+    return { ok: false, error: error?.message ?? GENERIC_ERROR };
+  }
+  return { ok: false, error: GENERIC_ERROR };
+}
+
+/**
+ * Revokes a link — families opening it afterwards get the same "ask your
+ * counselor for a current link" page a nonexistent token gets (get_form and
+ * submit_form both answer `not_found` for a revoked link, by design).
+ *
+ * Idempotent: the `is("revoked_at", null)` guard means re-revoking is a no-op
+ * rather than moving the timestamp.
+ */
+export async function revokeFormLink(
+  linkId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("form_links")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", linkId)
+    .is("revoked_at", null);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 // =============================================================================
@@ -858,6 +1017,23 @@ function mapRosterSubmission(raw: any): RosterSubmission {
       age: typeof c.age === "number" ? c.age : null,
       grade: c.grade ?? null,
     })),
+  };
+}
+
+function mapFormLinkRow(row: any): FormLinkRecord {
+  return {
+    id: row.id,
+    driveId: row.drive_id,
+    driveSchoolId: row.drive_school_id ?? null,
+    token: row.token,
+    label: row.label ?? null,
+    locale: row.locale ?? "en",
+    channel: row.channel as SubmissionChannel,
+    opensAt: row.opens_at ?? null,
+    expiresAt: row.expires_at ?? null,
+    revokedAt: row.revoked_at ?? null,
+    maxSubmissions: row.max_submissions ?? null,
+    submissionCount: row.submission_count ?? 0,
   };
 }
 
