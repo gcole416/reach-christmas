@@ -340,7 +340,7 @@ export async function claimCardWithCode(
 // conflict banner (US-13) — these are what it gets if it just renders
 // `result.error`.
 const CONFLICT_MESSAGE =
-  "Someone else changed this family while you were editing it. Reload to see their version, or save your version anyway to replace theirs.";
+  "Someone else changed this household while you were editing it. Reload to see their version, or save your version anyway to replace theirs.";
 
 // Deliberately the SAME message for "the row does not exist" and "row level
 // security hid it from you". A volunteer without can_view_confidential() gets
@@ -350,13 +350,13 @@ const CONFLICT_MESSAGE =
 // answering that with "someone else changed this" would confirm the row
 // exists. Generic not-found is the only safe answer on that path.
 const NOT_FOUND_MESSAGE =
-  "This family couldn't be found, or you no longer have access to it. Reload the page.";
+  "This household couldn't be found, or you no longer have access to it. Reload the page.";
 
 // Shown when the caller had no row version to check against, so we can't tell
 // whether anyone else has edited in the meantime. Refusing is the safe
 // direction: the whole point of US-13 is not to blind-overwrite.
 const UNVERIFIABLE_MESSAGE =
-  "Couldn't check whether anyone else has changed this family. Reload the page and make your edit again.";
+  "Couldn't check whether anyone else has changed this household. Reload the page and make your edit again.";
 
 // Shape of the pre-flight version reads. Untyped supabase client, so these are
 // asserted rather than inferred.
@@ -515,7 +515,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       p_internal_notes: input.internalNotes.trim() || null,
     });
     if (familyError || !familyRow) {
-      return { ok: false, error: familyError?.message ?? "Could not create the family." };
+      return { ok: false, error: familyError?.message ?? "Could not create the household." };
     }
 
     for (let i = 0; i < validChildren.length; i++) {
@@ -542,9 +542,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
         return {
           ok: false,
-          error: `Family saved, but couldn't add ${child.firstName || "a child"}: ${
+          error: `Household saved, but couldn't add ${child.firstName || "a child"}: ${
             childError?.message ?? "unknown error"
-          }. What was saved so far is already in "All families" — check there before retrying.`,
+          }. What was saved so far is already in the household list — check there before retrying.`,
         };
       }
 
@@ -616,7 +616,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
     const validChildren = children.filter((c) => c.firstName.trim());
     if (validChildren.length === 0) {
-      return { ok: false, error: "A family needs at least one child with a first name.", partialSave: false };
+      return { ok: false, error: "A household needs at least one child with a first name.", partialSave: false };
     }
 
     if (!force && !expectedFamilyUpdatedAt) {

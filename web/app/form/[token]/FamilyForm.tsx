@@ -34,6 +34,17 @@ import { validateAnswers } from "./validate";
 const GENERIC_SUBMIT_ERROR =
   "We couldn't save your registration just now. Please check your answers and try again.";
 
+// A hard gate the questionnaire definition doesn't carry: the person has to
+// affirm that everyone they listed lives in their home before the form will
+// send. It's a nudge, not a stored answer — nothing is written for it — so it
+// lives here as page state rather than as a definition field (US-30). The
+// synthetic path lets the error summary list and link to it like any real
+// field error.
+const LIVES_TOGETHER_FIELD = "everyone_lives_here";
+const LIVES_TOGETHER_LABEL = "Everyone I've listed lives in my home";
+const LIVES_TOGETHER_ERROR =
+  "Please confirm that everyone you've listed lives in your home.";
+
 type SectionValues = Record<string, unknown>;
 
 export function FamilyForm({
@@ -46,6 +57,7 @@ export function FamilyForm({
   schoolName: string | null;
 }) {
   const [answers, setAnswers] = useState<IntakeAnswers>(() => emptyAnswers(definition));
+  const [livesTogetherConfirmed, setLivesTogetherConfirmed] = useState(false);
   const [honeypot, setHoneypot] = useState("");
   const [errors, setErrors] = useState<IntakeFieldError[]>([]);
   const [banner, setBanner] = useState<string | null>(null);
@@ -137,6 +149,9 @@ export function FamilyForm({
 
     setBanner(null);
     const localErrors = validateAnswers(definition, answers);
+    if (!livesTogetherConfirmed) {
+      localErrors.push({ field: LIVES_TOGETHER_FIELD, message: LIVES_TOGETHER_ERROR });
+    }
     if (localErrors.length > 0) {
       setErrors(localErrors);
       focusSummary();
@@ -234,6 +249,37 @@ export function FamilyForm({
         ) : null}
 
         <PublicCard>
+          <div className="mb-5 flex items-start gap-3">
+            <input
+              id={fieldDomId(LIVES_TOGETHER_FIELD)}
+              type="checkbox"
+              checked={livesTogetherConfirmed}
+              onChange={(e) => {
+                setLivesTogetherConfirmed(e.target.checked);
+                if (e.target.checked) clearErrors([LIVES_TOGETHER_FIELD]);
+              }}
+              aria-describedby={
+                errorMap.has(LIVES_TOGETHER_FIELD) ? `${fieldDomId(LIVES_TOGETHER_FIELD)}-error` : undefined
+              }
+              className="mt-0.5 h-5 w-5 shrink-0 rounded border border-border accent-cat-blue focus:outline-none focus:ring-2 focus:ring-cat-blue"
+            />
+            <div>
+              <label htmlFor={fieldDomId(LIVES_TOGETHER_FIELD)} className="text-base text-ink-primary">
+                {LIVES_TOGETHER_LABEL}.
+              </label>
+              <p className="mt-1 text-sm text-ink-secondary">
+                Only register children who live with you. Please don&apos;t list a relative&apos;s
+                child or someone who only visits.
+              </p>
+              {errorMap.has(LIVES_TOGETHER_FIELD) ? (
+                <FieldError
+                  id={`${fieldDomId(LIVES_TOGETHER_FIELD)}-error`}
+                  message={errorMap.get(LIVES_TOGETHER_FIELD) as string}
+                />
+              ) : null}
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={submitting}
@@ -474,6 +520,8 @@ function ErrorSummary({
  * without the page keeping a second map of the questionnaire.
  */
 function describeFieldPath(definition: IntakeFormDefinition, path: string): string {
+  if (path === LIVES_TOGETHER_FIELD) return LIVES_TOGETHER_LABEL;
+
   const match = /^([a-z0-9_]+)(?:\[(\d+)\])?(?:\.([a-z0-9_]+))?(?:\[(\d+)\])?$/i.exec(path);
   if (!match) return "This form";
   const [, sectionId, itemIndex, fieldId, listIndex] = match;

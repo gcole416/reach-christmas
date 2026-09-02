@@ -49,7 +49,11 @@ export default function DistributionPage() {
       checkInFilter === "all" ||
       (checkInFilter === "checked_in" ? !!row.checkedInAt : !row.checkedInAt);
     const searchMatches =
-      !q || [row.schoolName ?? "", `family ${row.familyNumber}`].join(" ").toLowerCase().includes(q);
+      !q ||
+      [row.schoolName ?? "", `household ${row.householdTag}`, `family ${row.familyNumber}`]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
     return schoolMatches && checkInMatches && searchMatches;
   });
 
@@ -87,15 +91,15 @@ export default function DistributionPage() {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-semibold text-ink-primary">Distribution</h1>
       <p className="mt-2 text-ink-secondary">
-        One row per family. Set a distribution method or pickup time, and check a family in as they
+        One row per household. Set a distribution method or pickup time, and check a household in as they
         actually come through — however this year&apos;s drive ends up running (school drop-off, a single
-        pickup event, or a mix), it&apos;s tracked here per family rather than assumed drive-wide.
+        pickup event, or a mix), it&apos;s tracked here per household rather than assumed drive-wide.
       </p>
 
       <AdminNav />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search by family or school…" />
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by household or school…" />
         <select
           value={schoolFilter}
           onChange={(e) => setSchoolFilter(e.target.value)}
@@ -115,7 +119,7 @@ export default function DistributionPage() {
           onChange={(e) => setCheckInFilter(e.target.value as "all" | "checked_in" | "not_checked_in")}
           className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
         >
-          <option value="all">All families</option>
+          <option value="all">All households</option>
           <option value="checked_in">Checked in</option>
           <option value="not_checked_in">Not checked in</option>
         </select>
@@ -128,7 +132,7 @@ export default function DistributionPage() {
         <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="bg-ink-muted/5 text-xs uppercase tracking-wide text-ink-muted">
             <tr>
-              <th className="px-4 py-3 font-medium">Family</th>
+              <th className="px-4 py-3 font-medium">Household</th>
               <th className="px-4 py-3 font-medium">Method</th>
               <th className="px-4 py-3 font-medium">Scheduled pickup</th>
               <th className="px-4 py-3 font-medium">Progress</th>
@@ -148,7 +152,7 @@ export default function DistributionPage() {
                       </span>
                     ) : (
                       <>
-                        {row.schoolName ?? "Direct referral"} <span className="text-ink-muted">· Family {row.familyNumber}</span>
+                        {row.schoolName ?? "Direct referral"} <span className="text-ink-muted">· Household {row.householdTag}</span>
                       </>
                     )}
                   </td>
@@ -202,7 +206,7 @@ export default function DistributionPage() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
-                  {allRows.length === 0 ? "No families registered yet." : "No rows match this filter."}
+                  {allRows.length === 0 ? "No households registered yet." : "No rows match this filter."}
                 </td>
               </tr>
             ) : null}

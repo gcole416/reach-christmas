@@ -171,7 +171,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     await expect(page.getByText(fixedName).first()).toBeVisible();
     await expect(page.getByText(/counselor fix/i).first()).toBeVisible();
 
-    await page.getByRole("button", { name: /import this family/i }).click();
+    await page.getByRole("button", { name: /import this household/i }).click();
     await page.getByRole("button", { name: /import now/i }).click();
     await expect(page.getByRole("heading", { name: /^imported$/i })).toBeVisible();
 
@@ -248,6 +248,42 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     // can't cover: the Families Explorer has to actually list it.
     await page.goto(`/admin/families/${family.id as string}`);
     await expect(page.getByText(fixedName).first()).toBeVisible();
+  });
+
+  test("the form won't send until 'everyone lives in my home' is checked (US-30)", async ({ page }) => {
+    const tag = runTag();
+    const guardian = autotestGuardian(tag);
+    const childName = autotestChildName(tag, "LivesHere");
+
+    await page.goto(`/form/${DEMO_FORM_TOKEN}`);
+    await expect(page.getByRole("heading", { name: /family gift registration/i })).toBeVisible();
+
+    // Fill everything, but leave the affirmation unchecked.
+    await fillAndSubmitFamilyForm(page, {
+      guardianName: guardian,
+      guardianPhone: "555-0102",
+      children: [{ first_name: childName, age: 9, grade: "4", sex: "F", wishlist: ["a kite"] }],
+      everyoneLivesHere: false,
+    });
+
+    // The submit is refused and the error summary lists the affirmation.
+    await expect(page.getByRole("alert")).toContainText(/everyone you.{0,3}ve listed lives in your home/i);
+    await expect(page.getByRole("heading", { name: /thank you/i })).toHaveCount(0);
+
+    const admin = await signInAs("admin");
+    expect(
+      await findSubmissionByGuardian(admin, guardian),
+      "an unchecked affirmation still wrote a submission"
+    ).toBeNull();
+
+    // Check it, resubmit, and now it goes through.
+    await page.locator("#f-everyone-lives-here").check();
+    await page.getByRole("button", { name: /submit registration/i }).click();
+    await expect(page.getByRole("heading", { name: /thank you/i })).toBeVisible();
+
+    const submission = await findSubmissionByGuardian(admin, guardian);
+    expect(submission, "a checked affirmation should submit normally").not.toBeNull();
+    expect(submission!.status).toBe("submitted");
   });
 
   test("the public form works one-handed at 360px with no horizontal scroll", async ({ page }) => {

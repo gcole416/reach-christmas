@@ -46,28 +46,28 @@ test.describe("volunteer intake through the real UI (create_family grant)", () =
     expect(left ?? [], "cleanup must leave nothing behind on the dev project").toHaveLength(0);
   });
 
-  test("a plain volunteer can save a direct-referral family and gets a family number back", async ({ page }) => {
+  test("a plain volunteer can save a direct-referral household and gets a household number back", async ({ page }) => {
     await loginAsInBrowser(page, "volunteer");
 
     await page.goto("/admin/intake");
-    await expect(page.getByRole("heading", { name: /add a family/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /add a household/i })).toBeVisible();
 
     await page.getByLabel(/referral source/i).selectOption({ label: "Direct referral (no school)" });
     await page.getByLabel(/first name/i).fill(childName);
     await page.getByLabel(/^grade$/i).fill("3");
     await page.getByLabel(/shirt size/i).fill("YM");
 
-    await page.getByRole("button", { name: /save family/i }).click();
+    await page.getByRole("button", { name: /save household/i }).click();
 
     // The success banner is the UI's own proof that create_family returned a
     // row: store.tsx interpolates result.familyNumber straight into it.
-    const banner = page.getByText(/saved as family \d+ with 1 child\./i);
+    const banner = page.getByText(/saved as household Z\d+ with 1 child\./i);
     await expect(banner).toBeVisible();
     // A permission failure would render the red error box instead.
     await expect(page.getByText(/permission denied/i)).toHaveCount(0);
 
     const bannerText = (await banner.textContent()) ?? "";
-    const familyNumber = Number(/saved as family (\d+)/i.exec(bannerText)?.[1]);
+    const familyNumber = Number(/saved as household Z(\d+)/i.exec(bannerText)?.[1]);
     expect(Number.isInteger(familyNumber) && familyNumber > 0).toBe(true);
 
     // And confirm it landed in the database, with the card the copy on that
@@ -92,7 +92,7 @@ test.describe("volunteer intake through the real UI (create_family grant)", () =
     expect(cards ?? [], "one card per child").toHaveLength(1);
   });
 
-  test("double-clicking Save family creates one family, not two", async ({ page }) => {
+  test("double-clicking Save household creates one household, not two", async ({ page }) => {
     await loginAsInBrowser(page, "volunteer");
     await page.goto("/admin/intake");
 
@@ -103,10 +103,10 @@ test.describe("volunteer intake through the real UI (create_family grant)", () =
     // button's own `disabled={submitting}`; this test exists so that if that
     // ever regresses, the duplicate family number it would burn shows up here
     // rather than at a distribution table in December.
-    const save = page.getByRole("button", { name: /save family/i });
+    const save = page.getByRole("button", { name: /save household/i });
     await save.dblclick();
 
-    await expect(page.getByText(/saved as family \d+ with 1 child\./i)).toBeVisible();
+    await expect(page.getByText(/saved as household Z\d+ with 1 child\./i)).toBeVisible();
 
     const admin = await signInAs("admin");
     const { data: kids } = await admin.from("children").select("id, family_id").eq("first_name", childName);
@@ -118,7 +118,7 @@ test.describe("volunteer intake through the real UI (create_family grant)", () =
     await loginAsInBrowser(page, "volunteer");
     await page.goto("/admin/intake");
 
-    await expect(page.getByRole("heading", { name: /add a family/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /add a household/i })).toBeVisible();
     const overflows = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1
     );
@@ -128,7 +128,7 @@ test.describe("volunteer intake through the real UI (create_family grant)", () =
     await expect(page.getByLabel(/referral source/i)).toBeVisible();
     await page.getByLabel(/referral source/i).selectOption({ label: "Direct referral (no school)" });
     await page.getByLabel(/first name/i).fill(childName);
-    const save = page.getByRole("button", { name: /save family/i });
+    const save = page.getByRole("button", { name: /save household/i });
     await save.scrollIntoViewIfNeeded();
     const box = await save.boundingBox();
     expect(box, "Save family button must be laid out").not.toBeNull();

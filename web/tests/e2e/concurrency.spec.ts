@@ -201,7 +201,7 @@ test.describe("US-13: concurrent edits to a family record", () => {
 
     await page.getByRole("button", { name: /save changes/i }).click();
 
-    await expect(page.getByRole("heading", { name: /someone else changed this family/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /someone else changed this household/i })).toBeVisible();
     await expect(page.getByLabel(/internal notes/i)).toHaveValue("Typed by the first volunteer");
 
     const { data: row } = await admin.from("families").select("internal_notes").eq("id", family.id).single();
@@ -228,7 +228,7 @@ test.describe("US-13: concurrent edits to a family record", () => {
       await page.getByLabel(/internal notes/i).fill(note);
       await page.getByRole("button", { name: /save changes/i }).click();
       await expect(page.getByText(/changes saved/i)).toBeVisible();
-      await expect(page.getByRole("heading", { name: /someone else changed this family/i })).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: /someone else changed this household/i })).toHaveCount(0);
     }
 
     const { data: row } = await admin.from("families").select("internal_notes").eq("id", family.id).single();

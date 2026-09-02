@@ -86,8 +86,14 @@ export default function IntakePage() {
     }
 
     const savedChildCount = children.filter((c) => c.firstName.trim()).length;
+    // Matches getHouseholdTag / the card-number prefix: the school's code, or
+    // "Z" for a direct referral or confidential household with no school.
+    const schoolCode =
+      referralType === "school"
+        ? (schools.find((s) => s.driveSchoolId === driveSchoolId)?.code ?? "Z")
+        : "Z";
     setSuccessMessage(
-      `Saved as Family ${result.familyNumber} with ${savedChildCount} ${savedChildCount === 1 ? "child" : "children"}.`
+      `Saved as Household ${schoolCode}${result.familyNumber} with ${savedChildCount} ${savedChildCount === 1 ? "child" : "children"}.`
     );
     setInternalNotes("");
     setChildren([emptyChild()]);
@@ -95,7 +101,7 @@ export default function IntakePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Add a family</h1>
+      <h1 className="text-3xl font-semibold text-ink-primary">Add a household</h1>
       <p className="mt-2 text-ink-secondary">
         Enter a referral into {data.drive.name} — this replaces a row (or several) in the old
         spreadsheet. Each child gets a claimable card on the sponsor page as soon as you save.
@@ -105,7 +111,7 @@ export default function IntakePage() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
-          <h2 className="text-sm font-semibold text-ink-primary">Family</h2>
+          <h2 className="text-sm font-semibold text-ink-primary">Household</h2>
           <div className="mt-3">
             <label className="block text-sm sm:max-w-xs">
               <span className="text-ink-secondary">Referral source</span>
@@ -133,13 +139,13 @@ export default function IntakePage() {
             </label>
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            The family number is assigned automatically once you save — it&apos;ll show up here and on
+            The household number is assigned automatically once you save — it&apos;ll show up here and on
             every card/tag, but isn&apos;t something you pick.
           </p>
 
           {referralType === "confidential" ? (
             <div className="mt-3 rounded-lg bg-status-serious/10 px-3 py-2 text-sm text-ink-primary">
-              Confidential families are hidden from volunteers without clearance. Use this only when the
+              Confidential households are hidden from volunteers without clearance. Use this only when the
               referral needs that extra privacy.
             </div>
           ) : null}
@@ -195,7 +201,7 @@ export default function IntakePage() {
             disabled={submitting}
             className="rounded-lg bg-cat-blue px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? "Saving…" : "Save family"}
+            {submitting ? "Saving…" : "Save household"}
           </button>
         </div>
       </form>

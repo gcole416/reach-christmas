@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useData } from "@/lib/store";
 import { TextAreaField } from "@/components/TextAreaField";
 import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/ChildFormFields";
+import { getHouseholdTag } from "@/lib/queries";
 import type { DataBundle } from "@/lib/types";
 import { AdminNav } from "../../AdminNav";
 
@@ -129,7 +130,7 @@ function FamilyEditForm({
       <div className="mx-auto max-w-4xl px-6 py-10">
         <AdminNav />
         <p className="text-ink-secondary">
-          Family not found — either it doesn&apos;t exist, or it&apos;s confidential and you don&apos;t
+          Household not found — either it doesn&apos;t exist, or it&apos;s confidential and you don&apos;t
           have clearance to view it.
         </p>
       </div>
@@ -249,7 +250,7 @@ function FamilyEditForm({
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <h1 className="text-3xl font-semibold text-ink-primary">
-        Family {family.familyNumber}
+        Household {getHouseholdTag(data, family)}
         {family.isConfidential ? (
           <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-status-serious/15 px-2.5 py-1 align-middle text-xs font-medium text-ink-primary">
             Confidential
@@ -257,7 +258,7 @@ function FamilyEditForm({
         ) : null}
       </h1>
       <p className="mt-2 text-ink-secondary">
-        Referred by: {referralLabel}. Referral source and family number can&apos;t be changed here — that
+        Referred by: {referralLabel}. Referral source and household number can&apos;t be changed here — that
         affects card numbering, so it&apos;s a SQL-editor-only edit if it&apos;s ever genuinely wrong.
       </p>
 
@@ -265,7 +266,7 @@ function FamilyEditForm({
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
-          <h2 className="text-sm font-semibold text-ink-primary">Family details</h2>
+          <h2 className="text-sm font-semibold text-ink-primary">Household details</h2>
           <div className="mt-3">
             <TextAreaField
               label="Internal notes (staff only)"
@@ -311,7 +312,7 @@ function FamilyEditForm({
             className="rounded-xl border border-status-serious/40 bg-status-serious/10 p-4 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cat-blue"
           >
             <h2 id="conflict-heading" className="text-sm font-semibold text-ink-primary">
-              Someone else changed this family while you were editing
+              Someone else changed this household while you were editing
             </h2>
             <p className="mt-1.5 text-sm text-ink-secondary">
               Your edits were not saved, but nothing you typed has been lost — it&apos;s all still on this
@@ -382,7 +383,7 @@ function FamilyEditForm({
               {failure.message.replace(PARTIAL_SAVE_NOTICE, "").trim()}
             </p>
             <p className="mt-2 text-sm text-ink-secondary">
-              The family details saved, then it stopped partway. Nothing you typed has been lost — it&apos;s
+              The household details saved, then it stopped partway. Nothing you typed has been lost — it&apos;s
               all still on this page. Saving again on its own won&apos;t work now that part of it has
               landed, so choose one:
             </p>
@@ -466,7 +467,7 @@ function FamilyEditForm({
       </form>
 
       <p className="mt-6 text-xs text-ink-muted">
-        There&apos;s no way to delete a family or a child from here — that&apos;s a rare, higher-stakes
+        There&apos;s no way to delete a household or a child from here — that&apos;s a rare, higher-stakes
         action better done deliberately via the SQL editor for now.
       </p>
     </div>

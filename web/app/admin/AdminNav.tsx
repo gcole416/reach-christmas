@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const TABS = [
   { href: "/admin", label: "Dashboard" },
-  { href: "/admin/families", label: "Family Admin" },
+  { href: "/admin/families", label: "Household Admin" },
   { href: "/admin/submissions", label: "Registrations" },
   { href: "/admin/fulfillment", label: "Fulfillment" },
   { href: "/admin/shopping-list", label: "Shopping List" },

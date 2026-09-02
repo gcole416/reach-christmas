@@ -59,7 +59,7 @@ export default function SchoolsAdminPage() {
               <th className="px-4 py-3 font-medium">Code</th>
               <th className="px-4 py-3 font-medium">Liaison</th>
               <th className="px-4 py-3 font-medium">Distribution</th>
-              <th className="px-4 py-3 font-medium">Families</th>
+              <th className="px-4 py-3 font-medium">Households</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">

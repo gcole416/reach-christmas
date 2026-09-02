@@ -190,7 +190,7 @@ export function SubmissionDetail({ submissionId }: { submissionId: string }) {
             Counselor corrections
           </h2>
           <p className="mt-1 text-sm text-ink-secondary">
-            The family&apos;s answers below are shown exactly as they were submitted. These fixes
+            The household&apos;s answers below are shown exactly as they were submitted. These fixes
             are applied when you import.
           </p>
           <ul className="mt-3 space-y-1.5 text-sm">
@@ -212,7 +212,7 @@ export function SubmissionDetail({ submissionId }: { submissionId: string }) {
         className="rounded-xl border border-border bg-surface p-5"
       >
         <h2 id="family-heading" className="text-lg font-semibold text-ink-primary">
-          About the family
+          About the household
         </h2>
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
           {orderedKeys(family, FAMILY_ORDER).map((key) => (
@@ -457,17 +457,17 @@ function ImportPanel({
         <p className="mt-1 text-sm text-ink-secondary">
           {result
             ? result.alreadyImported
-              ? "This registration had already been imported. Here's the family it created — no second family was made."
-              : `Created Family ${result.familyNumber ?? "—"} with ${childCountLabel(result.childrenCreated)}.`
-            : "This registration is already a family in the drive."}
-          {result?.isConfidential ? " Imported as a confidential family." : ""}
+              ? "This registration had already been imported. Here's the household it created — no second household was made."
+              : `Created Household ${result.familyNumber ?? "—"} with ${childCountLabel(result.childrenCreated)}.`
+            : "This registration is already a household in the drive."}
+          {result?.isConfidential ? " Imported as a confidential household." : ""}
         </p>
         {familyId ? (
           <Link
             href={`/admin/families/${familyId}`}
             className="mt-4 inline-block rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue focus-visible:ring-offset-2"
           >
-            Open the family
+            Open the household
           </Link>
         ) : null}
       </section>
@@ -480,7 +480,7 @@ function ImportPanel({
         <h2 className="text-lg font-semibold text-ink-primary">Waiting on the counselor</h2>
         <p className="mt-1 text-sm text-ink-secondary">
           You can import this once the school counselor confirms it on their review link. Until
-          then there&apos;s nothing to do here — Reach doesn&apos;t create a family from a
+          then there&apos;s nothing to do here — Reach doesn&apos;t create a household from a
           registration nobody has vouched for.
         </p>
       </section>
@@ -505,7 +505,7 @@ function ImportPanel({
     <section className="rounded-xl border border-cat-blue/40 bg-cat-blue/5 p-5">
       <h2 className="text-lg font-semibold text-ink-primary">Ready to import</h2>
       <p className="mt-1 text-sm text-ink-secondary">
-        Importing creates the family, its children, and their cards in this drive, exactly as if
+        Importing creates the household, its children, and their cards in this drive, exactly as if
         someone had entered them by hand.
       </p>
 
@@ -528,14 +528,14 @@ function ImportPanel({
           onClick={() => setConfirming(true)}
           className="mt-4 rounded-lg bg-cat-blue px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue focus-visible:ring-offset-2"
         >
-          Import this family
+          Import this household
         </button>
       ) : (
         <div className="mt-4 rounded-lg border border-border bg-surface p-4">
           {confidentialChannel ? (
             <p className="text-sm text-ink-primary">
               This came in through the confidential channel, so it will be created as a{" "}
-              <strong className="font-medium">confidential family</strong> — visible only to staff
+              <strong className="font-medium">confidential household</strong> — visible only to staff
               with confidential clearance.
             </p>
           ) : (
@@ -549,11 +549,11 @@ function ImportPanel({
                   className="mt-0.5 h-5 w-5 shrink-0 rounded border border-border accent-cat-blue focus:ring-2 focus:ring-cat-blue focus:outline-none"
                 />
                 <label htmlFor="import-confidential" className="text-sm text-ink-primary">
-                  Create this as a <strong className="font-medium">confidential family</strong>
+                  Create this as a <strong className="font-medium">confidential household</strong>
                 </label>
               </div>
               <p className="mt-2 pl-7 text-sm text-ink-secondary">
-                Set it here, not afterwards. A family imported normally and edited later is
+                Set it here, not afterwards. A household imported normally and edited later is
                 readable by every volunteer in between.
               </p>
             </>

@@ -34,7 +34,7 @@ export function FamiliesExplorer() {
         familyId: family.familyId,
         driveSchoolId: family.driveSchoolId,
         school: family.schoolName ?? "Confidential / direct referral",
-        familyLabel: `Family ${family.familyNumber}`,
+        familyLabel: `Household ${family.householdTag}`,
         isConfidential: family.isConfidential,
         childName: displayFirstName(child.firstName, family.isConfidential, isAdmin),
         grade: child.grade,
@@ -113,7 +113,7 @@ export function FamiliesExplorer() {
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="mb-1 block text-ink-secondary">Search</span>
-          <SearchInput value={search} onChange={setSearch} placeholder="Child, family, card, sponsor…" />
+          <SearchInput value={search} onChange={setSearch} placeholder="Child, household, card, sponsor…" />
         </label>
         <label className="text-sm">
           <span className="mb-1 block text-ink-secondary">School</span>
@@ -177,7 +177,7 @@ export function FamiliesExplorer() {
           <thead className="bg-ink-muted/5 text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-4 py-3 font-medium">School</th>
-              <th className="px-4 py-3 font-medium">Family</th>
+              <th className="px-4 py-3 font-medium">Household</th>
               <th className="px-4 py-3 font-medium">Child</th>
               <th className="px-4 py-3 font-medium">Grade</th>
               <th className="px-4 py-3 font-medium">Card</th>

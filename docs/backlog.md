@@ -809,6 +809,70 @@ Owner: (built this session) — database-engineer (migration + `web/lib/intake.t
 
 ---
 
+## US-29: "Household" terminology + school-prefixed household tag
+
+As staff, a volunteer, or a counselor, I want every "family" in the app to read
+as "Household" and to be identified by a school-prefixed tag (e.g. "Household
+OL1") that matches its card numbers, so that a household is unambiguous across
+the whole drive and the label lines up with the printed cards.
+
+Prompted by Grant (2026-09-02): the "Family N" label increments only within a
+school, so OneLife and Clear Creek both have a "Family 1" and the number reads
+non-unique. The intent behind the rename is also to signal to registering
+households that they list only children who **live with them** — US-30 is the
+form-side half of that.
+
+Context:
+- `families.family_number` is a per-school integer (per-drive for confidential families), assigned atomically by `create_family()`. Bare, it repeats across schools.
+- Card base IDs are **already** school-prefixed and derived, never stored: `{drive_schools.code | 'Z'}{family_number}.{child_index}` → `OL1.3` — see `child_card_numbers` (SCHEMA §6), `public_available_cards` (§9), and `getChildCardNumber` in [web/lib/queries.ts](../web/lib/queries.ts).
+- So the gap is the *label*, not the number. Showing the school-code prefix as part of the identifier ("Household OL1") makes it read unique and aligns it with the card number — **no renumber, no migration**.
+- Decision (Grant, 2026-09-02): prefixed tag, **not** a global 1–200 renumber. Rename is **user-visible text only** — `family_number` / `familyNumber` / `create_family` / the `families` table / view + column names all stay.
+
+Acceptance criteria:
+- [x] One shared helper in `web/lib/queries.ts` — `getHouseholdTag(data, family)` → `${getFamilySchoolCode()}${familyNumber}` with the same `'Z'` fallback the card number uses. `getChildCardNumber` now derives from it (`${tag}.${childIndex}`) so the tag and the card number can't drift.
+- [x] `web/app/admin/families/FamiliesExplorer.tsx`: row label "Household OL1" (was "Family 1"); column header "Household"; search box placeholder + match string updated. `householdTag` threaded through `AdminFamilyRow` (and `DistributionRow`).
+- [x] Intake success banner (`web/app/admin/intake/page.tsx`) reads "Saved as Household OL1 with N child(ren)" — school code resolved client-side from the picked school, `'Z'` for direct/confidential.
+- [x] Family detail page `web/app/admin/families/[familyId]/page.tsx` — heading + body copy + conflict/partial-save banners use "Household" + the tag.
+- [x] Staff submission detail (`SubmissionDetail.tsx`) + queue empty state say "household". **Counselor review roster (`web/app/review/**`) deliberately NOT changed** — "the families you referred" reads as natural English there; flagged for Grant.
+- [x] Public sponsor pages unchanged; `public_available_cards` not touched.
+- [x] Staff-surface "family/families" copy → "household(s)": families pages, intake, distribution, schools household-count column, `AdminNav` ("Household Admin"), `store.tsx` error messages. **Public form / `web/components/intake/**` left for US-30** (same immutable-definition surface).
+- [x] No migration; no rename of `family_number` / `familyNumber` / `create_family` / `families` / `child_card_numbers` / `AddFamilyResult.familyNumber` / the `answers.family` data key.
+- [x] `tsc` / `eslint` / `next build` clean. e2e specs updated (`ui-flows`, `volunteer-intake`, `concurrency`). `volunteer-intake` (3) + the confidential-redaction + intake-validation tests green against live dev; the full `intake-walkthrough` run is blocked on `supabase/intake_demo_seed.sql` not being present on dev (pre-existing env gap, not this change).
+- [x] Confidential households show "Household Z1" — Grant confirmed `Z` is fine (2026-09-02).
+
+Status: **In review** — built on `dev`, committed & pushed. `tsc`/`eslint`/`next build` clean; targeted e2e green against live dev. No migration / no RLS / no view change, so no reach-reviewer gate required; a code-reviewer pass before Done is enough.
+Owner: (built this session) — frontend-designer surface. Files: [web/lib/queries.ts](../web/lib/queries.ts), [web/lib/store.tsx](../web/lib/store.tsx), [web/app/admin/families/FamiliesExplorer.tsx](../web/app/admin/families/FamiliesExplorer.tsx), [web/app/admin/families/page.tsx](../web/app/admin/families/page.tsx), [web/app/admin/families/[familyId]/page.tsx](../web/app/admin/families/[familyId]/page.tsx), [web/app/admin/intake/page.tsx](../web/app/admin/intake/page.tsx), [web/app/admin/distribution/page.tsx](../web/app/admin/distribution/page.tsx), [web/app/admin/schools/page.tsx](../web/app/admin/schools/page.tsx), [web/app/admin/AdminNav.tsx](../web/app/admin/AdminNav.tsx), [web/app/admin/submissions/SubmissionsQueue.tsx](../web/app/admin/submissions/SubmissionsQueue.tsx), [web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx](../web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx)
+
+---
+
+## US-30: "Everyone lives in my home" affirmation on the family intake form
+
+As the drive, I want a household filling out gift registration to affirm that
+every child listed lives in their home, so that we register children who live
+with the household — not extended family who visit.
+
+The form-side half of US-29's intent. Decision (Grant, 2026-09-02): **one
+household-level affirmation** near submit, plus reworded intro/help — not a
+per-child checkbox.
+
+Context:
+- The public form `web/app/form/[token]/FamilyForm.tsx` is fully definition-driven: intro, section help, submit label all come from the **immutable** published form version (`web/lib/intakeFormDefinition.ts` + the SQL seeds + `import_submission`'s hard-coded field contract). Wording changes touch the definition (a v2). A required checkbox can instead be hardcoded UI in `FamilyForm.tsx` (like the honeypot and the "you won't be able to change this" note), gated in `handleSubmit` before `submitForm`, with no persistence and no version bump — the lighter path, matching the decision.
+
+Acceptance criteria:
+- [x] A required checkbox in the submit card of `web/app/form/[token]/FamilyForm.tsx`: "Everyone I've listed lives in my home." Submit blocked until checked; the miss is pushed into `localErrors` in `handleSubmit` with a synthetic field path, so it lists in `ErrorSummary`, links/focuses like any field error, and clears when the box is ticked. `FieldError` also renders inline next to the checkbox.
+- [x] Per-child help text below the checkbox: "Only register children who live with you. Please don't list a relative's child or someone who only visits."
+- [x] **Not persisted** — it's a hardcoded page gate, no definition field, no version bump, `import_submission`'s contract untouched. The main form intro/section help (definition-driven, immutable) were **left as-is**; reword them in a definition v2 later if wanted. Flagged for Grant.
+- [x] Counselor review step unaffected (nothing persisted).
+- [x] e2e: new test in `intake-walkthrough.spec.ts` — fill the form, leave the box unchecked, submit → error summary + no `form_submissions` row; check it, resubmit → "Thank you" + row written. `fillAndSubmitFamilyForm` helper ticks the box by default (`everyoneLivesHere?: boolean` to opt out).
+- [x] `tsc` / `eslint` / `next build` clean. The new e2e can't run here — its `describe` block's `beforeAll` needs `supabase/intake_demo_seed.sql` on dev, which isn't seeded (pre-existing; blocks the whole walkthrough file). Grant to run it after the seed.
+- [x] **dev** only; **prod untouched**.
+- [x] No migration, no definition-contract change → no reach-reviewer gate. code-reviewer pass before Done.
+
+Status: **In review** — built on `dev`, committed & pushed. `tsc`/`eslint`/`next build` clean. New e2e written; run blocked on the dev intake seed (not this change).
+Owner: (built this session) — frontend-designer surface. Files: [web/app/form/[token]/FamilyForm.tsx](../web/app/form/[token]/FamilyForm.tsx), [web/tests/e2e/helpers/intake.ts](../web/tests/e2e/helpers/intake.ts), [web/tests/e2e/intake-walkthrough.spec.ts](../web/tests/e2e/intake-walkthrough.spec.ts)
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

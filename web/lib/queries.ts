@@ -13,6 +13,7 @@ import type {
   Child,
   DataBundle,
   DistributionMethod,
+  Family,
 } from "./types";
 
 export const OVERDUE_WARNING_DAYS = 10;
@@ -34,12 +35,30 @@ function getDriveSchool(data: DataBundle, driveSchoolId: string | null) {
   return data.driveSchools.find((ds) => ds.id === driveSchoolId) ?? null;
 }
 
-/** Mirrors the `child_card_numbers` view: base identifier like "B1.2". */
+/**
+ * The school-letter prefix used in a household's identifiers — the drive
+ * school's `code`, falling back to "Z" for confidential / direct-referral
+ * households with no school. Kept as one function so the household tag and the
+ * card number can't disagree about it.
+ */
+export function getFamilySchoolCode(data: DataBundle, family: Family): string {
+  return getDriveSchool(data, family.driveSchoolId)?.code ?? "Z";
+}
+
+/**
+ * A household's app-wide tag: school code + family number, e.g. "OL1". The
+ * `family_number` alone repeats across schools (each school counts from 1), so
+ * this is the identifier staff should see. It is also exactly the prefix of
+ * every card number under the household ("OL1.3"), so the two line up.
+ */
+export function getHouseholdTag(data: DataBundle, family: Family): string {
+  return `${getFamilySchoolCode(data, family)}${family.familyNumber}`;
+}
+
+/** Mirrors the `child_card_numbers` view: base identifier like "OL1.2". */
 export function getChildCardNumber(data: DataBundle, child: Child): string {
   const family = getFamily(data, child.familyId);
-  const driveSchool = getDriveSchool(data, family.driveSchoolId);
-  const code = driveSchool?.code ?? "Z";
-  return `${code}${family.familyNumber}.${child.childIndex}`;
+  return `${getHouseholdTag(data, family)}.${child.childIndex}`;
 }
 
 /**
@@ -166,6 +185,8 @@ export interface AdminFamilyRow {
   driveSchoolId: string | null;
   schoolName: string | null;
   familyNumber: number;
+  /** App-wide household tag, e.g. "OL1" — school code + familyNumber. */
+  householdTag: string;
   isConfidential: boolean;
   children: AdminChildRow[];
 }
@@ -182,6 +203,7 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
       driveSchoolId: family.driveSchoolId,
       schoolName: school?.name ?? null,
       familyNumber: family.familyNumber,
+      householdTag: getHouseholdTag(data, family),
       isConfidential: family.isConfidential,
       children: familyChildren.map((child) => {
         const childCards = data.cards.filter((c) => c.childId === child.id);
@@ -435,6 +457,8 @@ export interface DistributionRow {
   schoolName: string | null;
   isConfidential: boolean;
   familyNumber: number;
+  /** App-wide household tag, e.g. "OL1" — school code + familyNumber. */
+  householdTag: string;
   /** Resolved: this family's override, else the school's, else the drive default — what will actually happen. */
   distributionMethod: DistributionMethod | null;
   /** Raw per-family override, or null if this family just inherits — lets the edit UI distinguish "set to X" from "not set." */
@@ -465,6 +489,7 @@ export function getDistributionRows(data: DataBundle): DistributionRow[] {
       schoolName: school?.name ?? null,
       isConfidential: family.isConfidential,
       familyNumber: family.familyNumber,
+      householdTag: getHouseholdTag(data, family),
       distributionMethod,
       distributionMethodOverride: family.distributionMethodOverride,
       scheduledPickupAt: family.scheduledPickupAt,

@@ -193,7 +193,7 @@ test.describe("confidential name redaction", () => {
     // exactly this one control without ambiguity against "Status" or
     // "Search" nearby. See FamiliesExplorer.tsx's filter markup.
     await volunteerPage.getByLabel("School").selectOption("confidential");
-    const volunteerRow = volunteerPage.getByRole("row", { name: new RegExp(`Family ${family.family_number}(?!\\d)`) });
+    const volunteerRow = volunteerPage.getByRole("row", { name: new RegExp(`Household Z${family.family_number}(?!\\d)`) });
     await expect(volunteerRow).toBeVisible();
     await expect(volunteerRow).not.toContainText("Zconfidentialautotest");
     await expect(volunteerRow).toContainText("Z.");
@@ -204,7 +204,7 @@ test.describe("confidential name redaction", () => {
     await loginAsInBrowser(adminPage, "admin");
     await adminPage.goto("/admin/families");
     await adminPage.getByLabel("School").selectOption("confidential");
-    const adminRow = adminPage.getByRole("row", { name: new RegExp(`Family ${family.family_number}(?!\\d)`) });
+    const adminRow = adminPage.getByRole("row", { name: new RegExp(`Household Z${family.family_number}(?!\\d)`) });
     await expect(adminRow).toContainText("Zconfidentialautotest");
     await adminContext.close();
   });
@@ -222,7 +222,7 @@ test.describe("intake form validation", () => {
 
     await page.getByLabel(/referral source/i).selectOption("__direct");
     await page.getByLabel(/first name/i).fill(" ");
-    await page.getByRole("button", { name: /save family/i }).click();
+    await page.getByRole("button", { name: /save household/i }).click();
 
     await expect(page.getByText(/add at least one child with a first name/i)).toBeVisible();
   });

@@ -180,6 +180,8 @@ export interface TestAnswersInput {
   children: TestChildAnswer[];
   canReachChurchPickup?: string;
   consent?: boolean;
+  /** US-30 "everyone lives in my home" gate. Defaults to checked; set false to leave it unchecked. */
+  everyoneLivesHere?: boolean;
 }
 
 /**
@@ -630,6 +632,10 @@ export async function fillAndSubmitFamilyForm(
     input.canReachChurchPickup ?? "Yes"
   );
   if (input.consent !== false) await sel("pickup_consent.consent").check();
+
+  // Hardcoded gate on the form (US-30), not a definition field: the person must
+  // affirm everyone listed lives in their home before it will send.
+  if (input.everyoneLivesHere !== false) await sel("everyone_lives_here").check();
 
   await page.getByRole("button", { name: /submit registration/i }).click();
 }

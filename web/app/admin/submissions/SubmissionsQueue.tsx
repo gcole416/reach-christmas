@@ -147,7 +147,7 @@ export function SubmissionsQueue() {
         <div className="rounded-xl border border-border bg-surface p-6">
           <h2 className="text-lg font-semibold text-ink-primary">No registrations yet</h2>
           <p className="mt-2 text-ink-secondary">
-            Once a family fills in a registration link, it appears here and waits for their school
+            Once a household fills in a registration link, it appears here and waits for their school
             counselor to confirm it.
           </p>
         </div>
