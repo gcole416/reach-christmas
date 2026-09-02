@@ -49,6 +49,35 @@ export interface Family {
   familyNumber: number;
   isConfidential: boolean;
   internalNotes: string | null;
+  // --- intake-form provenance and contact (US-20) -------------------------
+  // All added by supabase/migrations/20260830120000_intake_forms.sql and
+  // populated ONLY by import_submission(). A family a volunteer typed in by
+  // hand has sourceSubmissionId === null and null contact fields — that
+  // difference is exactly what distinguishes the two, so don't assume these
+  // are present.
+  //
+  // Set when this family came in through the intake form: the id of the
+  // form_submissions row it was imported from.
+  sourceSubmissionId: string | null;
+  // The guardian's own words from the form. `families` had no contact info of
+  // its own before this (see OPEN_QUESTIONS DB-19); the church-pickup workflow
+  // needs a phone number.
+  guardianName: string | null;
+  guardianPhone: string | null;
+  guardianEmail: string | null;
+  // 'en' | 'es' in practice; free text in the column because the option list
+  // lives in the form definition, not the schema. Defaults to 'en'.
+  preferredLanguage: string;
+  // Stamped from the form's consent checkbox at import; null for a
+  // hand-entered family, which never collected one.
+  consentGivenAt: string | null;
+  // INTAKE_FORM_DRAFT.md §3.1 — "Yes" | "No" | "Not sure", free text for the
+  // same reason as preferredLanguage.
+  canReachChurchPickup: string | null;
+  // INTAKE_FORMS.md §7 — errors found after the counselor verified are fixed
+  // on the working record and flagged here, not by reopening the submission.
+  needsFollowup: boolean;
+  followupNote: string | null;
   distributionMethodOverride: DistributionMethod | null;
   scheduledPickupAt: string | null;
   checkedInAt: string | null;
@@ -77,6 +106,17 @@ export interface Child {
   shirtSize: string | null;
   shoeSize: string | null;
   otherNotes: string | null;
+  // --- intake-form provenance (US-20) --------------------------------------
+  // Nullable ON PURPOSE (INTAKE_FORMS §5.7): null means a volunteer added this
+  // child by hand, a uuid means they came in through a form submission.
+  sourceSubmissionId: string | null;
+  // The family's own words, preserved next to the English working values
+  // (INTAKE_FORMS §4.2). Identical to specificNeeds/otherNotes in Phase 1,
+  // since Phase 1 is English-only and nothing is translated yet — they exist
+  // so the §10 drive-close purge of submissions can't destroy the record of
+  // what a family actually asked for.
+  specificNeedsSource: string | null;
+  otherNotesSource: string | null;
   // `children.updated_at` — same trigger, same row-version role, and the same
   // "opaque string, pass it back untouched" rule as Family.updatedAt above.
   updatedAt: string;
@@ -99,7 +139,14 @@ export interface WishlistItem {
   id: string;
   childId: string;
   position: number;
+  // Always the English working value — what sponsors see on the public card
+  // and what purchasers buy from (INTAKE_FORMS §4.2 rule 3).
   description: string;
+  // The family's original wording, when this item came from a form import.
+  // Same as `description` in Phase 1 (English only). Null for a hand-entered
+  // wishlist item.
+  descriptionSource: string | null;
+  sourceLocale: string | null;
 }
 
 export interface Sponsor {
@@ -179,4 +226,300 @@ export interface DataBundle {
   // Own row only for a non-admin, every profile for an admin — see the
   // `Profile` doc comment above. Powers the admin volunteer-management page.
   profiles: Profile[];
+}
+
+// =============================================================================
+// Counselor-vetted intake forms (US-20)
+//
+// Mirrors supabase/migrations/20260830120000_intake_forms.sql. The functions
+// that produce and consume these live in lib/intake.ts — import from there,
+// not from a raw supabase call, so nothing outside that file has to know an
+// RPC name or argument order.
+// =============================================================================
+
+export type SubmissionStatus =
+  | "draft"
+  | "submitted"
+  | "under_review"
+  | "verified"
+  | "imported"
+  | "rejected"
+  | "duplicate";
+
+export type SubmissionChannel = "family" | "counselor" | "staff";
+
+/** One choice in a `select` field. `value` is what gets stored. */
+export interface IntakeFormOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * One question. `type` drives both the control the form renders AND the
+ * server-side validation in `submit_form` — the two are the same definition,
+ * which is the point: the server does not trust the client, and the client
+ * does not hard-code the questionnaire.
+ *
+ *  text | phone | email | textarea — plain string answers
+ *  number                          — integer, bounded by min/max
+ *  select                          — value must be one of `options`
+ *  checkbox                        — boolean; `required` means "must be true"
+ *  text_list                       — string[]; the wishlist
+ */
+export interface IntakeFormField {
+  id: string;
+  label: string;
+  help?: string;
+  type: "text" | "phone" | "email" | "textarea" | "number" | "select" | "checkbox" | "text_list";
+  required?: boolean;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  options?: IntakeFormOption[];
+  /**
+   * "Other (describe)" escape hatch. When the chosen value equals
+   * `otherValue` (default "Other"), the answer object must also carry a
+   * non-empty `otherField` key — the server enforces this, so render the
+   * extra text input whenever that option is selected.
+   */
+  otherField?: string;
+  otherValue?: string;
+  /** text_list only. */
+  minItems?: number;
+  maxItems?: number;
+  firstRequired?: boolean;
+  itemLabels?: string[];
+}
+
+export interface IntakeFormSection {
+  id: string;
+  title: string;
+  help?: string;
+  /** True for the child block: render N copies with add/remove. */
+  repeating?: boolean;
+  minItems?: number;
+  maxItems?: number;
+  itemLabel?: string;
+  addLabel?: string;
+  removeLabel?: string;
+  fields: IntakeFormField[];
+}
+
+export interface IntakeFormDefinition {
+  schemaVersion: number;
+  locale: string;
+  title: string;
+  intro: string;
+  helpFooter?: string;
+  privacyNote?: string;
+  submitLabel?: string;
+  confirmation?: { heading: string; body: string };
+  /**
+   * The per-child gift budget, as a display string ("$50"). Substitute it for
+   * the literal `{budget}` token wherever it appears in a field's `help`.
+   * PLACEHOLDER pending Grant's confirmation — one string, one place, so
+   * changing it is a one-line edit to the form definition.
+   */
+  budgetPerChild?: string;
+  /**
+   * Name of the hidden honeypot input to render. Whatever the visitor types
+   * into it goes back as `honeypot` on submitForm; a real person never sees
+   * or fills it, and a bot that does gets an ordinary-looking success with no
+   * row written.
+   */
+  honeypotField?: string;
+  sections: IntakeFormSection[];
+}
+
+/** One child's answers. Keys are field ids from the repeating section. */
+export interface IntakeChildAnswer {
+  first_name?: string;
+  age?: number | string;
+  grade?: string;
+  sex?: string;
+  shirt_size?: string;
+  shirt_size_other?: string;
+  pant_size?: string;
+  pant_size_other?: string;
+  shoe_size?: string;
+  shoe_size_other?: string;
+  wishlist?: string[];
+  specific_needs?: string;
+  other_notes?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The whole submitted payload. Deliberately snake_cased: this object is stored
+ * BYTE-FOR-BYTE in `form_submissions.answers` as the provenance record of what
+ * the family typed, and `import_submission` reads these exact keys, so it is
+ * not a camelCase app type and must not be renamed at the boundary.
+ */
+export interface IntakeAnswers {
+  family?: {
+    guardian_name?: string;
+    guardian_phone?: string;
+    guardian_email?: string;
+    preferred_language?: string;
+    [key: string]: unknown;
+  };
+  children?: IntakeChildAnswer[];
+  pickup_consent?: {
+    can_reach_church_pickup?: string;
+    consent?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** A server-side validation failure, addressed to one field. */
+export interface IntakeFieldError {
+  /** e.g. "family.guardian_phone", "children[0].age", "children[1].wishlist[0]". */
+  field: string;
+  message: string;
+}
+
+/**
+ * A counselor's typo fix for one child. These three fields are the ENTIRE
+ * scope of what a counselor may change (INTAKE_FORMS §3) — the database
+ * rejects any other key with an error rather than dropping it silently, so
+ * don't try to send one.
+ */
+export interface ChildCorrection {
+  firstName?: string;
+  age?: number;
+  grade?: string;
+}
+
+/**
+ * Corrections keyed by 1-BASED child position — the same numbering as
+ * `children.child_index`, so child 1 in the roster is key 1 here.
+ */
+export type SubmissionCorrections = Record<number, ChildCorrection>;
+
+/** One child as the counselor's roster sees them. Nothing else is returned. */
+export interface RosterChild {
+  index: number;
+  firstName: string | null;
+  age: number | null;
+  grade: string | null;
+}
+
+/**
+ * One correctable field's rule, exactly as the pinned form version states it.
+ *
+ * This is a projection of `IntakeFormField` — the same properties, off the same
+ * `form_versions.definition` — narrowed to what a counselor's inline edit
+ * control needs and with every optional property made explicitly nullable, so
+ * "the definition doesn't set a maximum" is a value rather than an absence.
+ *
+ * Build the control FROM this. Do not restate any of it in the page: a rule
+ * typed into JSX is a rule that drifts from what `verifySubmission` enforces,
+ * and when it drifts loose the counselor loses their whole approve click to a
+ * server-side rejection.
+ *
+ *   type "select" + non-empty `options` -> a picker over `options`
+ *   type "number"                       -> a number input bounded by min/max
+ *   anything else                       -> a text input capped at `maxLength`
+ *
+ * `options` is always an array (empty, never null); `maxLength`/`min`/`max` are
+ * null when the definition sets no such bound.
+ */
+export interface CorrectionFieldDef {
+  id: string;
+  label: string;
+  type: IntakeFormField["type"];
+  required: boolean;
+  maxLength: number | null;
+  min: number | null;
+  max: number | null;
+  options: IntakeFormOption[];
+}
+
+/**
+ * The rules behind the three fields a counselor may correct (INTAKE_FORMS §3),
+ * keyed to match `ChildCorrection` — so the control that edits
+ * `corrections[n].grade` reads its rule from `correctionFields.grade`.
+ *
+ * All three keys are ALWAYS present. A `null` value means no form version on
+ * this roster defines that field: render the control READ-ONLY. Do not fall
+ * back to a free-text box — an unconstrained box is worse than no box, because
+ * the server has no rule to accept whatever gets typed into it.
+ */
+export interface CorrectionFields {
+  firstName: CorrectionFieldDef | null;
+  age: CorrectionFieldDef | null;
+  grade: CorrectionFieldDef | null;
+}
+
+/**
+ * One submission on the counselor roster. Note what is NOT here, and is not in
+ * the network response either: wishlist, sizes, specific needs, other notes,
+ * and the guardian's name/phone/email. The counselor is confirming family
+ * composition, not reviewing gift requests.
+ */
+export interface RosterSubmission {
+  id: string;
+  status: SubmissionStatus;
+  submittedAt: string | null;
+  verifiedAt: string | null;
+  verifiedByLabel: string | null;
+  resolutionNote: string | null;
+  hasCorrections: boolean;
+  children: RosterChild[];
+}
+
+/**
+ * A submission as STAFF see it (the admin queue). This one does carry the full
+ * answers — that surface is behind AdminGate and RLS, and staff need the
+ * wishlist and sizes to sanity-check an import.
+ *
+ * `answers` is what the family submitted, unmodified. `corrections` is what
+ * the counselor changed. They are kept separate on purpose so the UI can show
+ * a correction AS a correction (US-23) instead of silently merging it.
+ */
+export interface SubmissionRecord {
+  id: string;
+  driveId: string;
+  driveSchoolId: string | null;
+  channel: SubmissionChannel;
+  status: SubmissionStatus;
+  sourceLocale: string;
+  submitterName: string | null;
+  submitterPhone: string | null;
+  submitterEmail: string | null;
+  submittedAt: string | null;
+  firstViewedAt: string | null;
+  verifiedAt: string | null;
+  verifiedByLabel: string | null;
+  importedAt: string | null;
+  importedFamilyId: string | null;
+  resolutionNote: string | null;
+  answers: IntakeAnswers;
+  corrections: SubmissionCorrections;
+  /** Derived from answers.children — convenience for the list view. */
+  childCount: number;
+}
+
+/**
+ * A shareable form link, as the staff link panel shows it. `token` is
+ * plaintext by design (INTAKE_FORMS §2) — it only permits WRITING a
+ * submission and exposes no PII.
+ *
+ * There is no equivalent type for review tokens: those are stored hashed and
+ * the plaintext is unrecoverable from the database, on purpose.
+ */
+export interface FormLinkRecord {
+  id: string;
+  driveId: string;
+  driveSchoolId: string | null;
+  token: string;
+  label: string | null;
+  locale: string;
+  channel: SubmissionChannel;
+  opensAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  maxSubmissions: number | null;
+  submissionCount: number;
 }

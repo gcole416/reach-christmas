@@ -24,7 +24,7 @@ Organized by the GitLab `area::` label scheme.
 |---|---|---|
 | Sponsor-facing | 7 | [↓](#sponsor-facing) |
 | Database & data integrity | 26 | [↓](#database--data-integrity) |
-| Admin / staff UI | 17 | [↓](#admin--staff-ui) |
+| Admin / staff UI | 19 | [↓](#admin--staff-ui) |
 | Docs, deploy & ops | 12 | [↓](#docs-deploy--ops) |
 | Testing | 6 | [↓](#testing) |
 
@@ -470,7 +470,55 @@ half of the same topic.
 
 - Code: [supabase/migrations/20260708140000_confidential_referral_access.sql](../supabase/migrations/20260708140000_confidential_referral_access.sql)
 
-### DB-27 — `anon` can still call the old `claim_card()` RPC on dev, even after the revoke and a schema-cache reload · **Blocking**
+### ~~DB-27 — `anon` can still call the old `claim_card()` RPC on dev, even after the revoke and a schema-cache reload~~ · **Root-caused 2026-09-01, fix written**
+
+**Answer: the revoke never named `public`.** `20260818160000_email_verified_claims.sql:394` says
+`revoke execute on function public.claim_card(...) from anon, authenticated;`
+— but Postgres grants `EXECUTE` to **`PUBLIC`** by default on every new
+function, and `anon` inherits it. The revoke removed a grant that was never the
+one holding the door open, which is exactly why re-running it and reloading the
+schema cache changed nothing.
+
+Found by qa-tester during the US-24 live run, and **reproduced rather than
+theorized**: an anonymous `claim_card` call gets *past permissions* to a foreign
+-key error (`assignments_card_id_fkey`), which only happens if the body executed.
+The tell was an asymmetry inside this repo — the US-20 intake migration revokes
+`from public` on all six of its functions, and this one doesn't.
+
+Both theories logged here previously were wrong: it is not a stale PostgREST
+cache (correctly ruled out at the time) and not a role-membership subtlety. It is
+the same Supabase platform-default-privilege mechanism as **DB-2**, which is now
+the second time this project has been bitten by it.
+
+**Fix written 2026-09-01, not yet applied — Grant pastes it.**
+[supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](../supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql)
+issues `revoke execute on function public.claim_card(uuid, text, text, text)
+from public, anon, authenticated;` — naming **both** grant sources, which is the
+actual generalizable lesson: a new function here gets EXECUTE from Postgres'
+built-in `PUBLIC` grant *and* from Supabase's per-role default privileges, and
+revoking either one alone leaves the other standing. That file's BACKGROUND
+block explains the mechanism and how to read `pg_proc.proacl` to spot it.
+
+**Audit result (every `revoke execute` in the repo, checked 2026-09-01):
+`claim_card` was the only no-op.** `20260812090000_restrict_confidential_helper_grants.sql`
+(US-16) is genuinely in force — it names `from public, anon` on all four
+confidential helpers, so anon cannot reach them; only its *header's* explanation
+of `public` is misleading, not its SQL. All thirteen functions in
+`20260830120000_intake_forms.sql` name `public` correctly too. One adjacent gap
+was found and closed in the same migration: `create_family()` was never revoked
+from anything, so `anon` held EXECUTE on it — reachable, but not exploitable
+(it is `security invoker`, so an anon caller fails on `families`' own RLS
+without reading or writing anything). `is_admin()`/`can_view_confidential()` are
+likewise anon-reachable but return `false` for anon and disclose nothing;
+flagged as separate hygiene, deliberately not bundled into a pre-demo hotfix.
+
+Severity while it stood: a sponsor could claim any card without ever receiving or
+entering a verification code — SPN-3's entire purpose defeated, on dev, live.
+
+- Code: [supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](../supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql) (the fix), [supabase/migrations/20260818160000_email_verified_claims.sql:394](../supabase/migrations/20260818160000_email_verified_claims.sql) (the bug), [web/tests/e2e/security.spec.ts:161](../web/tests/e2e/security.spec.ts) (the test was correct all along and was catching a real bug)
+- Raised by: Grant, live on dev 2026-08-19. Root-caused by: qa-tester, 2026-09-01. Fixed by: database-engineer, 2026-09-01.
+
+### DB-27 (original writeup, kept for the record)
 
 `20260818160000_email_verified_claims.sql` (SPN-3) revokes `claim_card`'s
 `anon`/`authenticated` execute grant specifically so the unverified one-step
@@ -499,6 +547,33 @@ condition not yet understood.
 
 - Code: [supabase/migrations/20260818160000_email_verified_claims.sql:394](../supabase/migrations/20260818160000_email_verified_claims.sql)
 - Raised by: Grant, live on dev 2026-08-19
+
+### DB-28 — "Confidential-cleared" and "admin" are currently the same set of people. Should they be? · Soon
+
+[INTAKE_FORMS.md §8](INTAKE_FORMS.md#8-confidential-channel) says confidential
+cases should be visible to **two named staff, not all admins**, and that the
+filter must be `can_view_confidential = true`, "never `role = 'admin'`". But the
+`can_view_confidential()` helper every policy in this app calls is defined as
+`role = 'admin' or can_view_confidential` ([init.sql:249](../supabase/migrations/20260708120000_init.sql#L249)) —
+so today **every admin is automatically confidential-cleared**, and the separate
+boolean only ever *adds* a volunteer. §8's intent and the code disagree.
+
+This is not new with the intake feature — it is how confidential `families` have
+always behaved. US-20 deliberately reused the existing helper rather than
+inventing a second, stricter one, because two competing definitions of
+"confidential" in one database is worse than one loose definition. But that
+means intake submissions inherit the same gap.
+
+The question is whether "admin" should keep implying confidential clearance.
+Tightening it is a one-line change to the shared helper that would immediately
+narrow access to confidential families, children, cards, wishlist items, *and*
+intake submissions for every admin who doesn't also have the boolean set — so
+it needs a deliberate answer and a check of who currently holds each flag, not a
+drive-by fix. Related to DB-22 (should granting clearance be logged) and DB-26
+(should creating a confidential family stay open to everyone).
+
+- Code: [supabase/migrations/20260708120000_init.sql:249](../supabase/migrations/20260708120000_init.sql#L249), [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql), [docs/INTAKE_FORMS.md §8](INTAKE_FORMS.md#8-confidential-channel)
+- Raised by: database-engineer during US-20, 2026-08-30
 
 ---
 
@@ -713,6 +788,185 @@ poor sponsor experience and probably a data-entry miss rather than a real
 "nothing needed."
 
 - Code: [web/app/admin/intake/page.tsx](../web/app/admin/intake/page.tsx), [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx)
+
+### ~~ADM-18 — How should counselor referral data reach this app?~~ · Decided, build pending
+
+Today it's Google Form → hand-consolidated spreadsheet → re-keyed into the
+app's own intake form by staff. Raised again by
+[Notes_8.10.txt](Notes_8.10.txt): counselors won't give last names and the
+data that does come back is inconsistent, and the meeting wants to fix "what
+we ask for" and "how it gets here." Three paths were scoped in
+[COUNSELOR_INTAKE_OPTIONS.md](COUNSELOR_INTAKE_OPTIONS.md).
+
+**Decided (2026-08-30): Option B, as fully designed in
+[INTAKE_FORMS.md](INTAKE_FORMS.md) and [INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md)**
+— self-hosted family form, school-scoped links, counselor review roster. This
+does reverse AGENTS.md's "not an app user in Phase 1" line for counselors, on
+purpose. Three follow-on calls made at the same time, driven by a mindset
+shift: **counselors are now high-trust vetters, not a checks-and-balances
+step** —
+
+1. **Import stays staff-gated, but as a rubber stamp.** A verified submission
+   still needs one staff click to become real `families`/`children` rows —
+   that's the one point a human sees every family before it's live, and where
+   confidential tier gets set — but no data-fixing or duplicate-resolving is
+   expected there anymore.
+2. **Counselors may correct name/age/grade typos only, nothing else.** Not a
+   general edit — they don't see and don't approve/reject wishlist, sizes,
+   needs, or notes at all (this matches INTAKE_FORMS.md §3's roster view,
+   unchanged). They're confirming family composition, not vetting gift
+   requests. `verify_submission()` needs an optional correction payload
+   scoped to exactly those three fields; the submission's `answers` blob
+   stays otherwise immutable.
+3. **Access stays the token-link model** — no counselor accounts, no
+   passwords, no new `app_role`. The season-long review token is enough.
+
+**Timeline:** phased. A minimal English-only, single-school, manual-review
+walkthrough is the target for the 9/9 demo (Notes item 5); Spanish
+translation, email deliverability, and digest notifications follow, targeting
+the 10/1 counselor launch.
+
+See ADM-19 for one thing this surfaced that isn't decided yet.
+
+- Code: [docs/COUNSELOR_INTAKE_OPTIONS.md](COUNSELOR_INTAKE_OPTIONS.md), [docs/INTAKE_FORMS.md](INTAKE_FORMS.md), [docs/INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md), [AGENTS.md](../AGENTS.md)
+- Raised by: Grant, 2026-08-26 team meeting prep. Decided: Grant, 2026-08-30.
+
+### ADM-23 — Two remaining fields still silently truncate what a user types · Whenever
+
+The intake work (US-21/US-22) established a rule worth applying app-wide:
+**enforcing a length limit with the HTML `maxLength` attribute silently edits
+what someone typed**, with no message. That's the wrong failure mode anywhere the
+value is a person's own words — it was found on the child's first name, where a
+pasted 95-character name would have been quietly chopped and then printed on a
+card that way, with nobody told. Every instance on the family form and the
+counselor roster was replaced with visible inline validation.
+
+Two instances elsewhere were deliberately left alone, and the reasoning is worth
+recording because it's the argument for *when the attribute is still right*:
+- `web/app/admin/schools/page.tsx` — the 3-character school card code
+- `web/app/sponsor/SponsorBrowser.tsx` — the 6-digit claim verification code
+
+Both are **fixed-format tokens rather than free text**, entered by staff or a
+sponsor about themselves, where a hard browser cap is arguably the better
+affordance and a truncation can't corrupt a child's record. Not urgent; worth one
+look if either field ever accepts something more free-form.
+
+- Code: [web/app/admin/schools/page.tsx](../web/app/admin/schools/page.tsx), [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx)
+- Raised by: frontend-designer during US-21/US-22, 2026-08-31
+
+### ADM-21 — Can a counselor recognize a family from its children's first names alone? · Soon (needed for the 10/1 launch, not for the 9/9 demo)
+
+The counselor roster identifies each submission by its children's first names,
+age, and grade — no guardian name, by design ([INTAKE_FORMS §3](INTAKE_FORMS.md#3-verification--what-the-counselor-is-actually-doing)).
+Asked during US-22: is that actually enough for a counselor scanning a list in
+November to think "yes, that's the family I referred"?
+
+Deliberately **not** answered by adding guardian name to the payload. That
+would widen what a forwarded or leaked review link exposes from "a season of
+children's first names" to "children's names plus who their parent is," and the
+review token is a no-login URL that lives for most of a season and gets emailed
+through district mail filters. If the answer is that counselors genuinely can't
+work without it, the honest fix is probably a shorter-lived or re-issuable
+token, not a quiet widening of the payload.
+
+This belongs in the counselor conversation §12 already says has to happen before
+launch (the "is a who-has-responded roster enough" question) — same meeting, same
+person, one more question.
+
+- Code: [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql) (`get_review_roster`), [docs/backlog.md](backlog.md) US-22
+- Raised by: database-engineer during US-22, escalated rather than assumed, 2026-08-31
+
+### ADM-22 — Staff submission detail hard-codes labels and ordering that belong to the form definition · Whenever (bites when questionnaire v2 or Spanish lands)
+
+`web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx` restates rules
+that live in `form_versions.definition`: a field-id→label map, the set of child
+fields it knows how to render, and section ordering. It has to, because neither
+`listSubmissions` nor `getSubmission` selects `form_version_id`, so the page
+can't reach the definition its own submission pinned — even though staff can
+read `form_versions` fine (`staff read using (true)`).
+
+This is the fourth instance of one class of bug found during this feature: *a
+rule that lives in the pinned definition, restated in code that can't see it.*
+The other three were closed in US-20/US-22 (counselor grade picker, age bounds,
+and the `first_name` length cap that was silently throwing away a counselor's
+approve click).
+
+**Deferred deliberately, not overlooked.** It's the mildest of the four and the
+only one that degrades gracefully — an unknown field gets a humanized label and
+lands in an `extras` block rather than being lost. Phase 1 ships exactly one
+form version, so it is unreachable today. It becomes real the moment §5.2's
+immutability forces a **v2** of the questionnaire (new field = no label, no
+ordering), and worse when Spanish (§4) lands, because at that point the correct
+staff-facing label is a *localized* string only the definition has.
+
+Fix is small, additive, and needs no SQL or policy change: add `form_version_id`
+to the two select lists in `web/lib/intake.ts`, add a
+`getFormVersionDefinition()` wrapper over the existing `normalizeDefinition`,
+and have the page render section-by-section from the definition.
+
+**Second surviving instance (2026-09-01), same class, one layer down:**
+`buildCorrections()` in `web/app/review/[token]/RosterCard.tsx` validates age as a
+number unconditionally. The control that *renders* age now dispatches on
+`def.type`, but the code that *validates* it doesn't — so if a future form version
+ever typed `age` as text, the client would refuse values the server would happily
+accept, and the counselor would lose an approve click to a rule nothing on the
+server actually enforces. That is the same "lost click" failure the `first_name`
+80-vs-120 bug caused, which is the one that made this whole class visible.
+
+Deliberately left alone eight days from the demo, and genuinely unreachable in
+Phase 1 (one definition, `age` is a number, published versions are immutable).
+Both instances should be closed together whenever this is picked up — the fix is
+the same idea in both places: **derive from the definition, don't restate it.**
+
+**Running count for this class: five found, three closed.** Closed — the
+counselor grade picker, the age min/max bounds, and the `first_name` length cap
+(that one was live and losing counselors' approve clicks). Open — this entry's
+two.
+
+- Code: [web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx](../web/app/admin/submissions/%5BsubmissionId%5D/SubmissionDetail.tsx), [web/lib/intake.ts](../web/lib/intake.ts)
+- Raised by: database-engineer, 2026-08-31
+
+### ADM-20 — A volunteer can read a counselor-direct link token, and those links skip review entirely · **Blocking** (for Phase 2 / the 10/1 counselor launch)
+
+`counselor` and `staff` channel links auto-verify at submit ([INTAKE_FORMS §2](INTAKE_FORMS.md#2-the-link-model))
+— that's the required backup path for a counselor entering a family over the
+phone. But `form_links.token` is **plaintext by design** (staff have to re-copy
+it) and `form_links` is readable by every authenticated user. So any volunteer
+can read a counselor-direct token and post submissions that land straight in the
+staff import queue as `verified`, with no counselor ever seeing them. That
+contradicts §11's "nothing reaches the real tables without human verification,"
+which has now been corrected in place.
+
+**Inert in Phase 1** — the demo seed creates only a `family`-channel link, and
+the migration carries a warning telling whoever sets up a walkthrough not to
+create a counselor-direct one. It stops being inert the moment the first real
+counselor-direct link is issued, which is a 10/1 launch requirement.
+
+Options, roughly in order of cost: gate `form_links` SELECT so non-`family`
+channel tokens need `can_view_confidential()` or admin; store counselor/staff
+tokens hashed like `review_tokens` and accept that they're shown once; or drop
+auto-verification and make a counselor's own submissions appear on their own
+roster for a self-confirm click. The third is the only one that removes the
+trust assumption rather than narrowing who holds it.
+
+- Code: [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql), [docs/INTAKE_FORMS.md §2, §11](INTAKE_FORMS.md#2-the-link-model)
+- Raised by: reach-reviewer (L3) during the US-20 audit, 2026-08-30
+
+### ADM-19 — Do high-school-age kids get collected in a family's form submission? · Soon
+
+Meeting notes (item 3, 8/26): roughly 200 elementary + middle school kids get
+tracked and bought for each year; high schoolers do their own shopping and
+"will be included in the family view, but will be split off and do not need
+tracking in this system like all the other gifts." `INTAKE_FORM_DRAFT.md`
+§2.3's grade select currently runs `1st–12th`, uncut. Needs a decision before
+the form ships: does a family with a mixed elementary/HS household list every
+child (with HS kids flagged somehow and excluded from card/wishlist
+generation), or does the form only ask about elementary/middle kids and the
+family's HS kids stay out of the system entirely, same as the recent
+elementary-only demo-seed-data decision?
+
+- Code: [docs/INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md#section-2--each-child--cada-nio)
+- Raised by: Claude, reading Notes_8.10.txt item 3 during ADM-18 planning, 2026-08-30
 
 ---
 

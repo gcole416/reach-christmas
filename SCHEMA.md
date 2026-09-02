@@ -7,6 +7,25 @@ this is built from.*
 
 Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--recommendation)).
 
+> ## ⚠️ This file is incomplete as of 2026-09-01 — six tables are missing
+>
+> The counselor-vetted intake feature added **six tables** (`forms`,
+> `form_versions`, `form_links`, `form_submissions`, `review_tokens`,
+> `submission_events`), two enums (`submission_status`, `submission_channel`),
+> ten functions, and ~14 columns on `families`/`children`/`wishlist_items` — and
+> **all of it is applied to the dev database**. None of it is documented below yet.
+>
+> Until that merge lands (**US-25** in [docs/backlog.md](docs/backlog.md)), the
+> authoritative reference for that half of the schema is
+> **[docs/INTAKE_FORMS.md](docs/INTAKE_FORMS.md) §5 (tables), §6 (functions), §9 (RLS)**.
+> Read both files before designing anything that touches families, children,
+> wishlist items, or intake — this file alone will tell you columns and tables
+> don't exist when they do.
+>
+> The live SQL is always
+> [supabase/migrations/20260830120000_intake_forms.sql](supabase/migrations/20260830120000_intake_forms.sql)
+> and [20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql).
+
 ## Conventions
 
 - Every table has a `uuid` primary key (`gen_random_uuid()`), matching Supabase norms.
@@ -613,12 +632,38 @@ and returns `{"ok": true, "sponsor_id": <the new sponsor's id>}`.
 
 **`claim_card` itself is no longer callable by `anon`/`authenticated`** —
 `revoke execute on function public.claim_card(uuid, text, text, text) from
-anon, authenticated;` in the same migration. Leaving that grant in place
-would let anyone skip verification entirely by calling the old one-shot
-function directly, defeating the point of this feature. The function is left
-defined (harmless, unreachable) rather than dropped, since
-`20260708120000_init.sql` is an already-applied migration this project never
-edits in place.
+public, anon, authenticated;`. Leaving that grant in place would let anyone
+skip verification entirely by calling the old one-shot function directly,
+defeating the point of this feature. The function is left defined (harmless,
+unreachable) rather than dropped, since `20260708120000_init.sql` is an
+already-applied migration this project never edits in place.
+
+**That revoke did not actually work until
+[supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql).**
+`20260818160000`'s version named only `anon, authenticated` and omitted
+`public` — and a new function on this database picks up EXECUTE from **two**
+independent places: Postgres' built-in grant to the `PUBLIC` pseudo-role, and
+Supabase's platform default privileges granting `anon`/`authenticated`
+directly. Revoking one leaves the other, so `anon` kept EXECUTE and could claim
+any card with no verification code at all — SPN-3's whole purpose, defeated,
+live on dev from 2026-08-18 to 2026-09-01. This is
+[OPEN_QUESTIONS.md DB-27](docs/OPEN_QUESTIONS.md), and the same platform-default
+mechanism as [DB-2](docs/OPEN_QUESTIONS.md). **Every lockdown revoke in this
+repo must name `public` *and* the specific roles**; see that migration's
+BACKGROUND block for how to read `pg_proc.proacl` and tell the two grants apart.
+The same file also closes a never-revoked (rather than wrongly-revoked)
+`anon` EXECUTE grant on `create_family()`, which was reachable but not
+exploitable — it is `security invoker`, so an anon caller failed on `families`'
+own RLS.
+
+That migration is **safe to paste into either project**. Its second half tightens
+a constraint on `review_tokens`, a table that only exists once the (dev-only)
+`20260830120000_intake_forms.sql` has been applied, so that half is wrapped in a
+`to_regclass('public.review_tokens') is null` guard and skips itself with a
+notice on a database that lacks the intake tables. The DB-27 revoke above still
+commits there — which matters, because the SQL editor runs a pasted script as one
+transaction, and an unguarded error in the second half would silently roll the
+security fix back with it.
 
 ## 11. `audit_log` — who changed what
 

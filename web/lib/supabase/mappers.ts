@@ -68,6 +68,17 @@ export function mapFamily(row: any): Family {
     checkedInAt: row.checked_in_at,
     checkedInBy: row.checked_in_by,
     createdBy: row.created_by,
+    // Intake-form provenance/contact (20260830120000_intake_forms.sql).
+    // Populated only by import_submission(); null on a hand-entered family.
+    sourceSubmissionId: row.source_submission_id ?? null,
+    guardianName: row.guardian_name ?? null,
+    guardianPhone: row.guardian_phone ?? null,
+    guardianEmail: row.guardian_email ?? null,
+    preferredLanguage: row.preferred_language ?? "en",
+    consentGivenAt: row.consent_given_at ?? null,
+    canReachChurchPickup: row.can_reach_church_pickup ?? null,
+    needsFollowup: row.needs_followup ?? false,
+    followupNote: row.followup_note ?? null,
     // Copied through verbatim on purpose — this is the row version used by
     // saveFamilyEdit's concurrency guard, and any reformatting here (e.g.
     // `new Date(...).toISOString()`, which drops microseconds) would break
@@ -90,13 +101,27 @@ export function mapChild(row: any): Child {
     shirtSize: row.shirt_size,
     shoeSize: row.shoe_size,
     otherNotes: row.other_notes,
+    // Null means "a volunteer typed this child in by hand"; a uuid means the
+    // child arrived through an intake-form submission (INTAKE_FORMS §5.7).
+    sourceSubmissionId: row.source_submission_id ?? null,
+    specificNeedsSource: row.specific_needs_source ?? null,
+    otherNotesSource: row.other_notes_source ?? null,
     // Verbatim, same reasoning as mapFamily's updatedAt above.
     updatedAt: row.updated_at,
   };
 }
 
 export function mapWishlistItem(row: any): WishlistItem {
-  return { id: row.id, childId: row.child_id, position: row.position, description: row.description };
+  return {
+    id: row.id,
+    childId: row.child_id,
+    position: row.position,
+    description: row.description,
+    // The family's own words, kept beside the English working value
+    // (INTAKE_FORMS §4.2). Identical to `description` in Phase 1.
+    descriptionSource: row.description_source ?? null,
+    sourceLocale: row.source_locale ?? null,
+  };
 }
 
 export function mapProfile(row: any): Profile {

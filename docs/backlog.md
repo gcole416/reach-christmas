@@ -504,6 +504,249 @@ Owner: built this session (schema, data layer, and UI) — see [supabase/migrati
 
 ---
 
+# Epic: Counselor-vetted intake forms — Phase 1 (US-20 … US-24)
+
+Decided in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) **ADM-18** (2026-08-30);
+designed in [INTAKE_FORMS.md](INTAKE_FORMS.md) (system) and
+[INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md) (the questionnaire itself).
+
+**Phase 1 = the 2026-09-09 walkthrough demo.** English only, one school, one
+hand-authored form definition, a manually-seeded link and review token. The
+whole point is that the lifecycle is *clickable end to end*:
+
+```
+staff has a form link → family submits (no login) → counselor opens their
+roster link (no login), fixes a name typo, approves → staff clicks Import →
+the family + children appear in the normal admin family list
+```
+
+**Explicitly Phase 2 (target 2026-10-01), not in these stories:** Spanish
+translation and the translation round-trip ([INTAKE_FORMS.md §4](INTAKE_FORMS.md#4-spanish--the-translation-round-trip)),
+digest/notification email and deliverability testing ([§11](INTAKE_FORMS.md#11-operational-risks)),
+duplicate hints in the import queue, the `needs_followup` report, and any
+polished staff UI for creating/copying/revoking links.
+
+**Not blocking Phase 1:** **ADM-19** (whether high-school-age kids are
+collected at all) — use elementary/middle test data in the demo and leave the
+grade list as-is. The per-child budget figure in INTAKE_FORM_DRAFT.md §2.8 help
+text is a **placeholder ($50) pending Grant's confirmation**, flagged in the
+form definition, not a blocker.
+
+---
+
+## US-20: Intake form data model, RLS, and server functions
+
+As the team, we want the intake-form tables, policies, and server functions in
+place, so that a family, a counselor, and staff can each do exactly their own
+step through a `security definer` function and nothing more.
+
+Schema is [INTAKE_FORMS.md §5](INTAKE_FORMS.md#5-schema-additions), functions
+are [§6](INTAKE_FORMS.md#6-server-functions), RLS is
+[§9](INTAKE_FORMS.md#9-row-level-security). Everything anonymous or
+token-bearing goes through functions — **no new table is reachable by `anon`**.
+
+Acceptance criteria:
+- [x] One additive migration creates the two enums (`submission_status`, `submission_channel`) and the six tables (`forms`, `form_versions`, `form_links`, `form_submissions`, `review_tokens`, `submission_events`) per §5.1–§5.6, with the indexes listed there.
+- [x] The `families` / `children` / `wishlist_items` column additions from §5.7 are applied, including `source_submission_id` on both `families` and `children` (nullable on `children` on purpose — it's what distinguishes a form kid from a hand-entered one), the guardian contact columns, `preferred_language`, `consent_given_at`, `needs_followup`/`followup_note`, and the `*_source` columns.
+- [x] `families.can_reach_church_pickup text` is added too (INTAKE_FORM_DRAFT.md §3.1 — the one field the draft flags as "not yet proposed anywhere"; cheap now, impossible to backfill in December).
+- [x] A trigger rejects `update` of `form_versions.definition` once `published_at` is set (§5.2 — schema alone can't express it).
+- [x] **`answers` stays byte-for-byte what the family submitted.** Counselor typo-fixes land in a separate `form_submissions.corrections jsonb` column and are overlaid at import — this is a deliberate reconciliation of §5.4 ("never modified") with §3's scoped-correction decision, and it keeps the provenance record honest. Documented in the migration header.
+- [x] RLS is enabled on all six new tables, with policies per §9: volunteers read non-confidential submissions in their drive; admins read/write; `anon` has **no** policy and no table grant on any of them (`revoke all ... from anon, authenticated` where the platform default would otherwise grant it — see **DB-2**).
+- [x] **Confidential-channel submissions (`drive_school_id is null`) are gated with the existing `can_view_confidential()` helper, never a hand-written `role = 'admin'` check** ([§8](INTAKE_FORMS.md#8-confidential-channel)). Volunteers without clearance get zero rows, not an error.
+- [x] `review_tokens.token_hash` is a hash, never a plaintext token, hashed with **schema-qualified** pgcrypto (`extensions.crypt`/`extensions.digest`) — the exact bug fixed in [20260818170000_fix_pgcrypto_schema_qualification.sql](../supabase/migrations/20260818170000_fix_pgcrypto_schema_qualification.sql). No function ever returns a token or a hash.
+- [x] `get_form(token)` returns the pinned version's definition plus the school's display name and nothing else — no counselor contact, no drive internals, no prior submissions, no family or child data of any kind. Returns a clean "this link isn't active" error for revoked / expired / not-yet-open / over-`max_submissions` links.
+- [x] `submit_form(token, answers, contact)` validates **server-side against the pinned `form_versions.definition`** (required fields, at least one child, age 0–19, grade in the allowed list, 1–3 wishlist items with the first required) — client validation is a convenience, not the control. It increments `submission_count`, writes a `submitted` row in `submission_events`, and auto-verifies `counselor`/`staff` channel links.
+- [x] `submit_form` accepts a **honeypot** field: when non-empty, the call returns the same success shape a real submission gets, but no `form_submissions` row is written and `submission_count` is not incremented.
+- [x] `get_review_roster(review_token)` returns the whole season's submissions **for that token's school only**, and only `first_name` / `age` / `grade` per child plus submission status and date. It never returns wishlist items, sizes, specific needs, other notes, guardian name/phone/email, or any confidential-channel submission. It stamps `first_viewed_at` on first read.
+- [x] `verify_submission(review_token, submission_id, verifier_name, corrections)` sets `verified`, stamps `verified_at` / `verified_by_label` / `verified_via_review_token`, and writes a `verified` event. `corrections` is optional and accepts **only** `first_name`, `age`, `grade`, keyed per child — any other key **raises an error** rather than being silently dropped, so a client bug can't quietly widen what a counselor can write.
+- [x] `reject_submission(review_token, submission_id, reason)` sets `rejected` (or `duplicate`), records the reason, and writes an event.
+- [x] `import_submission(id)` is **admin-gated** (`is_admin()`, plus `can_view_confidential()` for a confidential-channel submission) and creates `families` + `children` + `cards` + `wishlist_items` from `answers` with `corrections` overlaid, sets `source_submission_id` on the family and every child, copies the family's own words into the `*_source` columns, and stamps `imported` / `imported_at` / `imported_by` / `imported_family_id`.
+- [x] **`import_submission` is idempotent.** A second call (double-click, retry, two admins at once) returns the already-created family and creates nothing new — proven with a real concurrent/repeat call, not by reading the code. It reuses `create_family()`'s advisory-lock numbering rather than inventing a second family-numbering path.
+- [x] Every new function is `security definer` with an explicit `search_path`, has `execute` **revoked from `public`**, and is then granted deliberately: `get_form`/`submit_form`/`get_review_roster`/`verify_submission`/`reject_submission` to `anon` + `authenticated`; `import_submission` to `authenticated` only.
+- [x] A dev-only seed file creates the demo drive-school form, one published `form_versions` row holding the hand-authored English definition from INTAKE_FORM_DRAFT.md, one `form_links` row with a known token, and one `review_tokens` row whose plaintext is documented in the seed file. Synthetic data only, tagged like the rest of the demo seed. **Never run against prod.**
+- [x] Applied to the **dev** project only, and the migration's apply-target is stated explicitly when the story is reported. Prod is untouched (no Software Acceptance Review yet).
+
+Status: **Done** — applied to **dev** (`thvyntrxmahygesltgft`) by Grant on 2026-08-31, plus the follow-up `20260901120000` on 2026-09-01. **Prod untouched** — no Software Acceptance Review has happened, and the main migration's header now says so explicitly. Verified live by qa-tester: 17 of the 26 VERIFY checks driven from real sessions (including 13 and 21, which had to run as a signed-in volunteer because the SQL editor runs as `postgres` and bypasses RLS entirely, so run there they'd prove nothing), all five of reach-reviewer's runtime-only items discharged, 50 intake tests green. Final reach-reviewer gate: *"demo on 2026-09-09: yes, ship it."*
+
+**Every migration in this story was written without any SQL being executed by an agent** — there is no psql, DB password, or migration runner in the agent environment, only the anon key. Grant pasted each file. Stated here because the review gate requires it on the record.
+
+Audit history — reach-reviewer's first pass came back "safe to apply to dev as-is" with one High, two contract defects, five Mediums and four Lows. **All of High/contract/Medium are fixed in place** (the file has never run anywhere, so there was no deployed state to preserve and no follow-up migration was needed); L2/L3/L4 are documented in-code, and L1 is fixed by writing `ip_hash` as `null`.
+
+**Not yet applied to any database.** database-engineer executed **no SQL against any project** (dev or prod), in either round — there is no psql, DB password, or migration runner in the agent environment, only the anon key. Applying is a one-paste step for Grant in the **dev** SQL Editor (`thvyntrxmahygesltgft` — confirm the tab, since `.env.local` points at prod). The migration ends with a commented `-- VERIFY (run after applying, dev only):` block, now 25 read-only checks.
+
+What the audit round changed, for the record:
+- **H1 (High), fixed:** `intake_validate_field` only inspected an "Other" size field inside the branch where the select *equalled* Other — so `{"shirt_size":"Youth M","shirt_size_other":"<99KB>"}` validated clean, and `import_submission` wrote it to `children.shirt_size` untruncated, which `public_available_cards` publishes to **anon** and the printed card. Validator now checks the `_other` field whenever it's present and rejects it beside a non-Other select; every text column written at import is `left(...)`-truncated rather than relying on one JSON blob happening to set `max_length`.
+- **H1 turned out to be a class, not an instance.** Hunting for the same shape found three more: a non-string `text_list` element skipped validation and landed as raw JSON text in `wishlist_items.description` (also sponsor-visible), and `verify_submission` + `intake_apply_corrections` hard-coded the `children` section id in ways the audit hadn't named.
+- **Contract:** `import_submission(p_submission_id uuid, p_is_confidential boolean default null)` — staff can now set confidential tier *in the import click*. Without it, the only path was import-then-edit, which briefly exposes a child's name in a row every volunteer can read. `get_form` no longer reports `revoked` (a revoked link reports `not_found`, matching `submit_form`; `"revoked"` removed from the TS union).
+- **M1–M5, fixed:** unique index `families_one_per_submission` + `unique_violation` handling, so a hand-reset status can't double-import; `form_links` channel-gated on **read and write** (an `UPDATE ... RETURNING token` walked around a SELECT-only gate); bcrypt format check on `review_tokens.token_hash`; audit triggers on `form_links`/`review_tokens`; repeating-section id resolved from the definition everywhere.
+
+**Second round (2026-08-31), from building the counselor roster rather than reading the spec.** `get_review_roster` returned no field rules, so US-22's edit controls restated them in JSX — and diverged. `correction_fields` now carries the three correctable field definitions (`first_name`/`age`/`grade`: label, type, required, max_length, min, max, options) straight from the pinned `form_versions.definition`, resolved dynamically and merged strictest-wins across mixed versions. This closed one **live** bug: the roster's name input allowed 120 characters while the definition caps at 80, so an 81–120 character correction passed the browser and then raised server-side, throwing away the counselor's entire approve click. The per-child projection is untouched and still whitelisted to first name / age / grade, with two VERIFY checks standing guard over it (including one asserting no submitted name appears anywhere in the field-definition blob). Same class of bug found four times total across US-20/US-22 — three closed, the fourth (`SubmissionDetail`'s hard-coded labels) deferred as **ADM-22** because Phase 1 ships one form version and it degrades gracefully.
+Owner: database-engineer (migration + `web/lib` data layer), reach-reviewer (mandatory gate) — see [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql), [supabase/intake_demo_seed.sql](../supabase/intake_demo_seed.sql), [web/lib/intake.ts](../web/lib/intake.ts)
+
+---
+
+## US-21: Public family intake form
+
+As a parent or guardian, I want to fill out one short form on my phone for my
+children, so that I can register them for the drive without an account and
+without retyping anything for a volunteer.
+
+The questionnaire is [INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md) — English
+only for Phase 1.
+
+Acceptance criteria:
+- [x] `/form/[token]` renders the form from `get_form(token)` — the definition drives the fields; the page does not hard-code the questionnaire.
+- [x] Section 1 collects guardian name (required), phone (required), email (optional), and preferred contact language. **No address field exists anywhere on the form**, per DESIGN §5.
+- [x] Section 2 is a repeating child block with "Add another child" / remove, collecting first name, age, grade, boy/girl/prefer-not-to-say, the three sizes as selects with an "Other (describe)" escape hatch, up to 3 wishlist ideas (first required), specific needs, and other notes. At least one child is required.
+- [x] Section 3 collects the church-pickup transport answer and a required consent checkbox.
+- [x] There is **no school question** — the link already knows the school, and the page shows that school's name back to the family for reassurance.
+- [x] A hidden honeypot field is present and is submitted to `submit_form`; a bot that fills it gets the same confirmation screen a real family does.
+- [x] Submit calls `submit_form` only — never a table insert — and shows a plain-language confirmation ("Your registration is with your school counselor now") with no submission ID, no PII echoed, and no way to view or edit the submission afterwards.
+- [x] Server-side validation errors surface as readable field-level messages, not a raw Postgres error string.
+- [x] Mobile-first: usable one-handed at 360px with no horizontal scroll; labels are real `<label for>` associations (and **not** the wrapping-label pattern that broke the tests in US-18).
+- [x] An inactive/expired/revoked/unknown token shows a friendly "this link isn't open" page, not an error dump or a blank screen.
+- [x] The per-child budget line uses the **$50 placeholder** and is written so one string change updates it once Grant confirms the real figure.
+
+Status: **Done** — 2026-09-01. Verified live against dev by qa-tester (50 intake tests green, full suite 70 passed / 1 failed / 1 skipped, the single failure being the pre-existing unrelated Defect 2). reach-reviewer's final gate: *"demo on 2026-09-09: yes, ship it."*
+Owner: frontend-designer
+
+---
+
+## US-22: Counselor review roster
+
+As a school counselor, I want to open one link and confirm the families from my
+school that have registered, so that Reach knows these are real kids I referred
+without me needing an account or a password.
+
+[INTAKE_FORMS.md §3](INTAKE_FORMS.md#3-verification--what-the-counselor-is-actually-doing).
+The counselor is doing a **plausibility check on family composition** — not a
+data-quality audit, and not a review of what anyone asked for.
+
+Acceptance criteria:
+- [x] `/review/[token]` loads with no login, from `get_review_roster(token)` only.
+- [x] Shows a season-long roster for that counselor's school: one card/row per submission, with its **submitted date** and status, and a compact child table of **first name, age, grade — nothing else**. **Clarified 2026-08-31:** the original wording said "the guardian's submitted date", which was read as possibly meaning the guardian's *name*. It means the date. Guardian name/phone/email stay out of `get_review_roster` entirely — INTAKE_FORMS §3 scopes this screen to family composition, and adding guardian identity would widen what a forwarded or leaked review link exposes from "a season of children's first names" to "children's names plus who their parent is." Whether first names alone are enough for a counselor to recognize a family goes to the counselor conversation INTAKE_FORMS §12 already requires — see **ADM-21**.
+- [x] The three editable controls take their rules from the pinned form definition (`correctionFields`), not from constants in the page — grade is a real `<select>` over the definition's options, age is bounded by its `min`/`max`, and first name is capped at its `max_length`. A field the definition doesn't define renders read-only, never as a free-text box.
+- [x] Wishlist items, sizes, specific needs, other notes, and guardian phone/email are **not rendered anywhere on this page and are not present in the network response** (verified in the response payload, not just the DOM).
+- [x] Approve asks for the counselor's typed name and calls `verify_submission`; the row moves to Verified in place.
+- [x] Reject asks for a short reason and calls `reject_submission`.
+- [x] A pending submission allows inline editing of **exactly** first name, age, and grade per child, sent as the `corrections` payload on approve. No other field is editable, and the edit affordance disappears once the submission is verified.
+- [x] Already-verified, rejected, and imported submissions are visible read-only with their status, so the counselor can see who has come in at a glance.
+- [x] Expired, revoked, or unknown token shows a "this link is no longer active — ask Reach for a new one" page, never a partial roster.
+- [x] Works on a phone (a counselor checking between classes) and prints/reads cleanly on a laptop.
+
+Status: **Done** — 2026-09-01. Verified live against dev by qa-tester (50 intake tests green, full suite 70 passed / 1 failed / 1 skipped, the single failure being the pre-existing unrelated Defect 2). reach-reviewer's final gate: *"demo on 2026-09-09: yes, ship it."*
+Owner: frontend-designer
+
+---
+
+## US-23: Staff submission queue and one-click Import
+
+As a staff member, I want to see every counselor-verified submission and import
+it with one click, so that a family becomes a real record in the drive without
+anyone retyping it.
+
+Staff-gated, but per ADM-18 a **rubber stamp, not a review** — no data-fixing or
+duplicate-resolving is expected on this screen in Phase 1.
+
+Acceptance criteria:
+- [x] `/admin/submissions` lists submissions for the open drive grouped by status, with school, submitted date, guardian name, and child count. **Amended 2026-08-30** (frontend-designer's call, accepted): the actionable group — Verified / ready to import — comes **first**, ahead of Waiting on counselor, then Imported, then Rejected. The original criterion listed them in lifecycle order; a queue should lead with the thing the reader can act on.
+- [x] Opening one shows the full submitted detail (this is staff, so wishlist/sizes/needs are visible here) with any counselor correction shown as a correction, not silently merged into the display.
+- [x] A single **Import** button on a verified submission calls `import_submission` and nothing else; it is disabled while in flight and after success.
+- [x] Double-clicking Import, or two admins importing the same submission, results in **one** family — the UI shows the same "already imported" result rather than an error or a second row.
+- [x] After import the row moves to Imported and links straight to the new family in the Families Explorer, where it appears exactly like any hand-entered family (with `source_submission_id` set).
+- [x] Import is offered only on `verified` submissions; a submission still awaiting the counselor shows why it can't be imported yet.
+- [x] A volunteer without confidential clearance never sees a confidential-channel submission on this screen — because the query returns nothing, not because the UI hides it.
+- [x] The staff-visible **form link for the demo school is displayed somewhere copyable** (the manual-fallback requirement in [§11](INTAKE_FORMS.md#11-operational-risks)) — a plain read-only panel is enough for Phase 1. **Amended 2026-08-30:** the *review* link deliberately cannot be shown here — review tokens are bcrypt-hashed and shown once at issue time ([§2](INTAKE_FORMS.md#2-the-link-model)), so the panel says so and points at the issue-time output instead of pretending to have it. Re-issuing a review link is Phase 2's link-management screen.
+- [x] Reachable from the admin nav.
+
+Status: **Done** — 2026-09-01. Verified live against dev by qa-tester (50 intake tests green, full suite 70 passed / 1 failed / 1 skipped, the single failure being the pre-existing unrelated Defect 2). reach-reviewer's final gate: *"demo on 2026-09-09: yes, ship it."*
+Owner: frontend-designer
+
+---
+
+## US-24: End-to-end test for the intake walkthrough
+
+As the team, we want the whole family → counselor → staff chain covered by a
+test, so that the 9/9 demo can't be broken silently between now and then.
+
+Acceptance criteria:
+- [x] One spec walks the full happy path: anonymous submit at `/form/[token]` → submission appears on `/review/[token]` → counselor corrects one child's name and approves → admin sees it as verified at `/admin/submissions` → Import → family and children exist with `source_submission_id` set and the correction applied.
+- [x] A rejection path test: counselor rejects, and the submission is never importable.
+- [x] A honeypot test: a filled honeypot returns success to the caller but creates no `form_submissions` row.
+- [x] An idempotency test: `import_submission` called twice for the same submission yields exactly one family.
+- [x] A privacy test: the `get_review_roster` response payload contains no wishlist/sizes/needs/notes/guardian-contact values, asserted against the response body.
+- [x] A confidentiality test: a confidential-channel submission is invisible to an uncleared volunteer session.
+- [x] All test data is synthetic and cleaned up; no real PII, and the suite still passes serially per **TST-1**. **Amended 2026-09-01:** the original wording said "by the existing `is_autotest_data` mechanism", which turned out to be impossible for this feature and is now satisfied a different way. `import_submission` deliberately does *not* set `is_autotest_data` (so an e2e run can't delete a family imported during a stakeholder demo), so the existing sweep never reaches imported families. Worse, `families.source_submission_id` and `form_submissions.imported_family_id` reference each other with no `ON DELETE`, so deleting either side first fails — imported test families would have silently accumulated on dev in front of the demo. Cleanup now nulls `imported_family_id` first, sweeps via `source_submission_id` joined back to the test's own link, and **verifies the sweep emptied**, throwing if not.
+
+Status: **Done** — 2026-09-01. Verified live against dev by qa-tester (50 intake tests green, full suite 70 passed / 1 failed / 1 skipped, the single failure being the pre-existing unrelated Defect 2). reach-reviewer's final gate: *"demo on 2026-09-09: yes, ship it."*
+Owner: qa-tester
+
+---
+
+## US-26: Make "counselor-vetted" a checkable claim, not just a workflow convention
+
+As a staff member looking at an imported family, I want to know whether a
+counselor actually attested to it or whether staff marked it verified
+themselves, so that the feature's central claim can be audited after the fact.
+
+Found by reach-reviewer in the final Phase 1 pass. **Must land before the 10/1
+counselor launch** — not a Phase 1 blocker, and not a new security hole.
+
+An admin can set `status = 'verified'` directly (RLS allows it — and that path is
+*required* for the confidential channel, which has no counselor link by design),
+then click Import. Afterwards nothing distinguishes that family from a
+counselor-vetted one: `form_submissions` deliberately carries no audit trigger
+(the generic one would copy the `answers` PII blob into a table §10's purge never
+reaches), `submission_events` rows are written only by the definer functions, and
+`verified_by_label` is a hand-typed string. The one column that *does* tell them
+apart, `verified_via_review_token`, is selected by neither staff read, so
+`SubmissionDetail` renders "Confirmed {date} by {label}" identically either way.
+
+The gap is **attribution, not authorization** — an admin can already create a
+family by hand. But the entire premise of this feature is that a counselor
+vouched for each family, and right now that claim can't be checked after import.
+
+Acceptance criteria:
+- [ ] `verified_via_review_token` is selected by both staff reads in `web/lib/intake.ts`.
+- [ ] The staff submission detail distinguishes "Confirmed by counselor" from "Confirmed by staff (no counselor link)" — visibly, not in a tooltip.
+- [ ] `import_submission`'s `imported` event detail records `via_review_token`, so the event trail answers it too and not just the UI.
+- [ ] The confidential channel still works — staff verifying a confidential submission themselves is legitimate and must not be presented as an error or an anomaly.
+
+Status: Backlog — **must land before 2026-10-01**
+Owner: unassigned (database-engineer for the select + event detail, frontend-designer for the display)
+
+---
+
+## US-25: Merge the intake schema into SCHEMA.md
+
+As an agent or developer about to change the database, I want SCHEMA.md to
+describe the whole schema, so that I don't design against a version of it that's
+missing a third of the tables.
+
+Doc drift with teeth, not tidiness. [START_HERE.md](../START_HERE.md) routes
+*every* schema/RLS/migration task to SCHEMA.md and explicitly tells the reader
+not to bother re-reading DESIGN.md — so a file that silently omits six live
+tables is a trap, not just an omission. The next agent to design a feature
+touching `families`/`children` would be told those tables and columns don't
+exist. A warning banner now points at INTAKE_FORMS.md §5/§6/§9 as the interim
+authority, which closes the immediate danger but not the underlying drift.
+
+Deliberately **not** blocked on for the 9/9 demo — it's a docs task, and
+INTAKE_FORMS.md already documents all of it accurately.
+
+Acceptance criteria:
+- [ ] The six tables (`forms`, `form_versions`, `form_links`, `form_submissions`, `review_tokens`, `submission_events`) are documented in SCHEMA.md in the same style as the existing eleven, including the `review_tokens_hash_is_bcrypt` constraint and why review tokens are hashed while form-link tokens are plaintext.
+- [ ] The two new enums and the ~14 new columns on `families`/`children`/`wishlist_items` (§5.7) are folded into those tables' existing sections rather than bolted on as an appendix.
+- [ ] The ten new functions are covered wherever SCHEMA.md documents `claim_card`/`create_family` today, including which are `security definer` and who holds `execute`.
+- [ ] SCHEMA.md's "Row Level Security — who sees what" table gains rows for the six new tables, matching INTAKE_FORMS.md §9.
+- [ ] The warning banner added at the top of SCHEMA.md on 2026-09-01 is removed as part of this, and INTAKE_FORMS.md's "not yet merged into DESIGN.md or SCHEMA.md" status line is updated.
+- [ ] SCHEMA.md's own draft disclaimer ("nothing has been run against a real database yet") is corrected — that has been false since the first migration was applied.
+
+Status: Backlog
+Owner: unassigned (database-engineer when picked up)
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
