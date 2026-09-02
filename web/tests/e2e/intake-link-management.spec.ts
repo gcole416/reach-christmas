@@ -26,6 +26,7 @@ import {
 // carries no PII, and is exactly what the app would create on first use anyway.
 
 const LABEL_PREFIX = "AutoTest LinkMgmt";
+const REVIEW_EMAIL_PREFIX = "autotest-linkmgmt";
 
 test.describe("staff registration-link management (US-27)", () => {
   test.beforeAll(async () => {
@@ -36,6 +37,13 @@ test.describe("staff registration-link management (US-27)", () => {
     const admin = await signInAs("admin");
     const { error } = await admin.from("form_links").delete().like("label", `${LABEL_PREFIX}%`);
     if (error) throw new Error(`link-management cleanup failed: ${error.message}`);
+    // `authenticated` has no DELETE on review_tokens (insert + update only), so
+    // this suite's tokens are neutralised in place: revoked and their plaintext
+    // wiped, matching how neutralizeAutotestReviewTokens handles the M3 probe.
+    await admin
+      .from("review_tokens")
+      .update({ revoked_at: new Date().toISOString(), token: null })
+      .like("issued_to_email", `${REVIEW_EMAIL_PREFIX}%`);
     await cleanupIntakeTestData(admin);
   });
 
@@ -135,5 +143,86 @@ test.describe("staff registration-link management (US-27)", () => {
 
     // RLS "admin insert form_links" requires is_admin(); a volunteer is refused.
     expect(error, "a volunteer was allowed to create a registration link").not.toBeNull();
+  });
+
+  // --- US-28: counselor review link, re-copyable from the dashboard ----------
+
+  test("admin issues a counselor review link and it opens a roster", async ({ page }) => {
+    test.setTimeout(120_000);
+    const tag = runTag();
+    const email = `${REVIEW_EMAIL_PREFIX}-${tag}@example.com`;
+
+    await page.goto("/admin/login");
+    await page.getByLabel(/email/i).fill(process.env.TEST_ADMIN_EMAIL!);
+    await page.getByLabel(/password/i).fill(process.env.TEST_ADMIN_PASSWORD!);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL("**/admin");
+    await page.goto("/admin/submissions");
+
+    const panel = page.getByRole("region", { name: /registration links/i });
+    const group = panel
+      .locator("[data-school-group]")
+      .filter({ hasText: "OneLife Elementary" });
+
+    // The review-link section is either "None yet" (issue it) or already live
+    // (a prior run) — handle both so the suite is idempotent on shared dev.
+    const emailField = group.getByLabel("Counselor email");
+    if (await emailField.isVisible().catch(() => false)) {
+      await emailField.fill(email);
+      await group.getByRole("button", { name: "Create counselor link" }).click();
+    }
+
+    const reviewInput = group.getByLabel("Counselor review link");
+    await expect(reviewInput).toBeVisible();
+    const reviewPath = await reviewInput.inputValue();
+    expect(reviewPath).toMatch(/^\/review\/.+/);
+    const reviewToken = reviewPath.replace("/review/", "");
+
+    // The token is a working roster key.
+    const anon = anonClient();
+    const roster = await anon.rpc("get_review_roster", { p_review_token: reviewToken });
+    expect(roster.error).toBeNull();
+    expect((roster.data as { ok: boolean }).ok).toBe(true);
+    expect((roster.data as { school_name: string }).school_name).toBe("OneLife Elementary");
+  });
+
+  test("issue_review_token is admin-only and idempotent per school", async () => {
+    const admin = await signInAs("admin");
+    const driveId = await getOpenDriveId(admin);
+    const { data: ds } = await admin
+      .from("drive_schools")
+      .select("id")
+      .eq("drive_id", driveId)
+      .limit(1)
+      .single();
+    const driveSchoolId = (ds as { id: string }).id;
+    const email = `${REVIEW_EMAIL_PREFIX}-idem-${runTag()}@example.com`;
+
+    // Volunteer: refused.
+    const volunteer = await signInAs("volunteer");
+    const { data: vRes } = await volunteer.rpc("issue_review_token", {
+      p_drive_school_id: driveSchoolId,
+      p_issued_to_email: email,
+    });
+    expect((vRes as { ok: boolean; reason?: string })?.ok).toBe(false);
+    expect((vRes as { reason?: string })?.reason).toBe("forbidden");
+
+    // Admin: two calls for the same school return the SAME token (one live link
+    // per school). The earlier UI test may already have issued OneLife's, so
+    // `first` can itself be a reuse — what matters is the two agree and the
+    // second is flagged reused.
+    const first = await admin.rpc("issue_review_token", {
+      p_drive_school_id: driveSchoolId,
+      p_issued_to_email: email,
+    });
+    expect(first.error).toBeNull();
+    expect((first.data as { ok: boolean }).ok).toBe(true);
+
+    const second = await admin.rpc("issue_review_token", {
+      p_drive_school_id: driveSchoolId,
+      p_issued_to_email: `${email}.other`,
+    });
+    expect((second.data as { reused: boolean }).reused).toBe(true);
+    expect((second.data as { token: string }).token).toBe((first.data as { token: string }).token);
   });
 });

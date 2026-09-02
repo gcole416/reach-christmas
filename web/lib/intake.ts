@@ -898,6 +898,113 @@ export async function revokeFormLink(
 }
 
 // =============================================================================
+// Counselor review links (US-28)
+// =============================================================================
+//
+// The link a school counselor opens to see their roster and confirm families.
+// Unlike a form link, this one READS children's names — so before US-28 it was
+// bcrypt-only and unrecoverable. As of the 20260903120000 migration a plaintext
+// `token` is stored too, and `review_tokens` has an admin-only SELECT policy, so
+// staff can re-copy the link to re-send it all season. See that migration's
+// header for the trade-off.
+//
+// `issue_review_token` is idempotent per school: one live link at a time, so
+// this "creates" and "fetches the existing one" with the same call.
+
+export interface ReviewLinkRecord {
+  id: string;
+  driveSchoolId: string | null;
+  /** Null only on a legacy hash-only row; every US-28 row has it. */
+  token: string | null;
+  issuedToEmail: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+}
+
+function mapReviewLinkRow(row: any): ReviewLinkRecord {
+  return {
+    id: row.id,
+    driveSchoolId: row.drive_school_id ?? null,
+    token: row.token ?? null,
+    issuedToEmail: row.issued_to_email ?? "",
+    expiresAt: row.expires_at ?? null,
+    revokedAt: row.revoked_at ?? null,
+    lastUsedAt: row.last_used_at ?? null,
+  };
+}
+
+/** True when the link is usable right now (issued, not revoked, not expired). */
+export function reviewLinkIsLive(link: ReviewLinkRecord): boolean {
+  if (!link.token || link.revokedAt) return false;
+  return !link.expiresAt || new Date(link.expiresAt).getTime() > Date.now();
+}
+
+/**
+ * Every review link for a drive, for the staff panel. RLS returns nothing to a
+ * volunteer, and no confidential-channel row to an uncleared admin — same shape
+ * as listFormLinks.
+ */
+export async function listReviewLinks(driveId: string): Promise<ListResult<ReviewLinkRecord>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("review_tokens")
+    .select("id, drive_school_id, token, issued_to_email, expires_at, revoked_at, last_used_at")
+    .eq("drive_id", driveId)
+    .order("created_at", { ascending: true });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []).map(mapReviewLinkRow) };
+}
+
+export interface IssueReviewLinkInput {
+  driveSchoolId: string;
+  issuedToEmail: string;
+  /** ISO string; omit for the default (end of the drive's year). */
+  expiresAt?: string | null;
+}
+
+export type IssueReviewLinkResult =
+  | { ok: true; token: string; reviewPath: string; expiresAt: string | null; reused: boolean }
+  | {
+      ok: false;
+      error: string;
+      reason?: "forbidden" | "unknown_school" | "email_required" | "confidential" | "unknown";
+    };
+
+/**
+ * Issues a counselor review link for a school, or returns the school's existing
+ * live one. Admin-only (checked in the database). The plaintext comes back so
+ * the caller can show and copy it.
+ */
+export async function issueReviewLink(
+  input: IssueReviewLinkInput
+): Promise<IssueReviewLinkResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("issue_review_token", {
+    p_drive_school_id: input.driveSchoolId,
+    p_issued_to_email: input.issuedToEmail,
+    p_expires_at: input.expiresAt ?? null,
+  });
+  if (error) return { ok: false, error: error.message, reason: "unknown" };
+
+  const res = data as any;
+  if (!res?.ok) {
+    return {
+      ok: false,
+      error: res?.error ?? GENERIC_ERROR,
+      reason: res?.reason ?? "unknown",
+    };
+  }
+  return {
+    ok: true,
+    token: res.token,
+    reviewPath: res.review_path ?? reviewPath(res.token),
+    expiresAt: res.expires_at ?? null,
+    reused: Boolean(res.reused),
+  };
+}
+
+// =============================================================================
 // Pure helpers
 // =============================================================================
 

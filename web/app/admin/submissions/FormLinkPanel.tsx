@@ -4,29 +4,33 @@ import { useMemo, useState, type FormEvent } from "react";
 import {
   createFormLink,
   formPath,
+  issueReviewLink,
+  reviewLinkIsLive,
   revokeFormLink,
   type DriveFormVersionRecord,
   type FormLinkRecord,
+  type ReviewLinkRecord,
 } from "@/lib/intake";
 import { getSchoolsForDrive } from "@/lib/queries";
 import type { DataBundle } from "@/lib/types";
 import { formatDate } from "@/components/intake/format";
 import { channelLabel } from "./shared";
+import { CopyLinkButton } from "./CopyLinkButton";
 
-// The staff surface for registration links (ADM-24): the manual fallback
-// INTAKE_FORMS §11 asks for — every link on screen, copyable, sendable by hand —
-// plus the create/revoke controls that used to be SQL-only.
+// The staff surface for registration links (ADM-24, US-28): every link on
+// screen, copyable, sendable by hand — the family form link AND the counselor
+// review link — plus create/revoke.
 //
 // Grouped by school so "which of my schools has a link" is answerable at a
-// glance, which the flat list wasn't: a school with no link showed nothing at
-// all rather than "no link yet".
+// glance. Confidentiality is handled entirely by RLS: an uncleared volunteer
+// never gets a confidential-channel form_links or review_tokens row back, so
+// there is no client-side filtering here and none to add.
 //
-// Confidentiality is handled entirely by RLS on form_links — an uncleared
-// volunteer never gets the confidential-channel row back, so there is no
-// client-side filtering here and none to add. Creating a confidential
-// (null-school) link stays SQL-only; this UI only makes school links, and only
-// 'family' channel (a 'counselor'/'staff' link auto-verifies and its token is
-// readable by every signed-in user — ADM-20).
+// This UI only makes 'family' channel school links (a 'counselor'/'staff' link
+// auto-verifies and its token is readable by every signed-in user — ADM-20).
+// The counselor review link is stored plaintext as of US-28 so staff can
+// re-copy it to re-send all season — see the 20260903120000 migration header
+// for that trade-off.
 
 function linkState(link: FormLinkRecord): { label: string; live: boolean } {
   const now = Date.now();
@@ -59,6 +63,9 @@ function dateInputToIso(dateStr: string, endOfDay: boolean): string | null {
 const fieldClass =
   "mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-ink-primary focus:ring-2 focus:ring-cat-blue focus:outline-none";
 
+const readonlyInputClass =
+  "min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-ink-primary focus:ring-2 focus:ring-cat-blue focus:outline-none";
+
 function LinkItem({
   link,
   onRevoke,
@@ -68,20 +75,8 @@ function LinkItem({
   onRevoke: (link: FormLinkRecord) => void;
   busy: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
   const state = linkState(link);
-
-  async function copy() {
-    const origin = typeof window === "undefined" ? "" : window.location.origin;
-    try {
-      await navigator.clipboard.writeText(`${origin}${formPath(link.token)}`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    } catch {
-      // The read-only input beside the button is the fallback; nothing to recover.
-      setCopied(false);
-    }
-  }
+  const path = formPath(link.token);
 
   return (
     <li className="rounded-lg border border-gridline p-4">
@@ -118,17 +113,11 @@ function LinkItem({
           id={`link-${link.id}`}
           type="text"
           readOnly
-          value={formPath(link.token)}
+          value={path}
           onFocus={(e) => e.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-ink-primary focus:ring-2 focus:ring-cat-blue focus:outline-none"
+          className={readonlyInputClass}
         />
-        <button
-          type="button"
-          onClick={copy}
-          className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
-        >
-          {copied ? "Copied" : "Copy full link"}
-        </button>
+        <CopyLinkButton path={path} />
         {!link.revokedAt ? (
           <button
             type="button"
@@ -141,6 +130,105 @@ function LinkItem({
         ) : null}
       </div>
     </li>
+  );
+}
+
+// The counselor review link for one school. Unlike the family link, there is
+// only ever one live one per school (issue_review_token is idempotent), so this
+// is a single row, not a list — either "here it is, copy it" or "set one up".
+function ReviewLinkRow({
+  driveSchoolId,
+  reviewLink,
+  liaisonEmail,
+  onIssue,
+}: {
+  driveSchoolId: string;
+  reviewLink: ReviewLinkRecord | undefined;
+  liaisonEmail: string | null;
+  onIssue: (driveSchoolId: string, email: string) => Promise<string | null>;
+}) {
+  const [email, setEmail] = useState(liaisonEmail ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const live = reviewLink && reviewLinkIsLive(reviewLink);
+
+  async function issue(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!email.trim()) {
+      setError("Enter the counselor's email.");
+      return;
+    }
+    setBusy(true);
+    const message = await onIssue(driveSchoolId, email.trim());
+    setBusy(false);
+    if (message) setError(message);
+  }
+
+  if (live && reviewLink) {
+    const path = `/review/${reviewLink.token}`;
+    return (
+      <div className="mt-3 rounded-lg border border-gridline bg-background p-4">
+        <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          For {reviewLink.issuedToEmail}
+          {reviewLink.expiresAt ? ` · expires ${formatDate(reviewLink.expiresAt)}` : ""}
+          {reviewLink.lastUsedAt ? ` · last opened ${formatDate(reviewLink.lastUsedAt)}` : " · not opened yet"}
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label htmlFor={`review-${reviewLink.id}`} className="sr-only">
+            Counselor review link
+          </label>
+          <input
+            id={`review-${reviewLink.id}`}
+            type="text"
+            readOnly
+            value={path}
+            onFocus={(e) => e.currentTarget.select()}
+            className={readonlyInputClass}
+          />
+          <CopyLinkButton path={path} label="Copy link" />
+        </div>
+        <p className="mt-2 text-xs text-ink-muted">
+          Re-send this same link to the counselor any time — it stays valid until it expires.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={issue} className="mt-3 rounded-lg border border-gridline bg-background p-4">
+      <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
+      <p className="mt-0.5 text-xs text-ink-muted">
+        None yet. This is the link the school counselor opens to confirm the families that
+        registered.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-2">
+        <label className="block flex-1 text-sm">
+          <span className="text-ink-secondary">Counselor email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="counselor@school.org"
+            className={fieldClass}
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy}
+          className="rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+        >
+          {busy ? "Creating…" : "Create counselor link"}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-2 rounded-lg bg-status-critical/10 px-3 py-2 text-sm text-ink-primary" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </form>
   );
 }
 
@@ -173,9 +261,7 @@ function CreateLinkForm({
   const [formVersionId, setFormVersionId] = useState(formVersions[0]?.formVersionId ?? "");
   const [label, setLabel] = useState("");
   const [opensOn, setOpensOn] = useState("");
-  const [expiresOn, setExpiresOn] = useState(
-    isoToDateInput(data.drive.referralWindowEnd)
-  );
+  const [expiresOn, setExpiresOn] = useState(isoToDateInput(data.drive.referralWindowEnd));
   const [maxSubmissions, setMaxSubmissions] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -356,11 +442,13 @@ function CreateLinkForm({
 export function FormLinkPanel({
   data,
   links,
+  reviewLinks,
   formVersions,
   onChanged,
 }: {
   data: DataBundle;
   links: FormLinkRecord[];
+  reviewLinks: ReviewLinkRecord[];
   formVersions: DriveFormVersionRecord[];
   onChanged: () => void | Promise<void>;
 }) {
@@ -382,6 +470,20 @@ export function FormLinkPanel({
     }
     return map;
   }, [links]);
+
+  // At most one live review link per school (issue_review_token is idempotent),
+  // so a plain lookup by school is enough. Prefer a live one if somehow >1.
+  const reviewBySchool = useMemo(() => {
+    const map = new Map<string, ReviewLinkRecord>();
+    for (const rl of reviewLinks) {
+      if (!rl.driveSchoolId) continue;
+      const current = map.get(rl.driveSchoolId);
+      if (!current || (reviewLinkIsLive(rl) && !reviewLinkIsLive(current))) {
+        map.set(rl.driveSchoolId, rl);
+      }
+    }
+    return map;
+  }, [reviewLinks]);
 
   const confidentialLinks = bySchool.get(null) ?? [];
 
@@ -413,6 +515,16 @@ export function FormLinkPanel({
     return null;
   }
 
+  async function handleIssueReview(driveSchoolId: string, email: string): Promise<string | null> {
+    setError(null);
+    setNotice(null);
+    const result = await issueReviewLink({ driveSchoolId, issuedToEmail: email });
+    if (!result.ok) return result.error;
+    setNotice(result.reused ? "Counselor link is ready to copy." : "Counselor review link created.");
+    await onChanged();
+    return null;
+  }
+
   async function handleRevoke(link: FormLinkRecord) {
     const name = link.label ?? "this link";
     if (
@@ -436,10 +548,14 @@ export function FormLinkPanel({
     await onChanged();
   }
 
-  function renderSchoolGroup(driveSchoolId: string, name: string) {
+  function renderSchoolGroup(driveSchoolId: string, name: string, liaisonEmail: string | null) {
     const schoolLinks = bySchool.get(driveSchoolId) ?? [];
     return (
-      <div key={driveSchoolId} className="rounded-lg border border-gridline p-4">
+      <div
+        key={driveSchoolId}
+        data-school-group={driveSchoolId}
+        className="rounded-lg border border-gridline p-4"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-medium text-ink-primary">{name}</h3>
           <button
@@ -452,7 +568,7 @@ export function FormLinkPanel({
         </div>
 
         {schoolLinks.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">No registration link yet.</p>
+          <p className="mt-2 text-sm text-ink-muted">No family registration link yet.</p>
         ) : (
           <ul className="mt-3 space-y-3">
             {schoolLinks.map((link) => (
@@ -465,6 +581,13 @@ export function FormLinkPanel({
             ))}
           </ul>
         )}
+
+        <ReviewLinkRow
+          driveSchoolId={driveSchoolId}
+          reviewLink={reviewBySchool.get(driveSchoolId)}
+          liaisonEmail={liaisonEmail}
+          onIssue={handleIssueReview}
+        />
 
         {creatingFor === driveSchoolId ? (
           <CreateLinkForm
@@ -497,8 +620,10 @@ export function FormLinkPanel({
         </button>
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
-        Send these to a school counselor to pass on to families. Anyone with the link can register;
-        nobody with it can read anything.
+        Each school gets a <strong className="font-medium text-ink-primary">family link</strong> (the
+        counselor passes it to families to register) and a{" "}
+        <strong className="font-medium text-ink-primary">counselor review link</strong> (the
+        counselor opens it to confirm those families). Re-send either as often as you need.
       </p>
 
       {notice ? (
@@ -528,14 +653,12 @@ export function FormLinkPanel({
             This drive has no schools yet. Add one under Schools, then create its link here.
           </p>
         ) : (
-          schools.map((s) => renderSchoolGroup(s.driveSchoolId, s.name))
+          schools.map((s) => renderSchoolGroup(s.driveSchoolId, s.name, s.liaisonEmail))
         )}
 
         {confidentialLinks.length > 0 ? (
           <div className="rounded-lg border border-gridline p-4">
-            <h3 className="font-medium text-ink-primary">
-              {channelLabel(data, null).name}
-            </h3>
+            <h3 className="font-medium text-ink-primary">{channelLabel(data, null).name}</h3>
             <p className="mt-1 text-xs text-ink-muted">
               The direct channel for families with no school referral. Created outside this screen.
             </p>
@@ -553,13 +676,9 @@ export function FormLinkPanel({
         ) : null}
       </div>
 
-      <p className="mt-4 border-t border-border pt-4 text-sm text-ink-secondary">
-        <strong className="font-medium text-ink-primary">
-          Counselor review links can&apos;t be shown here.
-        </strong>{" "}
-        A review link opens a roster of children&apos;s names, so its token is stored hashed and is
-        shown exactly once, when it&apos;s issued. If a counselor loses theirs, issue a new one —
-        the old one can&apos;t be recovered from the database by anyone.
+      <p className="mt-4 border-t border-border pt-4 text-xs text-ink-muted">
+        A counselor review link opens a roster of children&apos;s first names, ages, and grades for
+        that school. Treat it like a password — send it to the counselor only.
       </p>
     </section>
   );
