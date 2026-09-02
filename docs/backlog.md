@@ -795,16 +795,16 @@ confidential families; roughly the tier `public_available_cards` already serves
 anon). Accepted deliberately for the operational win.
 
 Acceptance criteria:
-- [ ] Migration `20260903120000_review_link_recopy.sql`: `review_tokens.token text` (plaintext, unique); `admin read review_tokens` SELECT policy (`is_admin()` + the same confidential gate as `form_links`/`form_submissions`); `issue_review_token(drive_school_id, issued_to_email, expires_at?)` — `security definer`, admin-checked in body, mints ≥32 bytes server-side, **idempotent per school** (one live link; a second call returns the existing token, `reused:true`), writes BOTH `token` and `token_hash`. The three counselor functions are left untouched — they still match on `token_hash`.
-- [ ] Default expiry = end of the drive's year (INTAKE_FORMS §3), never issued already-expired.
-- [ ] Only school links: `issue_review_token` refuses a null `drive_school_id` (the confidential/staff queue isn't a counselor roster — `get_review_roster` already rejects it).
-- [ ] Registration links panel: each school shows its **counselor review link** below the family link — copyable, with issued-to email / expiry / last-opened — or a one-field "Create counselor link" form (email prefilled from the school's liaison) when none exists.
-- [ ] "Waiting on counselor" group in the queue shows a **Copy** shortcut for each relevant school's review link (or a pointer to create one).
-- [ ] A volunteer cannot issue a link (`reason: "forbidden"`) — covered by a test.
-- [ ] e2e in `intake-link-management.spec.ts`: admin issues a link through the page, an anon `get_review_roster` opens the roster with it, and `issue_review_token` is proven admin-only + idempotent.
-- [ ] Applied to **dev** only; **prod untouched** (no Software Acceptance Review).
+- [x] Migration `20260903120000_review_link_recopy.sql`: `review_tokens.token text` (plaintext, unique); `admin read review_tokens` SELECT policy (`is_admin()` + the same confidential gate as `form_links`/`form_submissions`); `issue_review_token(drive_school_id, issued_to_email, expires_at?)` — `security definer`, admin-checked in body, mints ≥32 bytes server-side, **idempotent per school** (one live link; a second call returns the existing token, `reused:true`), writes BOTH `token` and `token_hash`. The three counselor functions are left untouched — they still match on `token_hash`.
+- [x] Default expiry = end of the drive's year (INTAKE_FORMS §3), never issued already-expired.
+- [x] Only school links: `issue_review_token` refuses a null `drive_school_id` (the confidential/staff queue isn't a counselor roster — `get_review_roster` already rejects it).
+- [x] Registration links panel: each school shows its **counselor review link** below the family link — copyable, with issued-to email / expiry / last-opened — or a one-field "Create counselor link" form (email prefilled from the school's liaison) when none exists.
+- [x] "Waiting on counselor" group in the queue shows a **Copy** shortcut for each relevant school's review link (or a pointer to create one).
+- [x] A volunteer cannot issue a link (`reason: "forbidden"`) — covered by a test.
+- [x] e2e in `intake-link-management.spec.ts`: admin issues a link through the page, an anon `get_review_roster` opens the roster with it, and `issue_review_token` is proven admin-only + idempotent.
+- [x] Applied to **dev** only; **prod untouched** (no Software Acceptance Review).
 
-Status: **In review** — code committed & pushed on `dev`; `tsc`/`eslint`/`next build` clean; panel renders and degrades gracefully pre-migration (verified on live dev). **Migration NOT yet applied** — Grant pastes `20260903120000_review_link_recopy.sql` into the dev SQL editor, then the 3 new e2e tests can run. Needs the **reach-reviewer** gate — this reverses the "no function ever returns a token" invariant from 20260830120000 and changes what a DB leak exposes.
+Status: **In review** — code committed & pushed on `dev`; migration **applied to dev** by Grant 2026-09-03. `tsc`/`eslint`/`next build` clean; all 4 `intake-link-management` e2e tests green against live dev (issue-through-the-page, roster opens with the token, admin-only + idempotent). **Prod untouched.** Still needs the **reach-reviewer** gate — this reverses the "no function ever returns a token" invariant from 20260830120000 and changes what a DB leak exposes.
 Owner: (built this session) — database-engineer (migration + `web/lib/intake.ts` wrappers), frontend-designer (panel + queue shortcut), **reach-reviewer mandatory gate**. Files: [supabase/migrations/20260903120000_review_link_recopy.sql](../supabase/migrations/20260903120000_review_link_recopy.sql), [web/lib/intake.ts](../web/lib/intake.ts), [web/app/admin/submissions/FormLinkPanel.tsx](../web/app/admin/submissions/FormLinkPanel.tsx), [web/app/admin/submissions/SubmissionsQueue.tsx](../web/app/admin/submissions/SubmissionsQueue.tsx), [web/app/admin/submissions/CopyLinkButton.tsx](../web/app/admin/submissions/CopyLinkButton.tsx), [web/tests/e2e/intake-link-management.spec.ts](../web/tests/e2e/intake-link-management.spec.ts)
 
 ---
