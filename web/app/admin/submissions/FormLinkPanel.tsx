@@ -156,8 +156,8 @@ function CreateLinkForm({
   initialDriveSchoolId: string | null;
   onCreate: (input: {
     driveSchoolId: string;
-    formVersionId: string;
-    locale: string;
+    formVersionId: string | null;
+    locale: string | null;
     label: string;
     opensAt: string | null;
     expiresAt: string | null;
@@ -180,26 +180,10 @@ function CreateLinkForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (formVersions.length === 0) {
-    return (
-      <div className="mt-4 rounded-lg border border-border bg-background p-4 text-sm text-ink-secondary">
-        This drive has no published registration questionnaire yet, so there&apos;s nothing for a
-        link to point at. Publish a form version first, then create links here.
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+  // formVersions is empty on a drive that has never had a link — createFormLink
+  // publishes the standard questionnaire on the first one (ensureDriveFormVersion).
   const chosenVersion =
-    formVersions.find((v) => v.formVersionId === formVersionId) ?? formVersions[0];
+    formVersions.find((v) => v.formVersionId === formVersionId) ?? formVersions[0] ?? null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -229,8 +213,8 @@ function CreateLinkForm({
     setSubmitting(true);
     const message = await onCreate({
       driveSchoolId,
-      formVersionId: chosenVersion.formVersionId,
-      locale: chosenVersion.locale,
+      formVersionId: chosenVersion?.formVersionId ?? null,
+      locale: chosenVersion?.locale ?? null,
       label,
       opensAt,
       expiresAt,
@@ -263,7 +247,12 @@ function CreateLinkForm({
         </select>
       </label>
 
-      {formVersions.length === 1 ? (
+      {formVersions.length === 0 ? (
+        <p className="text-xs text-ink-muted">
+          Uses the standard Reach Christmas registration questionnaire — it&apos;s set up for this
+          drive automatically when you create the first link.
+        </p>
+      ) : formVersions.length === 1 && chosenVersion ? (
         <p className="text-xs text-ink-muted">
           Questionnaire: {chosenVersion.formName} (v{chosenVersion.version},{" "}
           {chosenVersion.locale})
@@ -291,7 +280,11 @@ function CreateLinkForm({
           type="text"
           value={label}
           maxLength={120}
-          placeholder={`e.g. "${chosenVersion.formName} — ${chosenVersion.locale}"`}
+          placeholder={
+            chosenVersion
+              ? `e.g. "${chosenVersion.formName} — ${chosenVersion.locale}"`
+              : 'e.g. "OneLife Elementary — English"'
+          }
           onChange={(e) => setLabel(e.target.value)}
           className={fieldClass}
         />
@@ -394,8 +387,8 @@ export function FormLinkPanel({
 
   async function handleCreate(input: {
     driveSchoolId: string;
-    formVersionId: string;
-    locale: string;
+    formVersionId: string | null;
+    locale: string | null;
     label: string;
     opensAt: string | null;
     expiresAt: string | null;

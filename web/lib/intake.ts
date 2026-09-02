@@ -52,6 +52,12 @@
 // the human sentence. Prefer branching on `reason`.
 
 import { createClient } from "./supabase/client";
+import {
+  INTAKE_FORM_DESCRIPTION,
+  INTAKE_FORM_NAME,
+  INTAKE_FORM_SLUG,
+  PHASE_1_FORM_DEFINITION,
+} from "./intakeFormDefinition";
 import type {
   ChildCorrection,
   CorrectionFieldDef,
@@ -671,13 +677,125 @@ export async function listDriveFormVersions(
   };
 }
 
+function definitionLocale(definition: any): string {
+  return typeof definition?.locale === "string" && definition.locale.trim()
+    ? definition.locale
+    : "en";
+}
+
+/**
+ * The published questionnaire for a drive's standard intake form, creating it on
+ * first use.
+ *
+ * A `form_links` row must pin a `form_version_id`, and a drive that has never
+ * had a link made has no `forms` row and no `form_versions` row. Rather than
+ * making staff run supabase/publish_intake_form.sql by hand, the first link
+ * created for a drive publishes the canonical Phase 1 definition
+ * (web/lib/intakeFormDefinition.ts) — the exact same JSON that SQL script and
+ * the demo seed use.
+ *
+ * Admin-only: the `admin insert forms` / `admin insert form_versions` policies
+ * gate on `is_admin()`. Idempotent — a second caller (or a concurrent one)
+ * reuses the published version rather than publishing a duplicate.
+ */
+export async function ensureDriveFormVersion(
+  driveId: string
+): Promise<{ ok: true; formVersionId: string; locale: string } | { ok: false; error: string }> {
+  const supabase = createClient();
+
+  const { data: formRow, error: formError } = await supabase
+    .from("forms")
+    .upsert(
+      {
+        drive_id: driveId,
+        slug: INTAKE_FORM_SLUG,
+        name: INTAKE_FORM_NAME,
+        description: INTAKE_FORM_DESCRIPTION,
+      },
+      { onConflict: "drive_id,slug" }
+    )
+    .select("id")
+    .single();
+  if (formError || !formRow) return { ok: false, error: formError?.message ?? GENERIC_ERROR };
+  const formId = formRow.id as string;
+
+  const readLatestPublished = () =>
+    supabase
+      .from("form_versions")
+      .select("id, version, definition")
+      .eq("form_id", formId)
+      .not("published_at", "is", null)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  const existing = await readLatestPublished();
+  if (existing.error) return { ok: false, error: existing.error.message };
+  if (existing.data) {
+    return {
+      ok: true,
+      formVersionId: existing.data.id as string,
+      locale: definitionLocale(existing.data.definition),
+    };
+  }
+
+  const { data: userData } = await supabase.auth.getUser();
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: maxRow } = await supabase
+      .from("form_versions")
+      .select("version")
+      .eq("form_id", formId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextVersion = ((maxRow?.version as number | undefined) ?? 0) + 1;
+
+    const { data: inserted, error: insertError } = await supabase
+      .from("form_versions")
+      .insert({
+        form_id: formId,
+        version: nextVersion,
+        definition: PHASE_1_FORM_DEFINITION,
+        published_at: new Date().toISOString(),
+        created_by: userData.user?.id ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (!insertError && inserted) {
+      return {
+        ok: true,
+        formVersionId: inserted.id as string,
+        locale: PHASE_1_FORM_DEFINITION.locale,
+      };
+    }
+    // Someone published a version between our read and our write — take theirs.
+    if (insertError?.code === "23505" && attempt < 2) {
+      const raced = await readLatestPublished();
+      if (raced.data) {
+        return {
+          ok: true,
+          formVersionId: raced.data.id as string,
+          locale: definitionLocale(raced.data.definition),
+        };
+      }
+      continue;
+    }
+    return { ok: false, error: insertError?.message ?? GENERIC_ERROR };
+  }
+  return { ok: false, error: GENERIC_ERROR };
+}
+
 export interface CreateFormLinkInput {
   driveId: string;
   /** School links only — never null through this path (see the note above). */
   driveSchoolId: string;
-  formVersionId: string;
-  /** Inherited from the chosen version's definition; stored on the link. */
-  locale: string;
+  /** Omit to publish/reuse the drive's standard questionnaire (the common case);
+   *  pass one only when a drive has multiple published versions and staff picked. */
+  formVersionId?: string | null;
+  /** Omit and it's taken from the resolved version's definition. */
+  locale?: string | null;
   label?: string | null;
   /** ISO strings, or null for "no bound". `expiresAt` should always be set
    *  (INTAKE_FORMS §11) — the UI makes it a required field. */
@@ -705,6 +823,10 @@ function newLinkToken(): string {
 /**
  * Creates a school registration link. Admin-only (enforced by RLS, not here).
  *
+ * When `input.formVersionId` is omitted, the drive's standard questionnaire is
+ * published (first time) or reused — see ensureDriveFormVersion — so a brand new
+ * drive needs no SQL step before its first link.
+ *
  * The token is generated client-side and never shown until the row comes back —
  * a collision on the unique index is a ~2^-256 event, and the retry only exists
  * so that if it somehow happened the staff member would see a fresh link rather
@@ -713,6 +835,15 @@ function newLinkToken(): string {
 export async function createFormLink(input: CreateFormLinkInput): Promise<CreateFormLinkResult> {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
+
+  let formVersionId = input.formVersionId ?? null;
+  let locale = input.locale ?? null;
+  if (!formVersionId) {
+    const ensured = await ensureDriveFormVersion(input.driveId);
+    if (!ensured.ok) return { ok: false, error: ensured.error };
+    formVersionId = ensured.formVersionId;
+    locale = locale ?? ensured.locale;
+  }
 
   const maxSubmissions =
     typeof input.maxSubmissions === "number" && Number.isFinite(input.maxSubmissions)
@@ -725,10 +856,10 @@ export async function createFormLink(input: CreateFormLinkInput): Promise<Create
       .insert({
         drive_id: input.driveId,
         drive_school_id: input.driveSchoolId,
-        form_version_id: input.formVersionId,
+        form_version_id: formVersionId,
         token: newLinkToken(),
         label: input.label?.trim() || null,
-        locale: input.locale || "en",
+        locale: locale || "en",
         channel: "family",
         opens_at: input.opensAt ?? null,
         expires_at: input.expiresAt ?? null,

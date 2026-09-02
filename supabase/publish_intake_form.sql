@@ -1,10 +1,16 @@
 -- Publish the Phase 1 registration questionnaire for the open drive.
 --
--- Run this ONCE per drive, in the Supabase SQL editor, on whichever project the
--- drive lives on (dev today — prod only after a Software Acceptance Review, same
--- as every intake migration). After it runs, staff create/revoke the actual
--- registration links from the app: Admin -> Registrations -> "Registration
--- links". No more hand-inserting form_links rows.
+-- USUALLY YOU DO NOT NEED THIS. As of US-27 the app publishes this same
+-- questionnaire automatically the first time a staff member creates a
+-- registration link for a drive (web/lib/intake.ts ensureDriveFormVersion,
+-- from web/lib/intakeFormDefinition.ts). This script is the manual equivalent —
+-- keep it for pre-provisioning a drive, for prod (where you may want the
+-- questionnaire in place before opening link creation), or for re-publishing a
+-- v2 after editing the definition below.
+--
+-- Run it in the Supabase SQL editor, on whichever project the drive lives on
+-- (dev freely; prod only after a Software Acceptance Review, same as every
+-- intake migration).
 --
 -- This is the narrow sibling of supabase/intake_demo_seed.sql. The demo seed
 -- ALSO creates a fake "Demo Elementary North" school, a known-plaintext form

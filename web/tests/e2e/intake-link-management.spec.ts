@@ -1,37 +1,39 @@
 import { test, expect } from "@playwright/test";
-import { anonClient, signInAs } from "./helpers/testClient";
+import { anonClient, getOpenDriveId, signInAs } from "./helpers/testClient";
 import {
   AUTOTEST_LINK_PREFIX,
   assertIntakeReady,
   cleanupIntakeTestData,
-  demoFormVersionId,
   runTag,
 } from "./helpers/intake";
 
-// ADM-24 — staff can create and revoke a school registration link from
+// US-27 — staff can create and revoke a school registration link from
 // /admin/submissions, instead of it being a SQL-editor-only operation.
 //
 // The link is created through the real page, then its behaviour is verified
 // against the database with an anon `get_form` call — "the link works" / "the
 // link is dead" are claims about the token, not about a green banner.
 //
-// Everything this suite creates is labelled `AutoTest LinkMgmt <tag>` (links it
-// makes through the UI) or tokened with AUTOTEST_LINK_PREFIX (the RLS probe),
-// and both are swept in afterAll. Nothing here submits a form, so no
-// form_submissions or families are produced.
+// Seed-independent: creating the first link on a drive publishes the standard
+// questionnaire automatically (ensureDriveFormVersion), so this suite only needs
+// the intake FUNCTIONS present, not intake_demo_seed.sql. It targets whichever
+// school is first in the drive, reads its name off the page, and asserts
+// get_form reports that same name back.
+//
+// Cleanup: links this suite makes carry a random token, so they're swept by
+// their `AutoTest LinkMgmt` label. The forms / form_versions row that the first
+// run auto-publishes is left in place — it's the real drive questionnaire,
+// carries no PII, and is exactly what the app would create on first use anyway.
 
 const LABEL_PREFIX = "AutoTest LinkMgmt";
 
-test.describe("staff registration-link management (ADM-24)", () => {
+test.describe("staff registration-link management (US-27)", () => {
   test.beforeAll(async () => {
-    await assertIntakeReady();
+    await assertIntakeReady({ needsSeed: false });
   });
 
   test.afterAll(async () => {
     const admin = await signInAs("admin");
-    // Links this suite made through the UI carry a random token, so they are
-    // keyed on their label instead of the AUTOTEST_LINK_PREFIX the shared
-    // cleanup sweeps.
     const { error } = await admin.from("form_links").delete().like("label", `${LABEL_PREFIX}%`);
     if (error) throw new Error(`link-management cleanup failed: ${error.message}`);
     await cleanupIntakeTestData(admin);
@@ -55,7 +57,11 @@ test.describe("staff registration-link management (ADM-24)", () => {
     // --- create ------------------------------------------------------------
     await panel.getByRole("button", { name: "New registration link" }).click();
 
-    await panel.getByLabel("School").selectOption({ label: "Demo Elementary North" });
+    const schoolSelect = panel.getByLabel("School");
+    const schoolName = (await schoolSelect.locator("option").first().textContent())?.trim() ?? "";
+    expect(schoolName, "the drive has no schools to link").not.toBe("");
+    await schoolSelect.selectOption({ index: 0 });
+
     await panel.getByLabel(/^Label/i).fill(label);
     await panel.getByLabel("Expires").fill("2030-01-01");
     await panel.getByRole("button", { name: "Create link" }).click();
@@ -69,12 +75,12 @@ test.describe("staff registration-link management (ADM-24)", () => {
     expect(linkPath).toMatch(/^\/form\/.+/);
     const token = linkPath.replace("/form/", "");
 
-    // The token actually resolves to a live form for anon.
+    // The token resolves to a live form for anon, scoped to the chosen school.
     const anon = anonClient();
     const created = await anon.rpc("get_form", { p_token: token });
     expect(created.error).toBeNull();
     expect((created.data as { ok: boolean }).ok).toBe(true);
-    expect((created.data as { school_name: string }).school_name).toBe("Demo Elementary North");
+    expect((created.data as { school_name: string }).school_name).toBe(schoolName);
 
     // --- revoke ----------------------------------------------------------------
     page.once("dialog", (dialog) => dialog.accept());
@@ -91,13 +97,38 @@ test.describe("staff registration-link management (ADM-24)", () => {
   });
 
   test("a volunteer cannot insert a form_links row", async () => {
-    const volunteer = await signInAs("volunteer");
-    const { versionId, driveId, driveSchoolId } = await demoFormVersionId(await signInAs("admin"));
+    // Runs after the create test, which has published the drive's questionnaire —
+    // so there's a real form_version to reference and the insert can only fail
+    // on RLS, not on a missing FK.
+    const admin = await signInAs("admin");
+    const driveId = await getOpenDriveId(admin);
 
+    const { data: ds } = await admin
+      .from("drive_schools")
+      .select("id")
+      .eq("drive_id", driveId)
+      .limit(1)
+      .single();
+    const { data: form } = await admin
+      .from("forms")
+      .select("id")
+      .eq("drive_id", driveId)
+      .eq("slug", "family-intake")
+      .single();
+    const { data: fv } = await admin
+      .from("form_versions")
+      .select("id")
+      .eq("form_id", (form as { id: string }).id)
+      .not("published_at", "is", null)
+      .order("version", { ascending: false })
+      .limit(1)
+      .single();
+
+    const volunteer = await signInAs("volunteer");
     const { error } = await volunteer.from("form_links").insert({
       drive_id: driveId,
-      drive_school_id: driveSchoolId,
-      form_version_id: versionId,
+      drive_school_id: (ds as { id: string }).id,
+      form_version_id: (fv as { id: string }).id,
       token: `${AUTOTEST_LINK_PREFIX}${runTag()}-vol`,
       channel: "family",
     });
