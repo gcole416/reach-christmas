@@ -66,6 +66,25 @@ const fieldClass =
 const readonlyInputClass =
   "min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-ink-primary focus:ring-2 focus:ring-cat-blue focus:outline-none";
 
+// The disclosure caret for the per-school dropdowns. Rotates when the parent
+// <details class="group"> is open.
+function Caret() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+      className="size-4 shrink-0 text-ink-muted transition-transform group-open:rotate-180"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 function LinkItem({
   link,
   onRevoke,
@@ -169,7 +188,7 @@ function ReviewLinkRow({
   if (live && reviewLink) {
     const path = `/review/${reviewLink.token}`;
     return (
-      <div className="mt-3 rounded-lg border border-gridline bg-background p-4">
+      <div className="rounded-lg border border-gridline bg-background p-4">
         <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
         <p className="mt-0.5 text-xs text-ink-muted">
           For {reviewLink.issuedToEmail}
@@ -198,7 +217,7 @@ function ReviewLinkRow({
   }
 
   return (
-    <form onSubmit={issue} className="mt-3 rounded-lg border border-gridline bg-background p-4">
+    <form onSubmit={issue} className="rounded-lg border border-gridline bg-background p-4">
       <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
       <p className="mt-0.5 text-xs text-ink-muted">
         None yet. This is the link the school counselor opens to confirm the families that
@@ -550,55 +569,79 @@ export function FormLinkPanel({
 
   function renderSchoolGroup(driveSchoolId: string, name: string, liaisonEmail: string | null) {
     const schoolLinks = bySchool.get(driveSchoolId) ?? [];
+    const liveFamily = schoolLinks.filter((l) => linkState(l).live).length;
+    const review = reviewBySchool.get(driveSchoolId);
+    const hasLiveReview = Boolean(review && reviewLinkIsLive(review));
+
+    const bits: string[] = [];
+    if (schoolLinks.length > 0) {
+      bits.push(
+        liveFamily > 0
+          ? `${liveFamily} family link${liveFamily > 1 ? "s" : ""}`
+          : "family link (inactive)"
+      );
+    }
+    if (hasLiveReview) bits.push("counselor link");
+    const status = bits.length > 0 ? bits.join(" · ") : "Not set up yet";
+
     return (
-      <div
+      <details
         key={driveSchoolId}
         data-school-group={driveSchoolId}
-        className="rounded-lg border border-gridline p-4"
+        className="group rounded-lg border border-gridline"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="font-medium text-ink-primary">{name}</h3>
-          <button
-            type="button"
-            onClick={() => setCreatingFor(driveSchoolId)}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
-          >
-            New link
-          </button>
-        </div>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg p-4 hover:bg-ink-muted/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0">
+            <span className="font-medium text-ink-primary">{name}</span>
+            <span className="ml-2 text-xs text-ink-muted">{status}</span>
+          </span>
+          <Caret />
+        </summary>
 
-        {schoolLinks.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">No family registration link yet.</p>
-        ) : (
-          <ul className="mt-3 space-y-3">
-            {schoolLinks.map((link) => (
-              <LinkItem
-                key={link.id}
-                link={link}
-                onRevoke={handleRevoke}
-                busy={busyLinkId === link.id}
-              />
-            ))}
-          </ul>
-        )}
+        <div className="space-y-3 border-t border-gridline p-4">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setCreatingFor(driveSchoolId)}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
+            >
+              New link
+            </button>
+          </div>
 
-        <ReviewLinkRow
-          driveSchoolId={driveSchoolId}
-          reviewLink={reviewBySchool.get(driveSchoolId)}
-          liaisonEmail={liaisonEmail}
-          onIssue={handleIssueReview}
-        />
+          {schoolLinks.length === 0 ? (
+            <p className="text-sm text-ink-muted">No family registration link yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {schoolLinks.map((link) => (
+                <LinkItem
+                  key={link.id}
+                  link={link}
+                  onRevoke={handleRevoke}
+                  busy={busyLinkId === link.id}
+                />
+              ))}
+            </ul>
+          )}
 
-        {creatingFor === driveSchoolId ? (
-          <CreateLinkForm
-            data={data}
-            formVersions={formVersions}
-            initialDriveSchoolId={driveSchoolId}
-            onCreate={handleCreate}
-            onCancel={() => setCreatingFor(undefined)}
+          <ReviewLinkRow
+            driveSchoolId={driveSchoolId}
+            reviewLink={review}
+            liaisonEmail={liaisonEmail}
+            onIssue={handleIssueReview}
           />
-        ) : null}
-      </div>
+
+          {creatingFor === driveSchoolId ? (
+            <CreateLinkForm
+              data={data}
+              formVersions={formVersions}
+              initialDriveSchoolId={driveSchoolId}
+              onCreate={handleCreate}
+              onCancel={() => setCreatingFor(undefined)}
+            />
+          ) : null}
+        </div>
+      </details>
     );
   }
 
@@ -657,22 +700,27 @@ export function FormLinkPanel({
         )}
 
         {confidentialLinks.length > 0 ? (
-          <div className="rounded-lg border border-gridline p-4">
-            <h3 className="font-medium text-ink-primary">{channelLabel(data, null).name}</h3>
-            <p className="mt-1 text-xs text-ink-muted">
-              The direct channel for families with no school referral. Created outside this screen.
-            </p>
-            <ul className="mt-3 space-y-3">
-              {confidentialLinks.map((link) => (
-                <LinkItem
-                  key={link.id}
-                  link={link}
-                  onRevoke={handleRevoke}
-                  busy={busyLinkId === link.id}
-                />
-              ))}
-            </ul>
-          </div>
+          <details className="group rounded-lg border border-gridline">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg p-4 hover:bg-ink-muted/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue [&::-webkit-details-marker]:hidden">
+              <span className="font-medium text-ink-primary">{channelLabel(data, null).name}</span>
+              <Caret />
+            </summary>
+            <div className="border-t border-gridline p-4">
+              <p className="text-xs text-ink-muted">
+                The direct channel for families with no school referral. Created outside this screen.
+              </p>
+              <ul className="mt-3 space-y-3">
+                {confidentialLinks.map((link) => (
+                  <LinkItem
+                    key={link.id}
+                    link={link}
+                    onRevoke={handleRevoke}
+                    busy={busyLinkId === link.id}
+                  />
+                ))}
+              </ul>
+            </div>
+          </details>
         ) : null}
       </div>
 

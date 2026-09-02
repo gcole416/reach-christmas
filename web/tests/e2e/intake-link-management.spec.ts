@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { anonClient, getOpenDriveId, signInAs } from "./helpers/testClient";
 import {
   AUTOTEST_LINK_PREFIX,
@@ -27,6 +27,14 @@ import {
 
 const LABEL_PREFIX = "AutoTest LinkMgmt";
 const REVIEW_EMAIL_PREFIX = "autotest-linkmgmt";
+
+/** Each school's controls live inside a collapsed <details> dropdown (US-27
+ *  tweak). Force it open before interacting with anything inside. */
+async function openSchoolGroup(group: Locator): Promise<void> {
+  await group.evaluate((el) => {
+    (el as HTMLDetailsElement).open = true;
+  });
+}
 
 test.describe("staff registration-link management (US-27)", () => {
   test.beforeAll(async () => {
@@ -76,7 +84,11 @@ test.describe("staff registration-link management (US-27)", () => {
 
     await expect(panel.getByText("Registration link created.")).toBeVisible();
 
-    const myItem = panel.locator("li").filter({ hasText: label });
+    // The new link lives inside the school's (collapsed) dropdown.
+    const group = panel.locator("[data-school-group]").filter({ hasText: schoolName });
+    await openSchoolGroup(group);
+
+    const myItem = group.locator("li").filter({ hasText: label });
     await expect(myItem).toHaveCount(1);
 
     const linkPath = await myItem.getByRole("textbox").inputValue();
@@ -163,6 +175,7 @@ test.describe("staff registration-link management (US-27)", () => {
     const group = panel
       .locator("[data-school-group]")
       .filter({ hasText: "OneLife Elementary" });
+    await openSchoolGroup(group);
 
     // The review-link section is either "None yet" (issue it) or already live
     // (a prior run) — handle both so the suite is idempotent on shared dev.
