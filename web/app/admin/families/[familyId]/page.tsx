@@ -8,6 +8,7 @@ import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/C
 import { getHouseholdTag } from "@/lib/queries";
 import type { DataBundle } from "@/lib/types";
 import { AdminNav } from "../../AdminNav";
+import { AdminPageHeader } from "../../AdminPageHeader";
 
 // The exact sentence the data layer already appends to the errors it raises
 // after a write has landed. Kept here as a constant so the banner can add it to
@@ -130,8 +131,8 @@ function FamilyEditForm({
       <div className="mx-auto max-w-4xl px-6 py-10">
         <AdminNav />
         <p className="text-ink-secondary">
-          Household not found — either it doesn&apos;t exist, or it&apos;s confidential and you don&apos;t
-          have clearance to view it.
+          Household not found. Either it doesn&apos;t exist, or it&apos;s confidential and you
+          don&apos;t have clearance to view it.
         </p>
       </div>
     );
@@ -249,20 +250,25 @@ function FamilyEditForm({
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">
-        Household {getHouseholdTag(data, family)}
-        {family.isConfidential ? (
-          <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-status-serious/15 px-2.5 py-1 align-middle text-xs font-medium text-ink-primary">
-            Confidential
-          </span>
-        ) : null}
-      </h1>
-      <p className="mt-2 text-ink-secondary">
-        Referred by: {referralLabel}. Referral source and household number can&apos;t be changed here — that
-        affects card numbering, so it&apos;s a SQL-editor-only edit if it&apos;s ever genuinely wrong.
-      </p>
-
-      <AdminNav />
+      <AdminPageHeader
+        title={
+          <>
+            Household {getHouseholdTag(data, family)}
+            {family.isConfidential ? (
+              <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-status-serious/15 px-2.5 py-1 align-middle text-xs font-medium text-ink-primary">
+                Confidential
+              </span>
+            ) : null}
+          </>
+        }
+        description={
+          <>
+            Referred by: {referralLabel}. Referral source and household number can&apos;t be changed
+            here, because that affects card numbering, so it&apos;s a SQL-editor-only edit if it&apos;s
+            ever genuinely wrong.
+          </>
+        }
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
@@ -315,8 +321,8 @@ function FamilyEditForm({
               Someone else changed this household while you were editing
             </h2>
             <p className="mt-1.5 text-sm text-ink-secondary">
-              Your edits were not saved, but nothing you typed has been lost — it&apos;s all still on this
-              page. Choose how to sort it out:
+              Your edits were not saved, but nothing you typed has been lost; it&apos;s all still on
+              this page. Choose how to sort it out:
             </p>
             {failure.partialSave ? (
               <p className="mt-2 text-sm font-medium text-ink-primary">
@@ -360,7 +366,7 @@ function FamilyEditForm({
                 the rest of the page's small print gets away with it on the
                 plain page background, this doesn't. */}
             <p className="mt-3 text-xs text-ink-secondary">
-              If you&apos;re not sure, reload — then make your change again on top of theirs.
+              If you&apos;re not sure, reload, then make your change again on top of theirs.
             </p>
           </div>
         ) : null}
@@ -383,9 +389,9 @@ function FamilyEditForm({
               {failure.message.replace(PARTIAL_SAVE_NOTICE, "").trim()}
             </p>
             <p className="mt-2 text-sm text-ink-secondary">
-              The household details saved, then it stopped partway. Nothing you typed has been lost — it&apos;s
-              all still on this page. Saving again on its own won&apos;t work now that part of it has
-              landed, so choose one:
+              The household details saved, then it stopped partway. Nothing you typed has been lost;
+              it&apos;s all still on this page. Saving again on its own won&apos;t work now that part of
+              it has landed, so choose one:
             </p>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -415,13 +421,14 @@ function FamilyEditForm({
                   {pendingAction === "force" ? "Saving…" : "Try again with what I typed"}
                 </button>
                 <p id="partial-force-help" className="mt-1.5 text-xs text-ink-secondary">
-                  Keeps everything on this page and saves it over what&apos;s on the family now.
+                  Keeps everything on this page and saves it over what&apos;s on the household now.
                 </p>
               </div>
             </div>
 
             <p className="mt-3 text-xs text-ink-secondary">
-              If you&apos;re not sure, reload — you&apos;ll see exactly what saved and what didn&apos;t.
+              If you&apos;re not sure, reload, and you&apos;ll see exactly what saved and what
+              didn&apos;t.
             </p>
           </div>
         ) : null}
@@ -467,8 +474,8 @@ function FamilyEditForm({
       </form>
 
       <p className="mt-6 text-xs text-ink-muted">
-        There&apos;s no way to delete a household or a child from here — that&apos;s a rare, higher-stakes
-        action better done deliberately via the SQL editor for now.
+        There&apos;s no way to delete a household or a child from here. That&apos;s a rare,
+        higher-stakes action better done deliberately via the SQL editor for now.
       </p>
     </div>
   );

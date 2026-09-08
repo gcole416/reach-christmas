@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAuditLog, useData } from "@/lib/store";
 import type { AuditAction, AuditLogEntry } from "@/lib/types";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 // Matches the tables covered by the audit_log triggers (see SCHEMA.md §11).
 const AUDITED_TABLES: { value: string; label: string }[] = [
   { value: "drives", label: "Drives" },
   { value: "schools", label: "Schools" },
   { value: "drive_schools", label: "Drive schools" },
-  { value: "families", label: "Families" },
+  { value: "families", label: "Households" },
   { value: "children", label: "Children" },
   { value: "cards", label: "Cards" },
   { value: "wishlist_items", label: "Wishlist items" },
@@ -113,15 +113,11 @@ export default function AuditLogPage() {
   const profiles = data?.profiles ?? [];
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Audit log</h1>
-      <p className="mt-2 text-ink-secondary">
-        Every insert, update, and delete across the drive&apos;s data, most recent first. Entries for
-        families and children can include real PII — this page is admin-only and nothing here should be
-        exported or copied elsewhere.
-      </p>
-
-      <AdminNav />
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      <AdminPageHeader
+        title="Audit log"
+        description="Every insert, update, and delete across the drive's data, most recent first. Entries for households and children can include real PII, so this page is admin-only and nothing here should be exported or copied elsewhere."
+      />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="text-sm">

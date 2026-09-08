@@ -457,8 +457,8 @@ function ImportPanel({
         <p className="mt-1 text-sm text-ink-secondary">
           {result
             ? result.alreadyImported
-              ? "This registration had already been imported. Here's the household it created — no second household was made."
-              : `Created Household ${result.familyNumber ?? "—"} with ${childCountLabel(result.childrenCreated)}.`
+              ? "This registration had already been imported. Here's the household it created; no second household was made."
+              : `Created Household ${result.familyNumber ?? "?"} with ${childCountLabel(result.childrenCreated)}.`
             : "This registration is already a household in the drive."}
           {result?.isConfidential ? " Imported as a confidential household." : ""}
         </p>

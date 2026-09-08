@@ -232,7 +232,7 @@ export function RosterCard({
   async function handleApprove() {
     const name = verifierName.trim();
     if (!name) {
-      setError("Please type your name — that's how Reach knows who confirmed this.");
+      setError("Please type your name, so Reach knows who confirmed this.");
       return;
     }
     if (name.length > VERIFIER_NAME_MAX) {
@@ -344,8 +344,8 @@ export function RosterCard({
             <ReadOnlyChildren rows={submission.children} />
             {pending ? (
               <p className="mt-3 text-sm text-ink-secondary">
-                These details can&apos;t be corrected here. Confirm the family if they look right, or
-                use &ldquo;This isn&apos;t right&rdquo; and tell us what to fix.
+                These details can&apos;t be corrected here. Confirm the household if it looks right,
+                or use &ldquo;This isn&apos;t right&rdquo; and tell us what to fix.
               </p>
             ) : null}
           </>
@@ -358,14 +358,14 @@ export function RosterCard({
           Confirmed{submission.verifiedByLabel ? ` by ${submission.verifiedByLabel}` : ""}
           {submission.verifiedAt ? ` on ${formatDate(submission.verifiedAt)}` : ""}
           {submission.hasCorrections ? " · you corrected a detail" : ""}
-          {submission.status === "imported" ? " · Reach has added this family to the drive" : ""}
+          {submission.status === "imported" ? " · Reach has added this household to the drive" : ""}
         </p>
       ) : null}
 
       {submission.status === "rejected" || submission.status === "duplicate" ? (
         <p className="mt-4 text-sm text-ink-secondary">
           {submission.status === "duplicate" ? "Marked a duplicate" : "Not approved"}
-          {submission.resolutionNote ? ` — ${submission.resolutionNote}` : ""}
+          {submission.resolutionNote ? `: ${submission.resolutionNote}` : ""}
         </p>
       ) : null}
 
@@ -390,7 +390,7 @@ export function RosterCard({
                 }}
                 className="rounded-xl bg-cat-blue px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
-                Confirm this family
+                Confirm this household
               </button>
               <button
                 type="button"
@@ -414,7 +414,7 @@ export function RosterCard({
                 Your name
               </label>
               <p id={`${baseId}-verifier-help`} className="mt-1 text-sm text-ink-secondary">
-                Reach records who confirmed each family.
+                Reach records who confirmed each household.
                 {anyEditable ? " Fix anything wrong in the details above before you confirm." : ""}
               </p>
               <input
@@ -459,8 +459,8 @@ export function RosterCard({
                 What&apos;s wrong with this one?
               </label>
               <p id={`${baseId}-reason-help`} className="mt-1 text-sm text-ink-secondary">
-                A short note is enough — &ldquo;not a family from our school&rdquo;, &ldquo;they
-                registered twice&rdquo;.
+                A short note is enough, like &ldquo;not a household from our school&rdquo; or
+                &ldquo;they registered twice&rdquo;.
               </p>
               <textarea
                 id={`${baseId}-reason`}
@@ -482,7 +482,7 @@ export function RosterCard({
                   className="mt-0.5 h-5 w-5 shrink-0 rounded border border-border accent-cat-blue focus:ring-2 focus:ring-cat-blue focus:outline-none"
                 />
                 <label htmlFor={`${baseId}-duplicate`} className="text-sm text-ink-primary">
-                  This family already registered — it&apos;s a duplicate
+                  This household already registered; it&apos;s a duplicate
                 </label>
               </div>
               <div className="mt-4 flex flex-wrap gap-3">
@@ -582,7 +582,7 @@ function EditableChildren({
     <div className="space-y-4">
       <p className="text-sm text-ink-secondary">
         Fix the {joinLabels(editable.map((key) => FIELD_LABELS[key].toLowerCase()))} if
-        something&apos;s wrong. Nothing else about the family can be changed here.
+        something&apos;s wrong. Nothing else about the household can be changed here.
         {ageRange ? <span id={ageRuleId}> Ages must be {ageRange}.</span> : null}
       </p>
       {drafts.map((draft, index) => (
@@ -648,9 +648,9 @@ function EditableChildren({
       ))}
       {hasReadOnly ? (
         <p id={noteId} className="text-sm text-ink-secondary">
-          Greyed-out details can&apos;t be corrected here — the registration form these families
-          filled out didn&apos;t ask for them. If one is wrong, use &ldquo;This isn&apos;t
-          right&rdquo; and say what to fix.
+          Greyed-out details can&apos;t be corrected here, because the registration form these
+          households filled out didn&apos;t ask for them. If one is wrong, use &ldquo;This
+          isn&apos;t right&rdquo; and say what to fix.
         </p>
       ) : null}
     </div>

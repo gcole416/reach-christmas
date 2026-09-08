@@ -67,7 +67,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
 
     // --- 1. The family, with no login ---------------------------------------
     await page.goto(`/form/${DEMO_FORM_TOKEN}`);
-    await expect(page.getByRole("heading", { name: /family gift registration/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /reach christmas gift registration/i })).toBeVisible();
     // The link already knows the school; the page shows it back (US-21).
     await expect(page.getByText("Demo Elementary North").first()).toBeVisible();
 
@@ -97,7 +97,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
 
     // --- 2. The counselor, with no login ------------------------------------
     await page.goto(`/review/${DEMO_REVIEW_TOKEN}`);
-    await expect(page.getByRole("heading", { name: /confirm your families/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /confirm your households/i })).toBeVisible();
 
     // Our card, by name — never "the first one".
     const card = await waitForRosterCard(page, typoName);
@@ -133,7 +133,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     // an input maxLength on purpose: clamping a pasted name without telling
     // anyone is worse. What matters is that the click isn't lost.)
     await firstName.fill("Q".repeat(81));
-    await card.getByRole("button", { name: /confirm this family/i }).click();
+    await card.getByRole("button", { name: /confirm this household/i }).click();
     await card.getByLabel(/your name/i).fill(`AutoTest Counselor ${tag}`);
     await card.getByRole("button", { name: /^confirm$/i }).click();
     await expect(card.getByRole("alert")).toContainText(/81 characters|80 or fewer/i);
@@ -256,7 +256,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     const childName = autotestChildName(tag, "LivesHere");
 
     await page.goto(`/form/${DEMO_FORM_TOKEN}`);
-    await expect(page.getByRole("heading", { name: /family gift registration/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /reach christmas gift registration/i })).toBeVisible();
 
     // Fill everything, but leave the affirmation unchecked.
     await fillAndSubmitFamilyForm(page, {
@@ -289,7 +289,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
   test("the public form works one-handed at 360px with no horizontal scroll", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 });
     await page.goto(`/form/${DEMO_FORM_TOKEN}`);
-    await expect(page.getByRole("heading", { name: /family gift registration/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /reach christmas gift registration/i })).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -318,7 +318,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
   test("the counselor roster is readable at 360px", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 780 });
     await page.goto(`/review/${DEMO_REVIEW_TOKEN}`);
-    await expect(page.getByRole("heading", { name: /confirm your families/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /confirm your households/i })).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -331,7 +331,7 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     await expect(
       page.getByRole("heading", { name: /no longer active/i })
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: /confirm this family/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /confirm this household/i })).toHaveCount(0);
     await expect(page.getByRole("table")).toHaveCount(0);
     await expectNoRawError(page);
   });

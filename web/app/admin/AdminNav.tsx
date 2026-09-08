@@ -6,16 +6,16 @@ import { createClient } from "@/lib/supabase/client";
 
 const TABS = [
   { href: "/admin", label: "Dashboard" },
-  { href: "/admin/families", label: "Household Admin" },
+  { href: "/admin/families", label: "Households" },
   { href: "/admin/submissions", label: "Registrations" },
   { href: "/admin/fulfillment", label: "Fulfillment" },
-  { href: "/admin/shopping-list", label: "Shopping List" },
+  { href: "/admin/shopping-list", label: "Shopping list" },
   { href: "/admin/print", label: "Print" },
   { href: "/admin/distribution", label: "Distribution" },
   { href: "/admin/schools", label: "Schools" },
   { href: "/admin/staff", label: "Staff" },
   { href: "/admin/drives", label: "Drives" },
-  { href: "/admin/audit", label: "Audit log" },
+  { href: "/admin/audit", label: "Audit" },
 ];
 
 export function AdminNav() {
@@ -30,15 +30,15 @@ export function AdminNav() {
   }
 
   return (
-    <div className="mb-8 flex items-center justify-between border-b border-border">
-      <div className="flex flex-wrap gap-1">
+    <div className="mt-6 mb-8 flex items-stretch border-b border-border">
+      <div className="flex min-w-0 flex-1 flex-nowrap gap-1 overflow-x-auto">
         {TABS.map((tab) => {
           const active = tab.href === "/admin" ? pathname === "/admin" : pathname.startsWith(tab.href);
           return (
             <Link
               key={tab.href}
               href={tab.href}
-              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+              className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${
                 active
                   ? "border-cat-blue text-ink-primary"
                   : "border-transparent text-ink-secondary hover:text-ink-primary"
@@ -49,7 +49,10 @@ export function AdminNav() {
           );
         })}
       </div>
-      <button onClick={handleSignOut} className="mb-2 text-sm font-medium text-ink-secondary hover:text-ink-primary">
+      <button
+        onClick={handleSignOut}
+        className="-mb-px shrink-0 border-b-2 border-l border-b-transparent border-l-border py-2 pl-4 text-sm font-medium text-ink-secondary hover:text-ink-primary"
+      >
         Sign out
       </button>
     </div>

@@ -53,20 +53,20 @@ export interface StatusGroup {
 export const STATUS_GROUPS: StatusGroup[] = [
   {
     key: "verified",
-    title: "Verified — ready to import",
-    blurb: "The counselor confirmed these. One click creates the family.",
+    title: "Confirmed by counselor, ready to import",
+    blurb: "The counselor confirmed these. One click creates the household.",
     statuses: ["verified"],
   },
   {
     key: "waiting",
     title: "Waiting on counselor",
-    blurb: "Submitted by a family. Not importable until the school confirms it.",
+    blurb: "Submitted by a household. Not importable until the school confirms it.",
     statuses: ["submitted", "under_review"],
   },
   {
     key: "imported",
     title: "Imported",
-    blurb: "Already in the drive as ordinary families.",
+    blurb: "Already in the drive as ordinary households.",
     statuses: ["imported"],
   },
   {

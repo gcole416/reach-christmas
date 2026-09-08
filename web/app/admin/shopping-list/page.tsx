@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useData } from "@/lib/store";
 import { displayFirstName, getShoppingList } from "@/lib/queries";
 import { StatusBadge } from "@/components/StatusBadge";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 // What the admin team still needs to shop for: every card that's reached
 // church with a volunteer note attached and hasn't advanced to 'verified'
@@ -33,15 +33,12 @@ export default function ShoppingListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="print:hidden">
-        <h1 className="text-3xl font-semibold text-ink-primary">Shopping list</h1>
-        <p className="mt-2 text-ink-secondary">
-          Every open volunteer note — what to check against the wishlist and pick up at the store. Mark a
-          row verified once it&apos;s been checked or topped up; it drops off this list.
-        </p>
-
-        <AdminNav />
+        <AdminPageHeader
+          title="Shopping list"
+          description="Every open volunteer note: what to check against the wishlist and pick up at the store. Mark a row verified once it's been checked or topped up, and it drops off this list."
+        />
 
         <div className="mb-6 flex items-center gap-3">
           <p className="text-sm text-ink-muted">{rows.length} open note{rows.length === 1 ? "" : "s"}</p>

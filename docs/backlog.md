@@ -873,6 +873,70 @@ Owner: (built this session) — frontend-designer surface. Files: [web/app/form/
 
 ---
 
+## US-31: Pre-demo copy + admin layout polish
+
+As the team about to demo this, I want the admin pages to feel consistent and
+the wording to be finished, so the demo doesn't get derailed by rough edges.
+
+Decisions (Grant, 2026-09-07):
+- **"Household" everywhere a person reads it** — this now includes the counselor
+  review pages (`web/app/review/**`), which US-29 had deliberately left as
+  "families". Backend identifiers (`families` table, `family_number`,
+  `create_family`, the `answers.family` JSON key, `familyId` in TS) stay
+  "family". Convention recorded in the auto-memory; **AGENTS.md / SCHEMA.md not
+  changed** (they describe the schema, which keeps the old names).
+- **No em-dashes in user-facing copy** — reworded, not just swapped. Scope: every
+  string a user could see, app-wide. Out of scope and left as-is: code comments,
+  the `"—"` empty-value placeholder in tables/detail views (a deliberate
+  convention — flag for Grant if he wants those swapped too), the
+  `SENTENCE_SHAPED` allowlist regex in `web/components/intake/format.ts`, and
+  test files.
+- **Admin header/nav spacing** — new `web/app/admin/AdminPageHeader.tsx`: one
+  component for the title + description + optional action + nav band, so the nav
+  sits in the same place on every page. Description capped at `max-w-2xl`; nav is
+  now a non-wrapping horizontal scroller (`AdminNav.tsx`) so it's always one row.
+  Nav labels shortened ("Household Admin" → "Households", "Audit log" → "Audit").
+
+Acceptance criteria:
+- [x] Counselor review pages, submissions queue/detail, `shared.ts` status
+  groups, schools/staff/audit/dashboard intros, landing page → "household(s)".
+  "Confidential families" on the staff account page also switched (Grant: all of
+  it).
+- [x] Intake questionnaire copy (B4–B8): section "About your family" → "About
+  your household"; "Each child" → "Children in your home"; consent "my family's
+  information" → "my household's information"; intro reworded (once-per-household
+  framing, reinforces the US-30 "lives with you" intent, no em-dash); privacy
+  note corrected — it claimed sponsors see "only first name, grade, and wish
+  list" but they also see sizes and specific needs, so it now lists those and
+  states "never your last name or address". Same fix applied to the `/sponsor`
+  page intro, which had the identical inaccuracy.
+- [x] Form definition change is in all three synced copies:
+  `web/lib/intakeFormDefinition.ts`, `supabase/publish_intake_form.sql`,
+  `supabase/intake_demo_seed.sql`. Field **ids** untouched, so
+  `import_submission`'s contract is unchanged. `INTAKE_FORM_NAME` /
+  `forms.name` → "Household Gift Registration".
+- [x] **dev publish:** `supabase/publish_intake_form.sql` run on dev by Grant
+  2026-09-07 — form-version **v2** cut. Existing registration links stay pinned
+  to v1 until new ones are created; for the demo, create a fresh link (or re-run
+  `intake_demo_seed.sql`) so the link shows the new wording.
+- [x] `AdminPageHeader` adopted by all 13 `/admin` pages; `AdminNav` no-wrap
+  scroller; labels shortened.
+- [x] Em-dash sweep: `web/app/**`, `web/components/**`, `web/lib/store.tsx`,
+  `web/components/intake/PublicShell.tsx`, the form definition ×3.
+- [x] `tsc` / `eslint` / `next build` clean.
+- [ ] **dev** only; **prod untouched**. No migration, no RLS/view/function change
+  → no reach-reviewer gate; code-reviewer pass before Done.
+
+Status: **In review** — built on `dev` this session, committed & pushed.
+`tsc`/`eslint`/`next build` clean; verified running against dev (admin login,
+screenshots). dev form-v2 published by Grant. Outstanding: create a fresh demo
+registration link (or re-seed) so it shows v2, and a code-reviewer pass before
+Done.
+Owner: (built this session) — frontend-designer surface + the two intake SQL
+files. Key files: [web/app/admin/AdminPageHeader.tsx](../web/app/admin/AdminPageHeader.tsx), [web/app/admin/AdminNav.tsx](../web/app/admin/AdminNav.tsx), all `web/app/admin/*/page.tsx`, [web/app/review/[token]/](../web/app/review/[token]/), [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts), [supabase/publish_intake_form.sql](../supabase/publish_intake_form.sql), [supabase/intake_demo_seed.sql](../supabase/intake_demo_seed.sql).
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

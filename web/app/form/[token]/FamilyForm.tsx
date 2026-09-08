@@ -515,7 +515,7 @@ function ErrorSummary({
 }
 
 /**
- * "children[1].age" -> "Child 2 — Age". Turns a machine-addressed error path
+ * "children[1].age" -> "Child 2: Age". Turns a machine-addressed error path
  * into the words on the family's screen, so the summary says where to look
  * without the page keeping a second map of the questionnaire.
  */
@@ -547,10 +547,10 @@ function describeFieldPath(definition: IntakeFormDefinition, path: string): stri
 
   const suffix =
     listIndex !== undefined && field?.itemLabels
-      ? ` — ${field.itemLabels[Number(listIndex)] ?? `Idea ${Number(listIndex) + 1}`}`
+      ? `, ${field.itemLabels[Number(listIndex)] ?? `Idea ${Number(listIndex) + 1}`}`
       : "";
 
-  return `${prefix} — ${fieldLabel}${suffix}`;
+  return `${prefix}: ${fieldLabel}${suffix}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -569,7 +569,7 @@ function Confirmation({
   definition: IntakeFormDefinition;
   schoolName: string | null;
 }) {
-  const heading = definition.confirmation?.heading ?? "Thank you — your registration is in.";
+  const heading = definition.confirmation?.heading ?? "Thank you. Your registration is in.";
   const body =
     definition.confirmation?.body ??
     "Your registration is with your school counselor now. They'll confirm it with Reach Church. There's nothing else you need to do.";

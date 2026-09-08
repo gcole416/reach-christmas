@@ -6,6 +6,7 @@ import { mapProfile } from "@/lib/supabase/mappers";
 import type { AppRole, Profile } from "@/lib/types";
 import { SearchInput } from "@/components/SearchInput";
 import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 const ROLE_LABELS: Record<AppRole, string> = {
   admin: "Admin",
@@ -74,7 +75,7 @@ export default function StaffPage() {
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <AdminNav />
         <div className="rounded-lg bg-status-critical/10 px-4 py-3 text-sm text-ink-primary">
           Couldn&apos;t load staff accounts: {loadError}
@@ -85,7 +86,7 @@ export default function StaffPage() {
 
   if (!profiles) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <AdminNav />
         <p className="text-ink-secondary">Loading…</p>
       </div>
@@ -101,19 +102,15 @@ export default function StaffPage() {
   });
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Staff &amp; permissions</h1>
-      <p className="mt-2 text-ink-secondary">
-        Who can access this app, and what they can see. Accounts themselves are still created in the
-        Supabase dashboard (Authentication → Add user) — this page only manages role and confidential
-        access for accounts that already exist.
-      </p>
-
-      <AdminNav />
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      <AdminPageHeader
+        title="Staff & permissions"
+        description="Who can access this app, and what they can see. Accounts themselves are still created in the Supabase dashboard (Authentication → Add user). This page only manages role and confidential access for accounts that already exist."
+      />
 
       {!isViewerAdmin ? (
         <div className="mb-6 rounded-lg bg-status-warning/15 px-4 py-3 text-sm text-ink-primary">
-          You&apos;re signed in as a volunteer, so you can only see your own account here — only an admin
+          You&apos;re signed in as a volunteer, so you can only see your own account here. Only an admin
           can view or change everyone else&apos;s role and access.
         </div>
       ) : null}
@@ -181,7 +178,7 @@ export default function StaffPage() {
                         onChange={(e) => updateConfidentialAccess(p.id, e.target.checked)}
                         className="h-4 w-4 rounded border-border disabled:cursor-not-allowed"
                       />
-                      Confidential families
+                      Confidential households
                     </label>
                   </td>
                 </tr>
@@ -205,10 +202,10 @@ export default function StaffPage() {
       ) : null}
 
       <p className="mt-4 text-xs text-ink-muted">
-        Admins always have confidential access regardless of this checkbox — it only matters for
-        volunteers who need to see confidential families without being made a full admin. You can&apos;t
-        change your own role or access here (so you can&apos;t accidentally lock yourself out) — ask
-        another admin, or use the SQL editor directly if you&apos;re the only one.
+        Admins always have confidential access regardless of this checkbox; it only matters for
+        volunteers who need to see confidential households without being made a full admin. You
+        can&apos;t change your own role or access here (so you can&apos;t accidentally lock yourself
+        out), so ask another admin, or use the SQL editor directly if you&apos;re the only one.
       </p>
     </div>
   );

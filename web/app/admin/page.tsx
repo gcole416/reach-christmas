@@ -10,7 +10,7 @@ import {
   getOverdueAssignments,
   OVERDUE_WARNING_DAYS,
 } from "@/lib/queries";
-import { AdminNav } from "./AdminNav";
+import { AdminPageHeader } from "./AdminPageHeader";
 
 export default function AdminPage() {
   const { data, viewerRole } = useData();
@@ -23,13 +23,15 @@ export default function AdminPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Staff dashboard</h1>
-      <p className="mt-2 text-ink-secondary">
-        {stats.totalChildren} children registered in {data.drive.name}. This data is real and shared —
-        changes here are visible to the whole team.
-      </p>
-
-      <AdminNav />
+      <AdminPageHeader
+        title="Staff dashboard"
+        description={
+          <>
+            {stats.totalChildren} children registered in {data.drive.name}. This data is real and
+            shared; changes here are visible to the whole team.
+          </>
+        }
+      />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile label="Children registered" value={stats.totalChildren} />

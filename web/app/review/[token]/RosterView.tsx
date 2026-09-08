@@ -51,23 +51,23 @@ export function RosterView({
 
   return (
     <PublicPage wide>
-      <PublicMasthead title="Confirm your families" schoolName={schoolName}>
+      <PublicMasthead title="Confirm your households" schoolName={schoolName}>
         <p>
-          These families registered for the Reach Christmas gift drive and named your school.
-          You&apos;re confirming that they&apos;re real families you referred and that the children
-          listed look right — nothing more.
+          These households registered for the Reach Christmas gift drive and named your school.
+          You&apos;re confirming that they&apos;re real households you referred and that the children
+          listed look right. Nothing more.
         </p>
       </PublicMasthead>
 
       <QuietNote>
-        You only see each child&apos;s first name, age, and grade. Gift lists, sizes, and family
+        You only see each child&apos;s first name, age, and grade. Gift lists, sizes, and household
         contact details aren&apos;t shown here, on purpose.
         {expiresAt ? ` This link works until ${formatDate(expiresAt)}.` : ""}
       </QuietNote>
 
       <p className="mt-4 text-sm font-medium text-ink-secondary">
         {submissions.length === 0
-          ? "No families yet"
+          ? "No households yet"
           : `${waiting.length} waiting on you · ${handled.length} already handled`}
       </p>
 
@@ -76,7 +76,7 @@ export function RosterView({
           <PublicCard>
             <h2 className="text-lg font-semibold text-ink-primary">Nothing to confirm yet</h2>
             <p className="mt-2 text-ink-secondary">
-              When a family from your school registers, they&apos;ll appear here. Check back after
+              When a household from your school registers, they&apos;ll appear here. Check back after
               you&apos;ve shared the registration link.
             </p>
           </PublicCard>
@@ -126,8 +126,8 @@ export function RosterView({
       ) : null}
 
       <p className="mt-8 text-sm text-ink-muted print:hidden">
-        Questions about a family on this list? Contact Reach Church — please don&apos;t forward this
-        link.
+        Questions about a household on this list? Contact Reach Church, and please don&apos;t forward
+        this link.
       </p>
     </PublicPage>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useData } from "@/lib/store";
 import { displayFirstName, getPrintableCards } from "@/lib/queries";
 import { SearchInput } from "@/components/SearchInput";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 // TODO(nametag stickers): this grid is laid out for plain paper. Still needs
 // a layout sized/spaced for adhesive nametag sticker sheets so cards can go
@@ -37,13 +37,10 @@ export default function PrintPage() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="print:hidden">
-        <h1 className="text-3xl font-semibold text-ink-primary">Printable cards</h1>
-        <p className="mt-2 text-ink-secondary">
-          The physical card for each child. Mark a card printed once it&apos;s off the printer so it drops
-          out of this list.
-        </p>
-
-        <AdminNav />
+        <AdminPageHeader
+          title="Printable cards"
+          description="The physical card for each child. Mark a card printed once it's off the printer so it drops out of this list."
+        />
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <SearchInput value={search} onChange={setSearch} placeholder="Search by name, card, or wishlist item…" />
@@ -74,7 +71,7 @@ export default function PrintPage() {
             ? "No cards generated yet."
             : q
               ? "No cards match this search."
-              : "Everything is printed — nothing left to show."}
+              : "Everything is printed. Nothing left to show."}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-2 print:gap-4">

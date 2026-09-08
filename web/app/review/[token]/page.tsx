@@ -33,7 +33,7 @@ export default function ReviewPage({ params }: { params: Promise<{ token: string
   }, [load]);
 
   if (!result) {
-    return <PublicLoading label="Loading your families…" />;
+    return <PublicLoading label="Loading your households…" />;
   }
 
   // Never a partial roster: any refusal replaces the whole page.

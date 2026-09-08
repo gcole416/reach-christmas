@@ -125,8 +125,8 @@ const FORM_PROBLEM_COPY: Record<FormLinkProblem, { heading: string; body: string
     },
     full: {
       heading: "This school's list is full",
-      body: "This link has reached the number of families it can accept.",
-      next: "Please contact your school counselor — they can tell you what's next.",
+      body: "This link has reached the number of households it can accept.",
+      next: "Please contact your school counselor, who can tell you what's next.",
     },
     unpublished: {
       heading: "This form isn't ready yet",
@@ -198,8 +198,8 @@ export function ReviewLinkClosed({
             : friendlyMessage(error, REVIEW_PROBLEM_COPY[reason] ?? REVIEW_PROBLEM_COPY.unknown)}
         </p>
         <p className="mt-4 rounded-xl bg-cat-yellow/10 px-4 py-3 text-sm text-ink-secondary">
-          Ask Reach Church for a new review link — they can issue you a fresh one. For your
-          families&apos; privacy, an old link can&apos;t be reopened.
+          Ask Reach Church for a new review link, and they can issue you a fresh one. For your
+          households&apos; privacy, an old link can&apos;t be reopened.
         </p>
       </PublicCard>
     </PublicPage>

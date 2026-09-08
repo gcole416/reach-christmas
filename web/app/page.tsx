@@ -7,7 +7,7 @@ export default function Home() {
         Reach Christmas gift drive
       </h1>
       <p className="mt-4 max-w-2xl text-lg text-ink-secondary">
-        Replacing the spreadsheet with one place to register families, match kids with sponsors, and
+        Replacing the spreadsheet with one place to register households, match kids with sponsors, and
         track every gift from referral to delivery.
       </p>
 
@@ -18,7 +18,8 @@ export default function Home() {
         >
           <h2 className="text-lg font-semibold text-ink-primary">Sponsor a child</h2>
           <p className="mt-2 text-sm text-ink-secondary">
-            The public page anyone can use to browse kids who need a sponsor and claim a gift — no login.
+            The public page anyone can use to browse kids who need a sponsor and claim a gift. No
+            login.
           </p>
         </Link>
         <Link
@@ -27,8 +28,8 @@ export default function Home() {
         >
           <h2 className="text-lg font-semibold text-ink-primary">Staff dashboard</h2>
           <p className="mt-2 text-sm text-ink-secondary">
-            Everything the team needs: registered families, sponsors running late, and which cards still
-            need to be printed.
+            Everything the team needs: registered households, sponsors running late, and which cards
+            still need to be printed.
           </p>
         </Link>
       </div>

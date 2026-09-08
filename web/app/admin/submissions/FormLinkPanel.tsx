@@ -210,7 +210,7 @@ function ReviewLinkRow({
           <CopyLinkButton path={path} label="Copy link" />
         </div>
         <p className="mt-2 text-xs text-ink-muted">
-          Re-send this same link to the counselor any time — it stays valid until it expires.
+          Re-send this same link to the counselor any time. It stays valid until it expires.
         </p>
       </div>
     );
@@ -220,7 +220,7 @@ function ReviewLinkRow({
     <form onSubmit={issue} className="rounded-lg border border-gridline bg-background p-4">
       <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
       <p className="mt-0.5 text-xs text-ink-muted">
-        None yet. This is the link the school counselor opens to confirm the families that
+        None yet. This is the link the school counselor opens to confirm the households that
         registered.
       </p>
       <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -307,7 +307,7 @@ function CreateLinkForm({
     const expiresAt = dateInputToIso(expiresOn, true);
     // INTAKE_FORMS §11 lists "expires_at always set" as a Phase 1 spam control.
     if (!expiresAt) {
-      setError("Set an expiry date — a link with no end date is one of the spam controls we skip.");
+      setError("Set an expiry date. A link with no end date is one of the spam controls we skip.");
       return;
     }
     if (opensAt && new Date(opensAt).getTime() >= new Date(expiresAt).getTime()) {
@@ -354,7 +354,7 @@ function CreateLinkForm({
 
       {formVersions.length === 0 ? (
         <p className="text-xs text-ink-muted">
-          Uses the standard Reach Christmas registration questionnaire — it&apos;s set up for this
+          Uses the standard Reach Christmas registration questionnaire. It&apos;s set up for this
           drive automatically when you create the first link.
         </p>
       ) : formVersions.length === 1 && chosenVersion ? (
@@ -372,7 +372,7 @@ function CreateLinkForm({
           >
             {formVersions.map((v) => (
               <option key={v.formVersionId} value={v.formVersionId}>
-                {v.formName} — v{v.version} ({v.locale})
+                {v.formName} · v{v.version} ({v.locale})
               </option>
             ))}
           </select>
@@ -380,15 +380,15 @@ function CreateLinkForm({
       )}
 
       <label className="block text-sm">
-        <span className="text-ink-secondary">Label (optional — shown to staff, not families)</span>
+        <span className="text-ink-secondary">Label (optional, shown to staff, not households)</span>
         <input
           type="text"
           value={label}
           maxLength={120}
           placeholder={
             chosenVersion
-              ? `e.g. "${chosenVersion.formName} — ${chosenVersion.locale}"`
-              : 'e.g. "OneLife Elementary — English"'
+              ? `e.g. "${chosenVersion.formName} · ${chosenVersion.locale}"`
+              : 'e.g. "OneLife Elementary · English"'
           }
           onChange={(e) => setLabel(e.target.value)}
           className={fieldClass}
@@ -549,7 +549,7 @@ export function FormLinkPanel({
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `Revoke ${name}? Families who already have it will see "ask your counselor for a current link". This can't be undone.`
+        `Revoke ${name}? Households who already have it will see "ask your counselor for a current link". This can't be undone.`
       )
     ) {
       return;
@@ -577,8 +577,8 @@ export function FormLinkPanel({
     if (schoolLinks.length > 0) {
       bits.push(
         liveFamily > 0
-          ? `${liveFamily} family link${liveFamily > 1 ? "s" : ""}`
-          : "family link (inactive)"
+          ? `${liveFamily} household link${liveFamily > 1 ? "s" : ""}`
+          : "household link (inactive)"
       );
     }
     if (hasLiveReview) bits.push("counselor link");
@@ -610,7 +610,7 @@ export function FormLinkPanel({
           </div>
 
           {schoolLinks.length === 0 ? (
-            <p className="text-sm text-ink-muted">No family registration link yet.</p>
+            <p className="text-sm text-ink-muted">No household registration link yet.</p>
           ) : (
             <ul className="space-y-3">
               {schoolLinks.map((link) => (
@@ -663,10 +663,10 @@ export function FormLinkPanel({
         </button>
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
-        Each school gets a <strong className="font-medium text-ink-primary">family link</strong> (the
-        counselor passes it to families to register) and a{" "}
+        Each school gets a <strong className="font-medium text-ink-primary">household link</strong>{" "}
+        (the counselor passes it to households to register) and a{" "}
         <strong className="font-medium text-ink-primary">counselor review link</strong> (the
-        counselor opens it to confirm those families). Re-send either as often as you need.
+        counselor opens it to confirm those households). Re-send either as often as you need.
       </p>
 
       {notice ? (
@@ -707,7 +707,7 @@ export function FormLinkPanel({
             </summary>
             <div className="border-t border-gridline p-4">
               <p className="text-xs text-ink-muted">
-                The direct channel for families with no school referral. Created outside this screen.
+                The direct channel for households with no school referral. Created outside this screen.
               </p>
               <ul className="mt-3 space-y-3">
                 {confidentialLinks.map((link) => (
@@ -726,7 +726,7 @@ export function FormLinkPanel({
 
       <p className="mt-4 border-t border-border pt-4 text-xs text-ink-muted">
         A counselor review link opens a roster of children&apos;s first names, ages, and grades for
-        that school. Treat it like a password — send it to the counselor only.
+        that school. Treat it like a password, and send it to the counselor only.
       </p>
     </section>
   );

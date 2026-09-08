@@ -6,6 +6,7 @@ import { mapDrive } from "@/lib/supabase/mappers";
 import type { Drive, DriveStatus, DistributionMethod } from "@/lib/types";
 import { FormField } from "@/components/FormField";
 import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 const STATUS_LABELS: Record<DriveStatus, string> = {
   draft: "Draft",
@@ -61,7 +62,7 @@ export default function DrivesPage() {
       if (otherOpen) {
         setRowError({
           id: drive.id,
-          message: `Close "${otherOpen.name}" first — only one drive can be open at a time.`,
+          message: `Close "${otherOpen.name}" first. Only one drive can be open at a time.`,
         });
         return;
       }
@@ -79,7 +80,7 @@ export default function DrivesPage() {
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <AdminNav />
         <div className="rounded-lg bg-status-critical/10 px-4 py-3 text-sm text-ink-primary">
           Couldn&apos;t load drives: {loadError}
@@ -90,7 +91,7 @@ export default function DrivesPage() {
 
   if (!drives) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto max-w-6xl px-6 py-10">
         <AdminNav />
         <p className="text-ink-secondary">Loading…</p>
       </div>
@@ -98,18 +99,20 @@ export default function DrivesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Drives</h1>
-      <p className="mt-2 text-ink-secondary">
-        Every year&apos;s drive is its own row here. Exactly one can be &quot;Open&quot; at a time —
-        that&apos;s the one the rest of the app reads and writes to.
-      </p>
-
-      <AdminNav />
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      <AdminPageHeader
+        title="Drives"
+        description={
+          <>
+            Every year&apos;s drive is its own row here. Exactly one can be &quot;Open&quot; at a
+            time, and that&apos;s the one the rest of the app reads and writes to.
+          </>
+        }
+      />
 
       {!isViewerAdmin ? (
         <div className="mb-6 rounded-lg bg-status-warning/15 px-4 py-3 text-sm text-ink-primary">
-          You&apos;re signed in as a volunteer — only an admin can create a drive or change its status.
+          You&apos;re signed in as a volunteer, so only an admin can create a drive or change its status.
         </div>
       ) : null}
 
@@ -176,7 +179,7 @@ export default function DrivesPage() {
             {drives.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
-                  No drives yet — create the first one.
+                  No drives yet. Create the first one.
                 </td>
               </tr>
             ) : null}
@@ -233,8 +236,8 @@ function CreateDriveForm({ onClose, onCreated }: { onClose: () => void; onCreate
       >
         <h2 className="text-lg font-semibold text-ink-primary">Create a drive</h2>
         <p className="mt-1 text-sm text-ink-secondary">
-          Starts as &quot;Draft&quot; — switch it to &quot;Open&quot; here once you&apos;re ready for it to
-          be the one the app uses.
+          Starts as &quot;Draft&quot;. Switch it to &quot;Open&quot; here once you&apos;re ready for it
+          to be the one the app uses.
         </p>
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <FormField label="Year" value={year} onChange={setYear} type="number" required />

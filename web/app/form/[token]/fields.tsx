@@ -412,7 +412,7 @@ function OtherDescribeField({
   return (
     <div className="mt-3">
       <label htmlFor={domId} className="block text-base font-medium text-ink-primary">
-        {label} — please describe
+        {label}: please describe
       </label>
       <input
         id={domId}

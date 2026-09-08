@@ -48,20 +48,20 @@ declare
 begin
   select id into v_drive_id from drives where status = 'open' order by year desc limit 1;
   if v_drive_id is null then
-    raise exception 'No open drive found — open one on the Drives page first.';
+    raise exception 'No open drive found. Open one on the Drives page first.';
   end if;
 
   v_definition := $json$
 {
   "schema_version": 1,
   "locale": "en",
-  "title": "Reach Christmas — Family Gift Registration",
-  "intro": "We're glad you're here. Fill this out for each child in your home you'd like to register, and your school counselor will confirm it with us.\n\nThis takes about five minutes. We ask only for first names — we never ask for your address.",
+  "title": "Reach Christmas Gift Registration",
+  "intro": "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
   "help_footer": "Questions? Contact your school counselor.",
-  "privacy_note": "Sponsors who provide gifts see only your child's first name, grade, and wish list.",
+  "privacy_note": "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name or address.",
   "submit_label": "Submit registration",
   "confirmation": {
-    "heading": "Thank you — your registration is in.",
+    "heading": "Thank you. Your registration is in.",
     "body": "Your registration is with your school counselor now. They'll confirm it with Reach Church. There's nothing else you need to do."
   },
   "budget_per_child": "$50",
@@ -69,12 +69,12 @@ begin
   "sections": [
     {
       "id": "family",
-      "title": "About your family",
+      "title": "About your household",
       "fields": [
         {
           "id": "guardian_name",
           "label": "Parent or guardian name",
-          "help": "One name is fine — whoever we should ask for at pickup.",
+          "help": "One name is fine. Whoever we should ask for at pickup.",
           "type": "text",
           "required": true,
           "max_length": 120
@@ -108,7 +108,7 @@ begin
     },
     {
       "id": "children",
-      "title": "Each child",
+      "title": "Children in your home",
       "repeating": true,
       "min_items": 1,
       "max_items": 10,
@@ -259,7 +259,7 @@ begin
         {
           "id": "wishlist",
           "label": "What would they like for Christmas?",
-          "help": "Up to 3 ideas. Be as specific as you can — brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
+          "help": "Up to 3 ideas. Be as specific as you can: brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
           "type": "text_list",
           "required": true,
           "min_items": 1,
@@ -301,7 +301,7 @@ begin
         },
         {
           "id": "consent",
-          "label": "I understand my family's information will be shared with Reach Church and its volunteers.",
+          "label": "I understand my household's information will be shared with Reach Church and its volunteers.",
           "type": "checkbox",
           "required": true
         }
@@ -316,7 +316,7 @@ $json$::jsonb;
   values (
     v_drive_id,
     'family-intake',
-    'Family Gift Registration',
+    'Household Gift Registration',
     'Phase 1 English intake questionnaire. Source: docs/INTAKE_FORM_DRAFT.md'
   )
   on conflict (drive_id, slug) do update

@@ -11,7 +11,7 @@ import {
 } from "@/lib/queries";
 import { STATUS_OPTIONS, OverdueBadge } from "@/components/StatusBadge";
 import { SearchInput } from "@/components/SearchInput";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 const COLUMN_DOT: Record<FulfillmentColumn, string> = {
   unassigned: "bg-ink-muted",
@@ -110,12 +110,10 @@ export default function FulfillmentPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Fulfillment</h1>
-      <p className="mt-2 text-ink-secondary">
-        Every card, grouped by where it stands. Click a column title to focus on just that status.
-      </p>
-
-      <AdminNav />
+      <AdminPageHeader
+        title="Fulfillment"
+        description="Every card, grouped by where it stands. Click a column title to focus on just that status."
+      />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by child, card, or sponsor…" />

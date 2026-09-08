@@ -71,7 +71,7 @@ function WaitingCounselorLinks({
             key={id}
             className="inline-flex items-center rounded-lg border border-gridline bg-surface px-3 py-1.5 text-xs text-ink-muted"
           >
-            {name}: no counselor link yet — set one up in Registration links below
+            {name}: no counselor link yet. Set one up in Registration links below.
           </span>
         );
       })}

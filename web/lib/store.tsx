@@ -544,7 +544,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ok: false,
           error: `Household saved, but couldn't add ${child.firstName || "a child"}: ${
             childError?.message ?? "unknown error"
-          }. What was saved so far is already in the household list — check there before retrying.`,
+          }. What was saved so far is already in the household list, so check there before retrying.`,
         };
       }
 
@@ -570,7 +570,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
         return {
           ok: false,
-          error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Everything else was saved — use "Cards to print" to retry.`,
+          error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Everything else was saved, so use "Cards to print" to retry.`,
         };
       }
     }
@@ -839,7 +839,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
         return {
           ok: false,
-          error: `Internal error saving ${child.firstName} — no child id was resolved.`,
+          error: `Internal error saving ${child.firstName}: no child id was resolved.`,
           partialSave: wroteSomething,
         };
       }

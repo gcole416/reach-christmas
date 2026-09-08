@@ -15,7 +15,7 @@
 // rendering — nothing downstream of that sees this shape.
 
 export const INTAKE_FORM_SLUG = "family-intake";
-export const INTAKE_FORM_NAME = "Family Gift Registration";
+export const INTAKE_FORM_NAME = "Household Gift Registration";
 export const INTAKE_FORM_DESCRIPTION =
   "Phase 1 English intake questionnaire. Source: docs/INTAKE_FORM_DRAFT.md";
 
@@ -23,15 +23,15 @@ export const INTAKE_FORM_DESCRIPTION =
 export const PHASE_1_FORM_DEFINITION = {
   schema_version: 1,
   locale: "en",
-  title: "Reach Christmas — Family Gift Registration",
+  title: "Reach Christmas Gift Registration",
   intro:
-    "We're glad you're here. Fill this out for each child in your home you'd like to register, and your school counselor will confirm it with us.\n\nThis takes about five minutes. We ask only for first names — we never ask for your address.",
+    "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
   help_footer: "Questions? Contact your school counselor.",
   privacy_note:
-    "Sponsors who provide gifts see only your child's first name, grade, and wish list.",
+    "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name or address.",
   submit_label: "Submit registration",
   confirmation: {
-    heading: "Thank you — your registration is in.",
+    heading: "Thank you. Your registration is in.",
     body: "Your registration is with your school counselor now. They'll confirm it with Reach Church. There's nothing else you need to do.",
   },
   budget_per_child: "$50",
@@ -39,12 +39,12 @@ export const PHASE_1_FORM_DEFINITION = {
   sections: [
     {
       id: "family",
-      title: "About your family",
+      title: "About your household",
       fields: [
         {
           id: "guardian_name",
           label: "Parent or guardian name",
-          help: "One name is fine — whoever we should ask for at pickup.",
+          help: "One name is fine. Whoever we should ask for at pickup.",
           type: "text",
           required: true,
           max_length: 120,
@@ -78,7 +78,7 @@ export const PHASE_1_FORM_DEFINITION = {
     },
     {
       id: "children",
-      title: "Each child",
+      title: "Children in your home",
       repeating: true,
       min_items: 1,
       max_items: 10,
@@ -229,7 +229,7 @@ export const PHASE_1_FORM_DEFINITION = {
         {
           id: "wishlist",
           label: "What would they like for Christmas?",
-          help: "Up to 3 ideas. Be as specific as you can — brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
+          help: "Up to 3 ideas. Be as specific as you can: brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
           type: "text_list",
           required: true,
           min_items: 1,
@@ -276,7 +276,7 @@ export const PHASE_1_FORM_DEFINITION = {
         {
           id: "consent",
           label:
-            "I understand my family's information will be shared with Reach Church and its volunteers.",
+            "I understand my household's information will be shared with Reach Church and its volunteers.",
           type: "checkbox",
           required: true,
         },

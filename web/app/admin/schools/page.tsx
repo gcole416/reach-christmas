@@ -6,7 +6,7 @@ import { getSchoolsForDrive } from "@/lib/queries";
 import { FormField } from "@/components/FormField";
 import { SearchInput } from "@/components/SearchInput";
 import type { DistributionMethod } from "@/lib/types";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 const DISTRIBUTION_LABELS: Record<DistributionMethod, string> = {
   school_dropoff: "School drop-off",
@@ -27,14 +27,16 @@ export default function SchoolsAdminPage() {
     : allSchools;
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Schools</h1>
-      <p className="mt-2 text-ink-secondary">
-        Partner schools referring families into {data.drive.name}. Each school gets its own card code
-        (e.g. &quot;L&quot; for Lincoln) used in every card number from that school.
-      </p>
-
-      <AdminNav />
+    <div className="mx-auto max-w-6xl px-6 py-10">
+      <AdminPageHeader
+        title="Schools"
+        description={
+          <>
+            Partner schools referring households into {data.drive.name}. Each school gets its own card
+            code (e.g. &quot;L&quot; for Lincoln) used in every card number from that school.
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name, code, or liaison…" />
@@ -80,7 +82,7 @@ export default function SchoolsAdminPage() {
             {schools.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
-                  {allSchools.length === 0 ? "No schools yet — add the first one." : "No schools match this search."}
+                  {allSchools.length === 0 ? "No schools yet. Add the first one." : "No schools match this search."}
                 </td>
               </tr>
             ) : null}

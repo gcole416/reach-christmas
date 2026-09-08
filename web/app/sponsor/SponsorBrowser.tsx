@@ -144,7 +144,7 @@ export function SponsorBrowser() {
       {filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center text-ink-secondary">
           {cards.length === 0
-            ? "No children are listed yet — check back soon."
+            ? "No children are listed yet. Check back soon."
             : "No children match that search right now."}
         </div>
       ) : (
@@ -348,7 +348,7 @@ function ClaimModal({
         ) : (
           <>
             <p className="mt-1 text-sm text-ink-secondary">
-              We sent a code to <span className="font-medium text-ink-primary">{email}</span> — enter it
+              We sent a code to <span className="font-medium text-ink-primary">{email}</span>. Enter it
               below to confirm.
             </p>
             {sessionDead ? (

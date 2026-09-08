@@ -5,7 +5,7 @@ import { useData } from "@/lib/store";
 import { getDistributionRows, getSchoolsForDrive } from "@/lib/queries";
 import type { DistributionMethod } from "@/lib/types";
 import { SearchInput } from "@/components/SearchInput";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 const DISTRIBUTION_LABELS: Record<DistributionMethod, string> = {
   school_dropoff: "School drop-off",
@@ -89,14 +89,10 @@ export default function DistributionPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Distribution</h1>
-      <p className="mt-2 text-ink-secondary">
-        One row per household. Set a distribution method or pickup time, and check a household in as they
-        actually come through — however this year&apos;s drive ends up running (school drop-off, a single
-        pickup event, or a mix), it&apos;s tracked here per household rather than assumed drive-wide.
-      </p>
-
-      <AdminNav />
+      <AdminPageHeader
+        title="Distribution"
+        description="One row per household. Set a distribution method or pickup time, and check a household in as they actually come through. However this year's drive ends up running (school drop-off, a single pickup event, or a mix), it's tracked here per household rather than assumed drive-wide."
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by household or school…" />

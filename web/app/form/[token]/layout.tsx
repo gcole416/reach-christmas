@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 // real control is that the token itself is the only way in and get_form
 // returns nothing but the blank questionnaire.
 export const metadata: Metadata = {
-  title: "Family Gift Registration — Reach Christmas",
+  title: "Household Gift Registration · Reach Christmas",
   robots: { index: false, follow: false, nocache: true },
 };
 

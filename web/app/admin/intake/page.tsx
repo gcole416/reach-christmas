@@ -7,7 +7,7 @@ import type { ReferralType } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
 import { TextAreaField } from "@/components/TextAreaField";
 import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/ChildFormFields";
-import { AdminNav } from "../AdminNav";
+import { AdminPageHeader } from "../AdminPageHeader";
 
 export default function IntakePage() {
   const { data, addFamily } = useData();
@@ -101,13 +101,15 @@ export default function IntakePage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
-      <h1 className="text-3xl font-semibold text-ink-primary">Add a household</h1>
-      <p className="mt-2 text-ink-secondary">
-        Enter a referral into {data.drive.name} — this replaces a row (or several) in the old
-        spreadsheet. Each child gets a claimable card on the sponsor page as soon as you save.
-      </p>
-
-      <AdminNav />
+      <AdminPageHeader
+        title="Add a household"
+        description={
+          <>
+            Enter a referral into {data.drive.name}. This replaces a row (or several) in the old
+            spreadsheet, and each child gets a claimable card on the sponsor page as soon as you save.
+          </>
+        }
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="rounded-xl border border-border p-4">
@@ -139,8 +141,8 @@ export default function IntakePage() {
             </label>
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            The household number is assigned automatically once you save — it&apos;ll show up here and on
-            every card/tag, but isn&apos;t something you pick.
+            The household number is assigned automatically once you save. It shows up here and on
+            every card and tag, but isn&apos;t something you pick.
           </p>
 
           {referralType === "confidential" ? (
