@@ -31,6 +31,7 @@ type Json = Record<string, unknown>;
 const GUARDIAN_FIELDS = {
   guardian_name: "", // filled per test
   guardian_phone: "555-0100",
+  guardian_email: "autotest@demo.example.com", // required as of form v3 (US-39)
   preferred_language: "en",
 };
 

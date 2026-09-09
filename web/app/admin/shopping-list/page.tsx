@@ -20,13 +20,21 @@ export default function ShoppingListPage() {
 
   const isAdmin = viewerRole === "admin";
   const rows = getShoppingList(data).map((row) => {
-    const specs = [
-      row.age !== null ? `Age ${row.age}` : null,
-      displayChildGender(row.sex),
-      row.shirtSize ? `Shirt ${row.shirtSize}` : null,
-      row.pantSize ? `Pants ${row.pantSize}` : null,
-      row.shoeSize ? `Shoes ${row.shoeSize}` : null,
-    ].filter(Boolean) as string[];
+    // Confidential children never reach this list (claim_card refuses
+    // confidential cards), but mirror displayFirstName's gate anyway so the
+    // age/gender/sizes line can't outrun the name redaction if that ever changes.
+    const showDetails = !row.isConfidential || isAdmin;
+    const specs = (
+      showDetails
+        ? [
+            row.age !== null ? `Age ${row.age}` : null,
+            displayChildGender(row.sex),
+            row.shirtSize ? `Shirt ${row.shirtSize}` : null,
+            row.pantSize ? `Pants ${row.pantSize}` : null,
+            row.shoeSize ? `Shoes ${row.shoeSize}` : null,
+          ]
+        : []
+    ).filter(Boolean) as string[];
     return {
       ...row,
       displayName: displayFirstName(row.childFirstName, row.isConfidential, isAdmin),
