@@ -1253,6 +1253,94 @@ Owner: frontend-designer — built this session
 
 ---
 
+## US-38: Put a child "on hold" (duplicate review)
+
+As an admin who has spotted a probable duplicate child (the US-37 hint, or just
+noticing two households are the same), I want to put that child on hold so their
+card leaves the sponsor pool, the print run, and every count until I've sorted
+it out — without deleting anything.
+
+Prompted by Grant (2026-09-09), reviewing the Rivera / Rivera 2 test data. US-37
+tells staff two households are probably the same; it gives them nowhere to act
+on it. The prior decisions stand — **no merge, no household-group model, the
+counselor's word is final** ([US-37](#us-37-cross-school-household-hint-in-the-staff-queue),
+OPEN_QUESTIONS DB-23) — and **deletion stays out of the app** (still SQL-editor
+only, [families/[familyId]/page.tsx](../web/app/admin/families/[familyId]/page.tsx)).
+"On hold" is the middle path: reversible, no data loss, admin-only.
+
+Decisions (Grant, 2026-09-09):
+- **Admin-only.** Volunteers see held children and the badge; they can't hold or
+  release.
+- **Its own page**, in the Intake menu — not just a filter.
+- **Claimed-card conflict is out of scope** — process puts every child in and
+  sorted *before* sponsor claiming opens, so it shouldn't arise. Handle it
+  defensively anyway (criterion below), don't build UI around it.
+
+Acceptance criteria:
+- [x] Migration (dev only, **reach-reviewer gate** — touches `public_available_cards`):
+  `children` gains `held_at timestamptz`, `held_by uuid`, `hold_reason text`.
+  `children` already has the RLS policies and the audit trigger this needs — no
+  new table, same as the US-32/US-35 columns. → [supabase/migrations/20260909120000_child_on_hold.sql](../supabase/migrations/20260909120000_child_on_hold.sql), **written, not yet pasted to dev**.
+- [x] `set_child_hold(p_child_id, p_reason)` and `release_child_hold(p_child_id)`
+  server functions: `is_admin()` only (plus `can_view_confidential()` when the
+  child's household is confidential). `set_child_hold` **raises** if the child's
+  card has a non-cancelled `assignment` — message names the sponsor and says to
+  cancel that claim first. Both write through so the audit trigger fires.
+- [x] `public_available_cards` gains one inner predicate `and ch.held_at is null`,
+  in the same spot as `and not ch.is_high_schooler`, character-for-character
+  minimal — no other change to the view, no `security_invoker`.
+- [x] `printable_cards` / `cards_needing_print` gain the same predicate — no card
+  is printed for a child under review.
+- [x] Held children are excluded from: the dashboard stats (`Children registered`,
+  the cards-claimed denominator, `still need a sponsor`, `Sponsors overdue`), the
+  Fulfillment board, the Shopping list, the Distribution list, and the high
+  schooler roster / shop-day board. The `web/lib/queries.ts` derivations mirror
+  the SQL, same as `isHighSchoolGrade` (`isChildOnHold`). Store methods
+  `setChildHold` / `releaseChildHold` on the `useData()` context.
+- [ ] New page `/admin/on-hold` ("On hold" in the Intake menu): one row per held
+  child — first name + household tag, hold reason, who/when, the US-37
+  suspected-duplicate link where there is one, a link to the household edit page,
+  and a **Release hold** button (admin only). Empty state when nothing is held.
+- [ ] `/admin/families` explorer: an "On hold" badge on held rows and an "On hold"
+  value in the status filter. Held children stay listed here so they're findable.
+- [ ] Family edit page: an admin-only **Put this child on hold** control on each
+  child block (prompts for a reason); a held child renders flagged with a
+  **Release hold** action. Non-admins see the flag, not the buttons.
+- [ ] Confidential households: a held confidential child is only visible to
+  `can_view_confidential()` staff — the existing row RLS already does this, just
+  confirm the new page and functions don't route around it.
+- [ ] Dashboard: an "On hold" stat (count) linking to `/admin/on-hold`.
+- [~] e2e: hold a child → assert gone from `public_available_cards` (by card_id
+  and first_name), gone from `printable_cards`, present on `/admin/on-hold`;
+  release → back in all three. A non-admin can't call `set_child_hold`.
+  → [web/tests/e2e/child-on-hold.spec.ts](../web/tests/e2e/child-on-hold.spec.ts)
+  written; **cannot run until the migration is on dev**. The `/admin/on-hold`
+  page assertion lands with the frontend pass.
+- [x] `tsc` / `eslint` / `next build` clean (for the data-layer changes).
+
+Not done (deliberate):
+- **Household-level hold.** Hold each child individually for now. If whole
+  accidental-duplicate households turn out common, revisit.
+- **Sponsor notification** on a hold — there's no email flow yet (INTAKE_FORMS
+  §11). The claimed-card case is blocked at the function instead.
+- **Any merge or auto-link** — unchanged from US-37.
+- **Delete.** Still SQL-editor only. Hold is not a soft-delete; a held child is
+  retained, audited, and reversible.
+
+Status: **In progress.** Data layer built this session on `dev` (migration file,
+server functions, all the `web/lib` view mirrors + `getChildrenOnHold`, e2e
+spec). Still to do: (1) Grant pastes `20260909120000` into the dev SQL editor;
+(2) **reach-reviewer gate** — mandatory, touches `public_available_cards`;
+(3) frontend-designer builds the `/admin/on-hold` page, the explorer badge +
+filter, the per-child hold/release control, and the dashboard tile; (4) run the
+e2e spec once the migration is live; (5) code-reviewer before Done. Prod
+untouched until a Software Acceptance Review (same rule as every intake
+migration).
+Owner: database-engineer (migration + `web/lib` — done), frontend-designer (the
+page, badges, and per-child controls — next), reach-reviewer (mandatory gate)
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

@@ -150,6 +150,14 @@ interface DataContextValue {
     childId: string,
     input: { status: ShopDayStatus; notes: string },
   ) => Promise<Result>;
+  // US-38: put a child on hold for duplicate review / release the hold. Admin
+  // only (enforced in set_child_hold() / release_child_hold(), not here — a
+  // volunteer calling either gets a raised Postgres error, which surfaces as
+  // `{ ok: false, error }`). setChildHold also refuses, naming the sponsor, if
+  // the child's card is still claimed. Both refresh the bundle on success so
+  // the held child drops out of the pool/print/board derivations immediately.
+  setChildHold: (childId: string, reason: string) => Promise<Result>;
+  releaseChildHold: (childId: string) => Promise<Result>;
   updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
   checkInFamily: (familyId: string) => Promise<Result>;
   undoCheckInFamily: (familyId: string) => Promise<Result>;
@@ -966,6 +974,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  async function setChildHold(childId: string, reason: string): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_child_hold", {
+      p_child_id: childId,
+      p_reason: reason.trim() || null,
+    });
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  async function releaseChildHold(childId: string): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("release_child_hold", { p_child_id: childId });
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
   async function updateFamilyDistribution(familyId: string, input: FamilyDistributionInput): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase
@@ -1028,6 +1055,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateAssignmentNotes,
         updateCardPrinted,
         setShopDayTracking,
+        setChildHold,
+        releaseChildHold,
         updateFamilyDistribution,
         checkInFamily,
         undoCheckInFamily,

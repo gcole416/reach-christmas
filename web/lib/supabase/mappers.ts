@@ -107,6 +107,13 @@ export function mapChild(row: any): Child {
     isHighSchooler: row.is_high_schooler ?? false,
     shopDayStatus: (row.shop_day_status ?? "not_contacted") as Child["shopDayStatus"],
     shopDayNotes: row.shop_day_notes ?? null,
+    // On-hold-for-duplicate-review (20260909120000_child_on_hold.sql).
+    // held_at/held_by/hold_reason are set only by set_child_hold() /
+    // release_child_hold(); a held child stays in this bundle (findable in the
+    // explorer) but queries.ts drops them from the pool/print/board math.
+    heldAt: row.held_at ?? null,
+    heldBy: row.held_by ?? null,
+    holdReason: row.hold_reason ?? null,
     // Null means "a volunteer typed this child in by hand"; a uuid means the
     // child arrived through an intake-form submission (INTAKE_FORMS §5.7).
     sourceSubmissionId: row.source_submission_id ?? null,

@@ -1,9 +1,11 @@
 # Database Schema
 
-*Status: LIVE. The base tables (§1–§11) and the counselor-vetted intake tables
-(§12) are all applied to the **dev** Supabase project. **Prod** has the base
-schema through roughly mid-August; the intake feature (`20260830120000` onward)
-and the high-schooler feature (`20260908130000`) are **not on prod** and won't
+*Status: LIVE on dev EXCEPT `20260909120000_child_on_hold.sql`, which is written
+but not yet pasted in (US-38). The base tables (§1–§11) and the
+counselor-vetted intake tables (§12) are all applied to the **dev** Supabase
+project. **Prod** has the base schema through roughly mid-August; the intake
+feature (`20260830120000` onward), the high-schooler feature (`20260908130000`)
+and the on-hold feature (`20260909120000`) are **not on prod** and won't
 be until a Software Acceptance Review clears them — see
 [docs/DEPLOY.md](docs/DEPLOY.md) Phase 0 for how to establish prod's exact state.
 Changes are migrations now, applied by pasting a file into the Supabase SQL
@@ -21,7 +23,11 @@ Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--re
 > [`20260903120000_review_link_recopy.sql`](supabase/migrations/20260903120000_review_link_recopy.sql)
 > (`review_tokens.token` plaintext + `issue_review_token()`),
 > [`20260908130000_high_schooler_bucket.sql`](supabase/migrations/20260908130000_high_schooler_bucket.sql)
-> (`children.is_high_schooler` + shop-day tracking + view changes).
+> (`children.is_high_schooler` + shop-day tracking + view changes),
+> [`20260909120000_child_on_hold.sql`](supabase/migrations/20260909120000_child_on_hold.sql)
+> (`children.held_at`/`held_by`/`hold_reason` + `set_child_hold()` /
+> `release_child_hold()` + the same three views gain `and ch.held_at is null`) —
+> **written, not yet applied to dev**.
 
 ## Conventions
 
@@ -326,11 +332,17 @@ create table children (
   -- --- high-schooler self-shopping bucket (20260908130000, §6.1) ----------
   is_high_schooler boolean not null default false,             -- grades 9-12; auto-set from grade on INSERT by a trigger, staff-overridable on UPDATE
   shop_day_status shop_day_status not null default 'not_contacted',
-  shop_day_notes text
+  shop_day_notes text,
+
+  -- --- on hold for duplicate review (20260909120000, §6.2) ----------------
+  held_at timestamptz,                                         -- NOT NULL = on hold; card out of the sponsor pool, print run and every count
+  held_by uuid references profiles(id),                        -- the admin who placed the hold
+  hold_reason text                                             -- free text the admin typed
 );
 
 create index children_family_id_idx on children (family_id);
 create index children_high_schooler_idx on children (family_id) where is_high_schooler;
+create index children_on_hold_idx on children (family_id) where held_at is not null;
 ```
 
 ### 6.1 High schoolers — a self-shopping bucket (20260908130000)
@@ -366,6 +378,44 @@ card must never enter the sponsor pool, the print run, or the fulfilment math.
   schooler out of the sponsor pool.
 - `is_high_schooler` is orthogonal to `families.is_confidential`; a confidential
   high schooler behaves as both.
+
+### 6.2 On hold for duplicate review (20260909120000)
+
+When staff spot a probable duplicate child (the US-37 cross-school hint, or just
+noticing two households are the same) an **admin** can put that child "on hold"
+so their card leaves the sponsor pool, the print run and every count until it's
+sorted — without deleting anything (docs/backlog.md US-38). No merge, no
+household-group model, deletion stays SQL-only; hold is the reversible middle
+path.
+
+- **`children.held_at` / `held_by` / `hold_reason`** — all nullable. `held_at IS
+  NOT NULL` means on hold. Set and cleared **only** through the two functions
+  below, never a direct column UPDATE from the app.
+- **`set_child_hold(child_id, reason)` / `release_child_hold(child_id)`** —
+  `security definer`, `is_admin()` only (plus `can_view_confidential()` when the
+  household is confidential, resolved through `family_is_confidential()` — the
+  same §12.3/US-16 pattern, belt-and-braces since every admin already clears the
+  helper). `set_child_hold` **RAISES**, naming the sponsor, if the child's card
+  still has a non-cancelled `assignments` row — the process holds children
+  before claiming opens, so this is defensive, not a workflow. Both write
+  through `children`, so `audit_children` fires and `auth.uid()` records the
+  acting admin. Execute revoked from `public`/`anon`, granted to
+  `authenticated`. See §12.2.
+- **Views** (`public_available_cards`, `printable_cards`, `cards_needing_print`)
+  each gain one added inner predicate `and ch.held_at is null`, beside the
+  `and not ch.is_high_schooler` from 20260908130000 — character-for-character
+  minimal, no other change, no `security_invoker`. That predicate, not the app,
+  is what pulls a held child's card.
+- **The `web/lib` data layer** mirrors `held_at is null` the way
+  `isHighSchoolGrade` mirrors `is_high_school_grade` (`isChildOnHold` in
+  `web/lib/queries.ts`): held children drop out of the dashboard stats
+  (`Children registered`, cards-claimed denominator, `still need a sponsor`,
+  `Sponsors overdue`), the fulfilment board, the shopping list, the distribution
+  list and the high-schooler roster / shop-day board — and surface only as the
+  dashboard `onHoldCount` tile and `getChildrenOnHold()` (the `/admin/on-hold`
+  page). The **families/household explorer keeps held children** (`getAdminFamilies`
+  exposes `heldAt`/`heldBy`/`holdReason` on the row) so they stay findable.
+- Orthogonal to `is_high_schooler` and to `families.is_confidential`.
 
 **`target_card_count` — removed** in
 [supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql)
@@ -435,7 +485,8 @@ select
 from children ch
 join cards crd on crd.child_id = ch.id
 where crd.printed_at is null
-  and not ch.is_high_schooler;   -- 20260908130000: high schoolers aren't printed
+  and not ch.is_high_schooler    -- 20260908130000: high schoolers aren't printed
+  and ch.held_at is null;        -- 20260909120000: a child under duplicate review isn't printed
 ```
 
 And the printable label — just the base card number now; the "(1/2)" copy-count suffix this view used to
@@ -452,15 +503,16 @@ select
   crd.printed_at,
   f.drive_id
 from cards crd
-join children ch on ch.id = crd.child_id and not ch.is_high_schooler   -- 20260908130000
+join children ch on ch.id = crd.child_id and not ch.is_high_schooler and ch.held_at is null   -- 20260908130000 / 20260909120000
 join families f on f.id = ch.family_id
 join child_card_numbers ccn on ccn.child_id = ch.id;
 ```
 
 *Both views were last recreated in
-[20260908130000_high_schooler_bucket.sql](supabase/migrations/20260908130000_high_schooler_bucket.sql)
-(prior recreation: `20260818140000_one_card_per_child.sql`). `security_invoker`
-is unchanged; grants (`select` to `authenticated`) are reissued after the drop.*
+[20260909120000_child_on_hold.sql](supabase/migrations/20260909120000_child_on_hold.sql)
+(prior recreations: `20260908130000_high_schooler_bucket.sql`,
+`20260818140000_one_card_per_child.sql`). `security_invoker` is unchanged;
+grants (`select` to `authenticated`) are reissued after the drop.*
 
 ## 8. `wishlist_items` — was 3 fixed columns, opened up
 
@@ -1016,8 +1068,9 @@ is a locked-down public view, listing individual **cards** (not children — a c
 appear as two separate claimable listings), plus a controlled claim action rather than raw table access:
 
 ```sql
--- Current definition, last recreated in 20260908130000_high_schooler_bucket.sql
--- (prior: 20260818120000_fix_public_available_cards_anon_bug.sql). NOT
+-- Current definition, last recreated in 20260909120000_child_on_hold.sql
+-- (prior: 20260908130000_high_schooler_bucket.sql,
+-- 20260818120000_fix_public_available_cards_anon_bug.sql). NOT
 -- security_invoker — its base-table reads run as the view owner, which is the
 -- whole point (anon has no policies on children/families/drive_schools).
 create view public_available_cards as
@@ -1030,7 +1083,7 @@ select
   ch.specific_needs,
   wi.description as wishlist_description
 from cards crd
-join children ch on ch.id = crd.child_id and not ch.is_high_schooler   -- 20260908130000
+join children ch on ch.id = crd.child_id and not ch.is_high_schooler and ch.held_at is null   -- 20260908130000 / 20260909120000
 join families f on f.id = ch.family_id and not f.is_confidential        -- literal, NOT family_is_confidential() — anon has no execute on it
 join drives d on d.id = f.drive_id and d.status = 'open'                 -- SPN-1: open drive only
 left join drive_schools ds on ds.id = f.drive_school_id
@@ -1042,10 +1095,12 @@ where not exists (
 grant select on public_available_cards to anon, authenticated;
 ```
 
-**`and not ch.is_high_schooler` (20260908130000) is the entire mechanism that
-keeps a high schooler out of the sponsor pool** — a predicate in the view, at
-the database layer, not a UI filter. `reach-reviewer` gate passed 2026-09-08:
-character-identical to the prior version apart from that one inner predicate.
+**`and not ch.is_high_schooler` (20260908130000) and `and ch.held_at is null`
+(20260909120000) are the entire mechanism that keeps a high schooler / a child
+on hold for duplicate review out of the sponsor pool** — predicates in the
+view, at the database layer, not a UI filter. Each was added as a single inner
+predicate with the rest of the view character-identical; `reach-reviewer` gate
+passed 2026-09-08 for the high-schooler one.
 
 **Correction:** the copy count (`crd.copy_number`/`crd.total_copies`, the "1 of 2" notation) was
 deliberately left out of this view. It was print-room information — it told staff which physical card to

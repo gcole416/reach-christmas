@@ -120,6 +120,21 @@ export interface Child {
   // US-35 shop-day tracking. Only meaningful when isHighSchooler.
   shopDayStatus: ShopDayStatus;
   shopDayNotes: string | null;
+  // --- on hold for duplicate review (US-38) --------------------------------
+  // heldAt NOT NULL means this child is under duplicate review: their card is
+  // pulled from the sponsor pool, the print run, and every dashboard/board
+  // count until an admin releases the hold. The child row itself stays fully
+  // present in the families explorer so staff can still find them. Set and
+  // cleared ONLY through setChildHold / releaseChildHold (RPCs backed by
+  // set_child_hold() / release_child_hold()) — never a direct column write.
+  // Mirrored in queries.ts as isChildOnHold, matching the `and ch.held_at is
+  // null` predicate in public_available_cards / printable_cards /
+  // cards_needing_print.
+  heldAt: string | null;
+  // profiles.id of the admin who placed the hold; null when not held. Resolve
+  // to a name via data.profiles the same way audit_log.changedBy is.
+  heldBy: string | null;
+  holdReason: string | null;
   // --- intake-form provenance (US-20) --------------------------------------
   // Nullable ON PURPOSE (INTAKE_FORMS §5.7): null means a volunteer added this
   // child by hand, a uuid means they came in through a form submission.

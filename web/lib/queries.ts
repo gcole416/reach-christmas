@@ -32,6 +32,20 @@ export function isHighSchoolGrade(grade: string | null | undefined): boolean {
   return HIGH_SCHOOL_GRADES.includes((grade ?? "").trim() as (typeof HIGH_SCHOOL_GRADES)[number]);
 }
 
+/**
+ * A child put "on hold" for duplicate review (US-38). Mirrors the
+ * `and ch.held_at is null` predicate that
+ * supabase/migrations/20260909120000_child_on_hold.sql adds to
+ * public_available_cards / printable_cards / cards_needing_print — a held
+ * child's card is out of the sponsor pool, the print run, and every count and
+ * board below until an admin releases the hold. The one place a held child is
+ * still surfaced is the families/household explorer (getAdminFamilies), which
+ * exposes `heldAt` on the row so it can be badged and filtered.
+ */
+export function isChildOnHold(child: Child): boolean {
+  return child.heldAt != null;
+}
+
 function daysSince(iso: string): number {
   const ms = Date.now() - new Date(iso).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
@@ -127,6 +141,8 @@ export function getCardsNeedingPrint(data: DataBundle): CardsNeedingPrintRow[] {
       // High schoolers self-shop — their card is never printed (mirrors the
       // `and not ch.is_high_schooler` in the cards_needing_print view).
       if (child.isHighSchooler) return false;
+      // On hold for duplicate review — mirrors `and ch.held_at is null`.
+      if (isChildOnHold(child)) return false;
       const card = data.cards.find((c) => c.childId === child.id);
       return card ? !card.printedAt : false;
     })
@@ -159,6 +175,14 @@ export function getOverdueAssignments(data: DataBundle): OverdueAssignmentRow[] 
     .filter((a) => a.status === "pledged" || a.status === "purchased")
     .map((a) => ({ assignment: a, days: daysSince(a.claimedAt) }))
     .filter(({ days }) => days >= OVERDUE_WARNING_DAYS)
+    // Held-for-duplicate-review children drop off "Sponsors overdue" too —
+    // there's nothing to chase a sponsor about while the card is under review
+    // (mirrors `and ch.held_at is null`).
+    .filter(({ assignment: a }) => {
+      const card = data.cards.find((c) => c.id === a.cardId);
+      const child = card ? data.children.find((c) => c.id === card.childId) : undefined;
+      return child ? !isChildOnHold(child) : true;
+    })
     .map(({ assignment: a, days }) => {
       const card = data.cards.find((c) => c.id === a.cardId)!;
       const child = data.children.find((c) => c.id === card.childId)!;
@@ -195,6 +219,15 @@ export interface AdminChildRow {
   cardNumber: string;
   /** Grades 9-12: self-shops at the store shopping day, not in the sponsor pool. */
   isHighSchooler: boolean;
+  /**
+   * US-38: non-null when this child is on hold for duplicate review. Held
+   * children stay in this list (they must stay findable) — this field is what
+   * the explorer badges and filters on. `heldBy` is a profiles.id; resolve it
+   * against data.profiles.
+   */
+  heldAt: string | null;
+  heldBy: string | null;
+  holdReason: string | null;
   cards: AdminCardRow[];
 }
 
@@ -231,6 +264,9 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
           grade: child.grade,
           cardNumber: getChildCardNumber(data, child),
           isHighSchooler: child.isHighSchooler,
+          heldAt: child.heldAt,
+          heldBy: child.heldBy,
+          holdReason: child.holdReason,
           cards: childCards.map((card) => {
             const active = getActiveAssignment(data, card.id);
             const sponsor = active ? data.sponsors.find((s) => s.id === active.sponsorId) ?? null : null;
@@ -250,10 +286,12 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
 }
 
 export interface DashboardStats {
-  /** Children in the sponsor pool — i.e. NOT high schoolers. */
+  /** Children in the sponsor pool — i.e. NOT high schoolers, NOT on hold. */
   totalChildren: number;
-  /** Grades 9-12: shop for their own gifts, tracked separately (US-35). */
+  /** Grades 9-12: shop for their own gifts, tracked separately (US-35). Excludes held. */
   totalHighSchoolers: number;
+  /** US-38: children on hold for duplicate review. Links to /admin/on-hold. */
+  onHoldCount: number;
   totalCards: number;
   cardsClaimed: number;
   cardsAvailable: number;
@@ -266,8 +304,13 @@ export function getDashboardStats(data: DataBundle): DashboardStats {
   // claimable sponsor card — every count below is over sponsored cards only,
   // matching the `not ch.is_high_schooler` filter in public_available_cards
   // and printable_cards.
+  //
+  // Held-for-duplicate-review children (US-38) drop out of every count here the
+  // same way — `and ch.held_at is null` in those same views — and are surfaced
+  // only as their own `onHoldCount` tile.
+  const activeChildren = data.children.filter((c) => !isChildOnHold(c));
   const sponsoredChildIds = new Set(
-    data.children.filter((c) => !c.isHighSchooler).map((c) => c.id),
+    activeChildren.filter((c) => !c.isHighSchooler).map((c) => c.id),
   );
   const sponsoredCards = data.cards.filter((c) => sponsoredChildIds.has(c.childId));
   const sponsoredCardIds = new Set(sponsoredCards.map((c) => c.id));
@@ -279,7 +322,8 @@ export function getDashboardStats(data: DataBundle): DashboardStats {
 
   return {
     totalChildren: sponsoredChildIds.size,
-    totalHighSchoolers: data.children.length - sponsoredChildIds.size,
+    totalHighSchoolers: activeChildren.filter((c) => c.isHighSchooler).length,
+    onHoldCount: data.children.length - activeChildren.length,
     totalCards: sponsoredCards.length,
     cardsClaimed,
     cardsAvailable: sponsoredCards.length - cardsClaimed,
@@ -338,7 +382,10 @@ export interface HighSchoolerRow {
  */
 export function getHighSchoolers(data: DataBundle): HighSchoolerRow[] {
   return data.children
-    .filter((child) => child.isHighSchooler)
+    // On hold for duplicate review — off the roster and the shop-day board
+    // until released (mirrors `and ch.held_at is null`). Still findable in the
+    // families explorer.
+    .filter((child) => child.isHighSchooler && !isChildOnHold(child))
     .map((child) => {
       const family = getFamily(data, child.familyId);
       const driveSchool = getDriveSchool(data, family.driveSchoolId);
@@ -363,6 +410,69 @@ export function getHighSchoolers(data: DataBundle): HighSchoolerRow[] {
       };
     })
     .sort((a, b) => a.householdTag.localeCompare(b.householdTag, undefined, { numeric: true }));
+}
+
+export interface ChildOnHoldRow {
+  childId: string;
+  familyId: string;
+  firstName: string;
+  /** App-wide household tag, e.g. "OL1". */
+  householdTag: string;
+  schoolName: string | null;
+  driveSchoolId: string | null;
+  isConfidential: boolean;
+  grade: string | null;
+  /** Free-text reason the admin typed when placing the hold. */
+  holdReason: string | null;
+  heldAt: string;
+  /** profiles.id of the admin who placed the hold — resolve via data.profiles. */
+  heldBy: string | null;
+  /**
+   * The guardian phone (digits only, last 10) this child's household shares, so
+   * the page can surface a US-37-style "suspected duplicate" link to another
+   * household with the same number. Null when there's no phone on file.
+   */
+  guardianPhoneKey: string | null;
+}
+
+/**
+ * The children currently on hold for duplicate review (US-38) — the roster
+ * behind /admin/on-hold and the dashboard "On hold" tile. One row per held
+ * child, newest hold first.
+ *
+ * Confidential households are included here for cleared staff exactly as they
+ * are in the families explorer; RLS on `children` (20260811120000, via
+ * `family_is_confidential()`) is what actually decides whether a given
+ * `data.children` row is present at all, and `set_child_hold` /
+ * `release_child_hold` re-check `can_view_confidential()` server-side — this
+ * derivation does not route around either.
+ */
+export function getChildrenOnHold(data: DataBundle): ChildOnHoldRow[] {
+  return data.children
+    .filter(isChildOnHold)
+    .map((child) => {
+      const family = getFamily(data, child.familyId);
+      const driveSchool = getDriveSchool(data, family.driveSchoolId);
+      const school = driveSchool
+        ? data.schools.find((s) => s.id === driveSchool.schoolId) ?? null
+        : null;
+      const phoneDigits = (family.guardianPhone ?? "").replace(/\D/g, "").slice(-10);
+      return {
+        childId: child.id,
+        familyId: family.id,
+        firstName: child.firstName,
+        householdTag: getHouseholdTag(data, family),
+        schoolName: school?.name ?? null,
+        driveSchoolId: family.driveSchoolId,
+        isConfidential: family.isConfidential,
+        grade: child.grade,
+        holdReason: child.holdReason,
+        heldAt: child.heldAt as string,
+        heldBy: child.heldBy,
+        guardianPhoneKey: phoneDigits.length === 10 ? phoneDigits : null,
+      };
+    })
+    .sort((a, b) => b.heldAt.localeCompare(a.heldAt));
 }
 
 export interface SchoolRow {
@@ -468,6 +578,9 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
     const child = data.children.find((c) => c.id === card.childId)!;
     // High schoolers self-shop — their card is never in the fulfilment pipeline.
     if (child.isHighSchooler) continue;
+    // On hold for duplicate review — off the board until released (mirrors
+    // `and ch.held_at is null`).
+    if (isChildOnHold(child)) continue;
 
     const active = getActiveAssignment(data, card.id);
     const cardNumber = getChildCardNumber(data, child);
@@ -540,7 +653,14 @@ export interface ShoppingListRow {
  */
 export function getShoppingList(data: DataBundle): ShoppingListRow[] {
   return data.assignments
-    .filter((a) => a.status === "received_at_church" && (a.volunteerNotes ?? "").trim())
+    .filter((a) => {
+      if (a.status !== "received_at_church" || !(a.volunteerNotes ?? "").trim()) return false;
+      // On hold for duplicate review — off the shopping list until released
+      // (mirrors `and ch.held_at is null`).
+      const card = data.cards.find((c) => c.id === a.cardId);
+      const child = card ? data.children.find((c) => c.id === card.childId) : undefined;
+      return child ? !isChildOnHold(child) : true;
+    })
     .map((a) => {
       // Non-null assertion relies on the same invariant getOverdueAssignments
       // above does: every assignments row's card is visible under the
@@ -589,7 +709,13 @@ export function getDistributionRows(data: DataBundle): DistributionRow[] {
   return data.families.map((family) => {
     const driveSchool = getDriveSchool(data, family.driveSchoolId);
     const school = driveSchool ? data.schools.find((s) => s.id === driveSchool.schoolId) : null;
-    const familyChildren = data.children.filter((c) => c.familyId === family.id);
+    // Held-for-duplicate-review children (US-38) are excluded from the
+    // distribution rollup — no gift bag goes out while the card is under
+    // review (mirrors `and ch.held_at is null`). The family still appears if it
+    // has other children.
+    const familyChildren = data.children.filter(
+      (c) => c.familyId === family.id && !isChildOnHold(c),
+    );
     const childIds = new Set(familyChildren.map((c) => c.id));
     const familyCards = data.cards.filter((c) => childIds.has(c.childId));
     const deliveredCards = familyCards.filter((c) => getActiveAssignment(data, c.id)?.status === "delivered").length;
@@ -633,9 +759,10 @@ export interface PrintableCardRow {
 export function getPrintableCards(data: DataBundle): PrintableCardRow[] {
   return data.cards
     .filter((card) => {
-      // Mirrors `printable_cards`'s `and not ch.is_high_schooler`.
+      // Mirrors `printable_cards`'s `and not ch.is_high_schooler and
+      // ch.held_at is null`.
       const child = data.children.find((c) => c.id === card.childId);
-      return child ? !child.isHighSchooler : false;
+      return child ? !child.isHighSchooler && !isChildOnHold(child) : false;
     })
     .map((card) => {
       const child = data.children.find((c) => c.id === card.childId)!;
