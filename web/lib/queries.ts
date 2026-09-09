@@ -122,6 +122,20 @@ export function displayFirstName(firstName: string, isConfidential: boolean, vie
   return initial ? `${initial}.` : "";
 }
 
+/**
+ * The intake form stores its "Boy or girl" answer as the raw option value
+ * ("M" / "F" / "Prefer not to say"); staff edits can put free text in the same
+ * column. Render "M"/"F" as "Boy"/"Girl" for the shopping team, pass anything
+ * else through untouched.
+ */
+export function displayChildGender(sex: string | null): string | null {
+  const t = (sex ?? "").trim();
+  if (!t) return null;
+  if (t === "M") return "Boy";
+  if (t === "F") return "Girl";
+  return t;
+}
+
 export interface CardsNeedingPrintRow {
   childId: string;
   firstName: string;
@@ -640,7 +654,12 @@ export interface ShoppingListRow {
   isConfidential: boolean;
   status: AssignmentStatus;
   notes: string;
-  sponsorName: string;
+  // Shown so the shopping team can buy clothes without opening the card.
+  age: number | null;
+  sex: string | null;
+  shirtSize: string | null;
+  pantSize: string | null;
+  shoeSize: string | null;
   daysSinceClaimed: number;
 }
 
@@ -670,7 +689,6 @@ export function getShoppingList(data: DataBundle): ShoppingListRow[] {
       // if that ever changes.
       const card = data.cards.find((c) => c.id === a.cardId)!;
       const child = data.children.find((c) => c.id === card.childId)!;
-      const sponsor = data.sponsors.find((s) => s.id === a.sponsorId)!;
       return {
         assignmentId: a.id,
         cardNumber: getChildCardNumber(data, child),
@@ -678,7 +696,11 @@ export function getShoppingList(data: DataBundle): ShoppingListRow[] {
         isConfidential: getFamily(data, child.familyId).isConfidential,
         status: a.status,
         notes: (a.volunteerNotes ?? "").trim(),
-        sponsorName: sponsor.name,
+        age: child.age,
+        sex: child.sex,
+        shirtSize: child.shirtSize,
+        pantSize: child.pantSize,
+        shoeSize: child.shoeSize,
         daysSinceClaimed: daysSince(a.claimedAt),
       };
     })

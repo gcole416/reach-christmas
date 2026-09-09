@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/lib/store";
-import { displayFirstName, getShoppingList } from "@/lib/queries";
+import { displayChildGender, displayFirstName, getShoppingList } from "@/lib/queries";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AdminPageHeader } from "../AdminPageHeader";
 
@@ -19,10 +19,20 @@ export default function ShoppingListPage() {
   if (!data) return null;
 
   const isAdmin = viewerRole === "admin";
-  const rows = getShoppingList(data).map((row) => ({
-    ...row,
-    displayName: displayFirstName(row.childFirstName, row.isConfidential, isAdmin),
-  }));
+  const rows = getShoppingList(data).map((row) => {
+    const specs = [
+      row.age !== null ? `Age ${row.age}` : null,
+      displayChildGender(row.sex),
+      row.shirtSize ? `Shirt ${row.shirtSize}` : null,
+      row.pantSize ? `Pants ${row.pantSize}` : null,
+      row.shoeSize ? `Shoes ${row.shoeSize}` : null,
+    ].filter(Boolean) as string[];
+    return {
+      ...row,
+      displayName: displayFirstName(row.childFirstName, row.isConfidential, isAdmin),
+      specs,
+    };
+  });
 
   async function handleMarkVerified(assignmentId: string) {
     setBusyId(assignmentId);
@@ -72,9 +82,14 @@ export default function ShoppingListPage() {
                   </span>
                   <StatusBadge status={row.status} />
                 </div>
+                {row.specs.length > 0 ? (
+                  <p className="mt-1 text-xs text-ink-secondary print:text-black">
+                    {row.specs.join(" · ")}
+                  </p>
+                ) : null}
                 <p className="mt-2 text-ink-secondary print:text-black">{row.notes}</p>
                 <p className="mt-2 text-xs text-ink-muted print:text-black">
-                  Sponsor: {row.sponsorName} · claimed {row.daysSinceClaimed}d ago
+                  Claimed {row.daysSinceClaimed}d ago
                 </p>
                 {rowError?.id === row.assignmentId ? (
                   <p className="mt-2 text-xs text-status-critical">{rowError.message}</p>

@@ -1350,6 +1350,103 @@ page, badges, and per-child controls — done), reach-reviewer (mandatory gate)
 
 ---
 
+## US-39: Form V2 — require a contact email + confirmation-screen rewording
+
+As the drive, I want every registration to carry an email we can send updates
+to, and I want the confirmation screen to tell the family what happens next and
+how they'll hear from us, so nobody registers and then hears nothing.
+
+Requested by Grant, 2026-09-09. Cuts a new form version (**v3**).
+
+Decisions (Grant, 2026-09-09):
+- **One required email field**, not a separate counselor-email field. The
+  existing `guardian_email` field becomes `required: true`; help text tells a
+  family with no email of their own to have the counselor enter one (or a
+  trusted contact's). No new field ids, so `import_submission`'s contract is
+  untouched. The counselor can still add/fix the email at the review step.
+- **"OneLife Church" everywhere in the form definition**, replacing "Reach
+  Church" (consent checkbox, confirmation). App-wide "Reach Church" usage
+  (`web/components/intake/PublicShell.tsx`, `web/app/review/[token]/RosterView.tsx`,
+  and anywhere else) is **flagged for a follow-up**, not done here.
+- **Confirmation body reworded**, heading kept ("Thank you. Your registration
+  is in."). New body: "Your registration is with your school counselor now.
+  They'll confirm it and pass it along to OneLife Church. You will receive
+  further information via the email you provided. If you do not have an email,
+  your counselor will relay further information."
+
+Acceptance criteria:
+- [x] Definition change in all three synced copies —
+  [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts),
+  [supabase/publish_intake_form.sql](../supabase/publish_intake_form.sql),
+  [supabase/intake_demo_seed.sql](../supabase/intake_demo_seed.sql): `guardian_email`
+  → `label: "Email address"`, `required: true`, new `help` string; consent label
+  → "OneLife Church"; `confirmation.body` → the new text. Field **ids** untouched.
+- [x] `FamilyForm.tsx` hardcoded confirmation fallback string kept in sync.
+- [x] `validate.ts` email message: "...or leave it blank" only when the field is
+  optional; a required email that is malformed says "Please enter a valid email
+  address." (blank still hits the generic "Email address is required.")
+- [x] Server enforcement needs **no migration** — `intake_validate_field` reads
+  `required` from the pinned definition, same path US-30/US-31 relied on. Known
+  cosmetic nit: the SQL function's own email-format message still ends "...or
+  leave it blank"; it only surfaces if client JS is bypassed AND a malformed
+  address is sent, so it's left for the next intake migration rather than opening
+  a reach-reviewer gate now.
+- [x] e2e helper `web/tests/e2e/helpers/intake.ts` now fills `guardian_email`
+  (defaults to `family@demo.example.com`) so the walkthrough specs still pass.
+- [x] `tsc` / `eslint` / `next build` clean.
+- [ ] **dev publish:** Grant runs `supabase/publish_intake_form.sql` on dev to
+  cut **form-version v3**. Existing registration links stay pinned to v2 until
+  new ones are created; re-run `intake_demo_seed.sql` (or make a fresh link) to
+  demo the new wording.
+- [ ] **dev only; prod untouched.** No migration, no RLS/view/function change →
+  no reach-reviewer gate; code-reviewer pass before Done.
+- [ ] Spanish: the new email help text and confirmation body need a fluent
+  translation before an ES form version ships (tracked in INTAKE_FORM_DRAFT.md).
+
+Status: **Built on `dev` this session** (not yet committed at time of writing).
+`tsc` / `eslint` / `next build` clean; both SQL definition blobs re-parsed and
+verified byte-consistent with the TS copy. Outstanding: commit + push, dev
+publish by Grant, code-reviewer pass, and the app-wide "Reach Church" follow-up.
+Owner: (built this session) — frontend-designer surface + the two intake SQL
+files. Files: [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts),
+[web/app/form/[token]/FamilyForm.tsx](../web/app/form/[token]/FamilyForm.tsx),
+[web/app/form/[token]/validate.ts](../web/app/form/[token]/validate.ts),
+[supabase/publish_intake_form.sql](../supabase/publish_intake_form.sql),
+[supabase/intake_demo_seed.sql](../supabase/intake_demo_seed.sql),
+[web/tests/e2e/helpers/intake.ts](../web/tests/e2e/helpers/intake.ts).
+
+---
+
+## US-40: Shopping list shows child sizes, not the sponsor
+
+As the shopping team buying gifts (including clothes) off the volunteer notes, I
+want each row on the shopping list to show the child's age, gender, and sizes,
+and I don't need the sponsor's name there.
+
+Requested by Grant, 2026-09-09.
+
+Acceptance criteria:
+- [x] `/admin/shopping-list` rows keep first name + card ID and add a line: age,
+  gender ("M"/"F" rendered "Boy"/"Girl" via `displayChildGender`; other values
+  pass through), shirt / pant / shoe size. Missing values are omitted, not shown
+  blank.
+- [x] Sponsor name removed from the row. `ShoppingListRow.sponsorName` dropped
+  from `getShoppingList` (nothing else read it); the "claimed Nd ago" line stays.
+- [x] Staff/admin surface only — no change to `public_available_cards` or any
+  anon path. Confidential children never reach this list (`claim_card` refuses
+  confidential cards), and the first-name redaction that was already here is
+  untouched.
+- [x] `tsc` / `eslint` / `next build` clean. No shopping-list e2e exists to update.
+- [ ] **dev only; prod untouched.** No migration / RLS / view change → code-reviewer
+  pass before Done, no reach-reviewer gate.
+
+Status: **Built on `dev` this session** (not yet committed at time of writing).
+Owner: (built this session) — frontend-designer surface. Files:
+[web/app/admin/shopping-list/page.tsx](../web/app/admin/shopping-list/page.tsx),
+[web/lib/queries.ts](../web/lib/queries.ts).
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
