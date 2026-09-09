@@ -1040,9 +1040,29 @@ added to the three views. Smaller, more auditable surface for the gate.
 **Migration applied to dev by Grant 2026-09-08.** Live-verified via US-36:
 `public_available_cards` as a genuine anon client excludes a grade-10 card and
 keeps the grade-3 one; the INSERT trigger classifies a hand-inserted grade-11
-child; the wishlist trigger drops rows for a high schooler. **Outstanding:
-reach-reviewer gate; prod untouched.**
-Owner: database-engineer (migration, view, data layer — built this session), reach-reviewer (mandatory gate)
+child; the wishlist trigger drops rows for a high schooler.
+
+**reach-reviewer gate: PASSED 2026-09-08 — "clean, no high or critical findings,
+safe to promote to prod."** All ten invariants checked; `intake_validate_field`
+confirmed byte-equivalent to the original apart from the SELF-SHOPPER early
+return; `public_available_cards` confirmed character-identical to
+`20260818120000` plus the one inner predicate. Three informational notes, none
+blockers:
+1. **SAR note:** the SELF-SHOPPER validation skip is coupled to
+   `is_high_schooler` tracking grade. If staff *manually clear* the flag on a
+   grade 9–12 child, that card re-enters `public_available_cards` with gift
+   fields that were never server-validated at submit. Bounded by
+   `import_submission`'s `left()` truncation (sizes ≤ ~80, notes ≤ 500 — not the
+   unbounded H1 class) and requires a deliberate staff action that contradicts
+   the grade. Documented, not fixed.
+2. `wishlist_items_skip_high_schooler` is `security definer` where `invoker`
+   would do — not exploitable (trigger return type, no data-out path). Optional
+   least-privilege downgrade; left as-is.
+3. The backfill `UPDATE` fires `set_updated_at` + `audit_children` for every
+   reclassified row at apply time. Expected, harmless.
+
+**Outstanding: prod untouched (needs SAR).**
+Owner: database-engineer (migration, view, data layer — built this session), reach-reviewer (gate — PASSED)
 
 ---
 
@@ -1222,8 +1242,10 @@ the distribution page. Left as a possible follow-up if cross-school households
 turn out to be common enough to matter operationally — revisit in November.
 
 Status: **In review** — built this session on `dev`. No migration (pure
-client-side derivation over data staff already load). code-reviewer pass before
-Done.
+client-side derivation over data staff already load). Covered by the
+2026-09-08 reach-reviewer pass on the epic: "cannot surface a household the
+viewer can't already see; both links target RLS-gated routes; non-blocking."
+code-reviewer pass before Done.
 Owner: frontend-designer — built this session
 
 ---
