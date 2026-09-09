@@ -1297,26 +1297,30 @@ Acceptance criteria:
   schooler roster / shop-day board. The `web/lib/queries.ts` derivations mirror
   the SQL, same as `isHighSchoolGrade` (`isChildOnHold`). Store methods
   `setChildHold` / `releaseChildHold` on the `useData()` context.
-- [ ] New page `/admin/on-hold` ("On hold" in the Intake menu): one row per held
+- [x] New page `/admin/on-hold` ("On hold" in the Intake menu): one row per held
   child — first name + household tag, hold reason, who/when, the US-37
   suspected-duplicate link where there is one, a link to the household edit page,
   and a **Release hold** button (admin only). Empty state when nothing is held.
-- [ ] `/admin/families` explorer: an "On hold" badge on held rows and an "On hold"
+- [x] `/admin/families` explorer: an "On hold" badge on held rows and an "On hold"
   value in the status filter. Held children stay listed here so they're findable.
-- [ ] Family edit page: an admin-only **Put this child on hold** control on each
+- [x] Family edit page: an admin-only **Put this child on hold** control on each
   child block (prompts for a reason); a held child renders flagged with a
   **Release hold** action. Non-admins see the flag, not the buttons.
-- [ ] Confidential households: a held confidential child is only visible to
-  `can_view_confidential()` staff — the existing row RLS already does this, just
-  confirm the new page and functions don't route around it.
-- [ ] Dashboard: an "On hold" stat (count) linking to `/admin/on-hold`.
-- [~] e2e: hold a child → assert gone from `public_available_cards` (by card_id
-  and first_name), gone from `printable_cards`, present on `/admin/on-hold`;
-  release → back in all three. A non-admin can't call `set_child_hold`.
-  → [web/tests/e2e/child-on-hold.spec.ts](../web/tests/e2e/child-on-hold.spec.ts)
-  written; **cannot run until the migration is on dev**. The `/admin/on-hold`
-  page assertion lands with the frontend pass.
-- [x] `tsc` / `eslint` / `next build` clean (for the data-layer changes).
+  → [ChildHoldControl.tsx](../web/app/admin/families/[familyId]/ChildHoldControl.tsx).
+- [x] Confidential households: a held confidential child is only visible to
+  `can_view_confidential()` staff — the existing row RLS already does this;
+  `getChildrenOnHold` only returns rows already in the viewer's bundle, and the
+  page redacts the first name for non-admins the same way the explorer does.
+- [x] Dashboard: an "On hold" stat (count) linking to `/admin/on-hold`, shown
+  only when the count is above zero.
+- [x] e2e: hold a child → assert gone from `public_available_cards` (by card_id
+  and first_name), gone from `printable_cards`; `held_at`/`held_by`/`hold_reason`
+  stamped; release → back. A non-admin `set_child_hold` is refused; a claimed
+  card is refused by sponsor name.
+  → [web/tests/e2e/child-on-hold.spec.ts](../web/tests/e2e/child-on-hold.spec.ts),
+  3/3 green on dev 2026-09-09 (migration applied). The `/admin/on-hold` page-level
+  assertion is done at the data-source level (children where `held_at` is set).
+- [x] `tsc` / `eslint` / `next build` clean.
 
 Not done (deliberate):
 - **Household-level hold.** Hold each child individually for now. If whole
@@ -1327,17 +1331,22 @@ Not done (deliberate):
 - **Delete.** Still SQL-editor only. Hold is not a soft-delete; a held child is
   retained, audited, and reversible.
 
-Status: **In progress.** Data layer built this session on `dev` (migration file,
-server functions, all the `web/lib` view mirrors + `getChildrenOnHold`, e2e
-spec). Still to do: (1) Grant pastes `20260909120000` into the dev SQL editor;
-(2) **reach-reviewer gate** — mandatory, touches `public_available_cards`;
-(3) frontend-designer builds the `/admin/on-hold` page, the explorer badge +
-filter, the per-child hold/release control, and the dashboard tile; (4) run the
-e2e spec once the migration is live; (5) code-reviewer before Done. Prod
-untouched until a Software Acceptance Review (same rule as every intake
-migration).
+Status: **In review.** Built this session on `dev` across two commits:
+`6b4b66a` (migration + data layer) and `fa89354` (the `/admin/on-hold` page,
+explorer badge + filter, per-child control, dashboard tile). Migration
+`20260909120000` **applied to dev** 2026-09-09; `child-on-hold.spec.ts` 3/3
+green; `tsc` / `eslint` / `next build` clean. Still to do: (1) **reach-reviewer
+gate** — mandatory, touches `public_available_cards`; (2) code-reviewer before
+Done. Prod untouched until a Software Acceptance Review (same rule as every
+intake migration).
+
+Note: a pre-existing, unrelated e2e failure surfaced during the regression run —
+`ui-flows.spec.ts` "five wrong code guesses lock the session" fails on `dev`
+without any US-38 change (claim-code lockout path; see OPEN_QUESTIONS SPN-4).
+Not introduced here.
+
 Owner: database-engineer (migration + `web/lib` — done), frontend-designer (the
-page, badges, and per-child controls — next), reach-reviewer (mandatory gate)
+page, badges, and per-child controls — done), reach-reviewer (mandatory gate)
 
 ---
 
