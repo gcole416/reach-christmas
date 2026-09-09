@@ -38,7 +38,11 @@ export default function AdminPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div
+        className={`grid grid-cols-2 gap-4 sm:grid-cols-3 ${
+          stats.onHoldCount > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"
+        }`}
+      >
         <StatTile label="Children registered" value={stats.totalChildren} />
         <StatTile
           label="High schoolers"
@@ -52,6 +56,14 @@ export default function AdminPage() {
         />
         <StatTile label="Gifts delivered" value={stats.cardsDelivered} />
         <StatTile label="Sponsors overdue" value={stats.overdueCount} />
+        {stats.onHoldCount > 0 ? (
+          <StatTile
+            label="On hold"
+            value={stats.onHoldCount}
+            hint="Duplicate review"
+            href="/admin/on-hold"
+          />
+        ) : null}
       </div>
 
       <section className="mt-12">

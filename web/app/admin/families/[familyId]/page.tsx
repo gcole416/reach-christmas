@@ -6,6 +6,7 @@ import { useData } from "@/lib/store";
 import { TextAreaField } from "@/components/TextAreaField";
 import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/ChildFormFields";
 import { getHouseholdTag } from "@/lib/queries";
+import { ChildHoldControl } from "./ChildHoldControl";
 import type { DataBundle } from "@/lib/types";
 import { AdminNav } from "../../AdminNav";
 import { AdminPageHeader } from "../../AdminPageHeader";
@@ -17,6 +18,11 @@ import { AdminPageHeader } from "../../AdminPageHeader";
 const PARTIAL_SAVE_NOTICE = "Other changes on this page may already be saved.";
 
 const SAVED_NOTICE = "Changes saved.";
+
+// A hold/release lands through the store on its own (US-38), separately from
+// the family form's Save button. It still reseeds the form afterwards so the
+// per-child updated_at baselines stay fresh for the next save.
+const HOLD_NOTICE = "Hold updated.";
 
 function seedChildren(data: DataBundle, familyId: string): ChildFormState[] {
   const familyChildren = data.children
@@ -85,6 +91,7 @@ export default function FamilyEditPage({ params }: { params: Promise<{ familyId:
       initialSuccessMessage={savedNotice}
       onSaved={() => reseed(SAVED_NOTICE)}
       onReloaded={() => reseed(null)}
+      onHoldChanged={() => reseed(HOLD_NOTICE)}
     />
   );
 }
@@ -94,11 +101,13 @@ function FamilyEditForm({
   initialSuccessMessage,
   onSaved,
   onReloaded,
+  onHoldChanged,
 }: {
   familyId: string;
   initialSuccessMessage: string | null;
   onSaved: () => void;
   onReloaded: () => void;
+  onHoldChanged: () => void;
 }) {
   const { data, refresh, saveFamilyEdit } = useData();
 
@@ -288,17 +297,21 @@ function FamilyEditForm({
 
         <div className="space-y-4">
           {children.map((child, idx) => (
-            <ChildFormFields
-              key={child.key}
-              child={child}
-              index={idx}
-              canRemove={children.length > 1}
-              onChange={(patch) => updateChild(child.key, patch)}
-              onRemove={() => removeChildBlock(child.key)}
-              onWishlistChange={(wIdx, value) => updateWishlistItem(child.key, wIdx, value)}
-              onAddWishlistItem={() => addWishlistItem(child.key)}
-              onRemoveWishlistItem={(wIdx) => removeWishlistItem(child.key, wIdx)}
-            />
+            <div key={child.key}>
+              <ChildFormFields
+                child={child}
+                index={idx}
+                canRemove={children.length > 1}
+                onChange={(patch) => updateChild(child.key, patch)}
+                onRemove={() => removeChildBlock(child.key)}
+                onWishlistChange={(wIdx, value) => updateWishlistItem(child.key, wIdx, value)}
+                onAddWishlistItem={() => addWishlistItem(child.key)}
+                onRemoveWishlistItem={(wIdx) => removeWishlistItem(child.key, wIdx)}
+              />
+              {child.id ? (
+                <ChildHoldControl childId={child.id} onChanged={onHoldChanged} />
+              ) : null}
+            </div>
           ))}
         </div>
 

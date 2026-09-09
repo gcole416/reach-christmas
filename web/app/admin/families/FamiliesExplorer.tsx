@@ -41,6 +41,7 @@ export function FamiliesExplorer() {
         cardNumber: card.cardNumber,
         status: card.status,
         isHighSchooler: child.isHighSchooler,
+        isOnHold: child.heldAt != null,
         sponsorName: card.sponsorName,
       }))
     )
@@ -56,7 +57,12 @@ export function FamiliesExplorer() {
           : schoolFilter === "direct"
             ? !row.isConfidential && row.driveSchoolId === null
             : row.driveSchoolId === schoolFilter;
-    const statusMatches = statusFilter === "all" || row.status === statusFilter;
+    const statusMatches =
+      statusFilter === "all"
+        ? true
+        : statusFilter === "on-hold"
+          ? row.isOnHold
+          : row.status === statusFilter;
     const searchMatches =
       !q ||
       [
@@ -66,6 +72,7 @@ export function FamiliesExplorer() {
         row.cardNumber,
         row.sponsorName ?? "",
         row.isHighSchooler ? "high schooler shop day" : "",
+        row.isOnHold ? "on hold duplicate review" : "",
       ]
         .join(" ")
         .toLowerCase()
@@ -153,6 +160,7 @@ export function FamiliesExplorer() {
                 {s.label}
               </option>
             ))}
+            <option value="on-hold">On hold</option>
           </select>
         </label>
 
@@ -214,13 +222,24 @@ export function FamiliesExplorer() {
                 <td className="px-4 py-3 text-ink-secondary">{row.grade ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-secondary">{row.cardNumber}</td>
                 <td className="px-4 py-3">
-                  {row.isHighSchooler ? (
-                    <span className="inline-flex items-center rounded-full bg-cat-blue/10 px-2.5 py-1 text-xs font-medium text-cat-blue">
-                      High schooler · shop day
-                    </span>
-                  ) : (
-                    <StatusBadge status={row.status} />
-                  )}
+                  <div className="flex flex-col items-start gap-1">
+                    {row.isOnHold ? (
+                      <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-status-serious/15 px-2.5 py-1 text-xs font-medium text-ink-primary">
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-serious"
+                          aria-hidden="true"
+                        />
+                        On hold
+                      </span>
+                    ) : null}
+                    {row.isHighSchooler ? (
+                      <span className="inline-flex items-center rounded-full bg-cat-blue/10 px-2.5 py-1 text-xs font-medium text-cat-blue">
+                        High schooler · shop day
+                      </span>
+                    ) : (
+                      <StatusBadge status={row.status} />
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-ink-secondary">
                   {row.isHighSchooler ? "—" : row.sponsorName ?? "—"}

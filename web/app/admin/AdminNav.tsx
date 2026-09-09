@@ -32,6 +32,7 @@ const NAV: NavItem[] = [
       { href: "/admin/families", label: "Households" },
       { href: "/admin/high-schoolers", label: "High schoolers" },
       { href: "/admin/intake", label: "Add a household" },
+      { href: "/admin/on-hold", label: "On hold" },
     ],
   },
   {
