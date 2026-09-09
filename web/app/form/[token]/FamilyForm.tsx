@@ -491,9 +491,9 @@ function ShopDayNote() {
     <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
       <p className="font-semibold text-ink-primary">This child shops for their own gifts.</p>
       <p className="mt-1">
-        High schoolers are invited to a shopping day at {SHOP_DAY_STORE} on {SHOP_DAY_DATE} to pick
-        out their own gifts, so we don&apos;t need a wish list or sizes for them here. Your school
-        counselor will share the details closer to the date.
+        High schoolers are invited to a store shopping day to pick out their own gifts, so we
+        don&apos;t need a wish list or sizes for them here. It&apos;s at {SHOP_DAY_STORE} on{" "}
+        {SHOP_DAY_DATE}. Your school counselor will share the details closer to the date.
       </p>
       <p className="mt-1">Just their first name, age, and grade above is all we need.</p>
     </div>
