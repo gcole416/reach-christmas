@@ -19,7 +19,7 @@ import { childCountLabel, formatDate } from "@/components/intake/format";
 import { SubmissionStatusBadge } from "@/components/intake/SubmissionStatusBadge";
 import { FormLinkPanel } from "./FormLinkPanel";
 import { CopyLinkButton } from "./CopyLinkButton";
-import { STATUS_GROUPS, channelLabel, guardianName } from "./shared";
+import { STATUS_GROUPS, channelLabel, findHouseholdMatches, guardianName } from "./shared";
 
 // The staff queue (US-23) — every registration in the open drive, grouped by
 // what still has to happen to it.
@@ -185,6 +185,10 @@ export function SubmissionsQueue() {
                 <ul className="mt-3 space-y-2">
                   {rows.map((submission) => {
                     const source = channelLabel(data, submission.driveSchoolId);
+                    const matches =
+                      group.key === "rejected"
+                        ? []
+                        : findHouseholdMatches(submission, submissions, data);
                     return (
                       <li key={submission.id}>
                         <Link
@@ -211,6 +215,25 @@ export function SubmissionsQueue() {
                             </div>
                           </div>
                         </Link>
+                        {matches.length > 0 ? (
+                          <p className="mt-1 px-4 text-xs text-ink-secondary">
+                            <span className="font-medium text-status-warning">
+                              Possibly the same household
+                            </span>{" "}
+                            (same guardian phone) as{" "}
+                            {matches.map((m, i) => (
+                              <span key={m.href}>
+                                {i > 0 ? ", " : ""}
+                                <Link href={m.href} className="text-cat-blue hover:underline">
+                                  {m.label}
+                                </Link>
+                                {m.differentSchool ? " (different school)" : ""}
+                              </span>
+                            ))}
+                            . They import as separate records on purpose; note the link if it
+                            matters at distribution.
+                          </p>
+                        ) : null}
                       </li>
                     );
                   })}

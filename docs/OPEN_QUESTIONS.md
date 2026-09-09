@@ -429,15 +429,25 @@ exists; the open part is "why", and whether that's worth a required note.
 - Code: [web/app/admin/staff/page.tsx](../web/app/admin/staff/page.tsx), [supabase/migrations/20260708130000_profiles_staff_management.sql](../supabase/migrations/20260708130000_profiles_staff_management.sql)
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #4
 
-### DB-23 — Can a referral ever split siblings across schools or confidential status? · Whenever
+### DB-23 — Can a referral ever split siblings across schools or confidential status? · ~~Whenever~~ Resolved
 
 DESIGN.md §8 treats this as **resolved** — a cross-school household becomes two
 separate `Family` records, one per school, because `Family` is a
-distribution-day grouping convenience and not a household model. It's restated
-here only because backlog.md still carries it as open. Confirm the resolution
-holds and it can be struck.
+distribution-day grouping convenience and not a household model.
 
-- Code: [DESIGN.md:121-129](../DESIGN.md#L121), [SCHEMA.md:569-572](../SCHEMA.md#L569)
+**Confirmed (Grant, 2026-09-08).** The split stays; no merge, no "household
+group" model. Per-school links stay too — each counselor vouches only for their
+own school's kids. The intake form makes the split more visible (a guardian
+fills one form per school), so the staff queue now carries a **soft
+cross-school hint**: when a pending registration shares a guardian phone with an
+already-imported household (or another pending one), the queue and the
+submission detail page flag "Possibly the same household as Household N3
+(different school)". It is a hint, never a blocker — staff still import both.
+See **US-37** in [backlog.md](backlog.md). The high-schooler split (US-32)
+softens the most common case anyway: an elementary household goes through
+church pickup while its high-school sibling goes to the shop day independently.
+
+- Code: [DESIGN.md:121-129](../DESIGN.md#L121), [SCHEMA.md:569-572](../SCHEMA.md#L569), [web/app/admin/submissions/shared.ts](../web/app/admin/submissions/shared.ts) `findHouseholdMatches`
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #5
 
 ### DB-24 — Is the school list fixed year to year, or does it need an "inactive school" flag? · Whenever

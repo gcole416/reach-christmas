@@ -14,7 +14,7 @@ import {
 } from "@/lib/intake";
 import { childCountLabel, formatDateTime } from "@/components/intake/format";
 import { SubmissionStatusBadge } from "@/components/intake/SubmissionStatusBadge";
-import { channelLabel, guardianName } from "../shared";
+import { channelLabel, findHouseholdMatches, guardianName } from "../shared";
 
 // One registration in full, for staff (US-23).
 //
@@ -165,6 +165,31 @@ export function SubmissionDetail({ submissionId }: { submissionId: string }) {
             <span className="font-medium">Counselor&apos;s note:</span> {submission.resolutionNote}
           </p>
         ) : null}
+
+        {/* Soft cross-school hint (INTAKE_FORMS §3): a household with kids at
+            more than one school registers once per school and imports as one
+            record per school (by design). Matched on guardian phone; passing
+            [] means "check already-imported households only". */}
+        {(() => {
+          const matches = findHouseholdMatches(submission, [], data);
+          if (matches.length === 0) return null;
+          return (
+            <p className="mt-4 rounded-lg bg-status-warning/10 px-3 py-2 text-sm text-ink-primary">
+              <span className="font-medium text-status-warning">Possibly the same household</span> as{" "}
+              {matches.map((m, i) => (
+                <span key={m.href}>
+                  {i > 0 ? ", " : ""}
+                  <Link href={m.href} className="text-cat-blue hover:underline">
+                    {m.label}
+                  </Link>
+                  {m.differentSchool ? " (different school)" : ""}
+                </span>
+              ))}{" "}
+              (same guardian phone). Importing this creates a separate record on purpose. Note the
+              connection on both households if it matters at distribution.
+            </p>
+          );
+        })()}
       </section>
 
       <ImportPanel

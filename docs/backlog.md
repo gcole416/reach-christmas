@@ -1193,6 +1193,41 @@ Owner: qa-tester — spec drafted + run this session
 
 ---
 
+## US-37: Cross-school household hint in the staff queue
+
+As a staff member importing registrations, I want to be told when a
+registration is probably the same household as one I've already imported (at a
+different school), so that I'm not surprised at distribution and can note the
+connection.
+
+Prompted by Grant during the US-32 work (2026-09-08). A household with kids at
+more than one school fills out one form per school (per-school links stay — each
+counselor vouches only for their own kids) and imports as **one record per
+school**. That split is by design ([DESIGN.md §8](../DESIGN.md), OPEN_QUESTIONS
+DB-23) — `Family` is a distribution-day grouping, not a household model, and
+merging would break per-school card/household numbering. Decision (Grant,
+2026-09-08): **hint only, no merge, no "household group" model.**
+
+Acceptance criteria:
+- [x] `findHouseholdMatches` in [web/app/admin/submissions/shared.ts](../web/app/admin/submissions/shared.ts): matches a submission against already-imported `families` and other pending submissions **on normalized guardian phone** (last 10 digits — the one field a guardian re-types identically on both forms). Name is not used (too loose). A phone under 10 digits yields no match.
+- [x] The staff queue (`SubmissionsQueue.tsx`) shows, under any non-rejected row with a match: "Possibly the same household (same guardian phone) as Household N3 (different school). They import as separate records on purpose; note the link if it matters at distribution." The household tag / other registration is a link.
+- [x] The submission detail page (`SubmissionDetail.tsx`) shows the same hint as a banner above the Import panel — matched against imported households only (it doesn't load the full queue).
+- [x] It is **never a blocker** — Import still works exactly as before. Nothing is auto-linked or auto-rejected.
+- [x] Confidential-channel submissions obey the existing gate: `data.families` and `listSubmissions` already exclude confidential rows for uncleared staff, so an uncleared volunteer's hint can't reveal a confidential household.
+- [x] e2e: [web/tests/e2e/submissions-dedup.spec.ts](../web/tests/e2e/submissions-dedup.spec.ts) — import household A, submit household B with the same phone, assert the hint appears on B's queue row and names A's household on B's detail page. Green on dev.
+- [x] `tsc` / `eslint` / `next build` clean.
+
+Not done (deliberate): a "link these two households" action that groups them on
+the distribution page. Left as a possible follow-up if cross-school households
+turn out to be common enough to matter operationally — revisit in November.
+
+Status: **In review** — built this session on `dev`. No migration (pure
+client-side derivation over data staff already load). code-reviewer pass before
+Done.
+Owner: frontend-designer — built this session
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
