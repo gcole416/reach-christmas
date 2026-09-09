@@ -1140,14 +1140,24 @@ Status: **In review** — built this session on `dev`. `tsc` / `eslint` / `next 
 Storage: **columns on `children`** (`shop_day_status` enum `not_contacted`/`invited`/
 `confirmed`/`attended`, `shop_day_notes text`) in migration 20260908130000 — no new
 table, so the existing `children` RLS + audit trigger cover it. New
-[web/app/admin/high-schoolers/page.tsx](../web/app/admin/high-schoolers/page.tsx):
-count tiles (click to filter), school + status + search filters, inline status
-select + notes (save on change / blur via `setShopDayTracking` in `store.tsx`),
-"Copy roster (CSV)" to clipboard. Dashboard gains a "High schoolers" tile;
-"Children registered" now counts sponsored kids only (`getDashboardStats` reworked).
-`AdminNav` gains the tab. **Export is copy-to-clipboard CSV, not a download or a
-dedicated print view** — enough for Phase 1; revisit if staff want a file.
-Owner: frontend-designer (page, tile, export), database-engineer (columns + `setShopDayTracking`) — built this session
+[web/app/admin/high-schoolers/page.tsx](../web/app/admin/high-schoolers/page.tsx)
+with **two views** (toggle):
+- **Roster** — one row per teen, contact info, inline status select + notes,
+  "Copy roster (CSV)" to clipboard, school + status + search filters.
+- **Board** (added 2026-09-08 on Grant's ask — a card sitting at "unclaimed" with
+  no pipeline was the gap): columns per shop-day stage, one card per teen, a
+  "Mark [next]" / "Back" button pair, mirrors `/admin/fulfillment`. Stages are
+  the four above; **no-shows are handled offline** (Grant, 2026-09-08) — the
+  board just shows who didn't reach Attended.
+
+Both write through `setShopDayTracking` in `store.tsx`. Dashboard gains a
+"High schoolers" tile; "Children registered" now counts sponsored kids only
+(`getDashboardStats` reworked). `AdminNav` gains the tab. Shared constants
+(`SHOP_DAY_STATUS_ORDER` / `_LABELS` / `NEXT_SHOP_DAY_STATUS`) in `queries.ts`.
+**Export is copy-to-clipboard CSV, not a file download** — enough for Phase 1.
+e2e: `high-schoolers.spec.ts` covers the board advancing a teen through the
+pipeline (7/7 green on dev).
+Owner: frontend-designer (page, tile, board, export), database-engineer (columns + `setShopDayTracking`) — built this session
 
 ---
 

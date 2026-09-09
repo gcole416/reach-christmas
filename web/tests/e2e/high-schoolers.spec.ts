@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { anonClient } from "./helpers/testClient";
+import { anonClient, loginAsInBrowser } from "./helpers/testClient";
 import {
   sharedAdmin,
   DEMO_FORM_TOKEN,
@@ -256,6 +256,42 @@ test.describe("high schooler split (US-36)", () => {
     await child.getByLabel("Grade").selectOption("3");
     await expect(child.getByText(/what would they like for christmas/i)).toBeVisible();
     await expect(child.getByLabel("Shirt size")).toBeVisible();
+  });
+
+  test("the shop-day board advances a teen through the pipeline", async ({ page }) => {
+    const tag = runTag();
+    const guardian = autotestGuardian(tag);
+    const admin = await sharedAdmin();
+
+    const submission = await verifiedSubmission(
+      guardian,
+      household(guardian, [highSchoolerChild(tag, "Board", "10")]),
+    );
+    const imported = await rpcImportSubmission(admin, submission.id);
+    expect((imported.data as Json).ok).toBe(true);
+    const childId = (
+      await admin
+        .from("children")
+        .select("id")
+        .eq("family_id", (imported.data as Json).family_id as string)
+        .single()
+    ).data!.id as string;
+
+    await loginAsInBrowser(page, "admin");
+    await page.goto("/admin/high-schoolers");
+    await page.getByPlaceholder(/name, household, guardian/i).fill(`Zzautotest${tag}`);
+    await page.getByRole("button", { name: "board" }).click();
+
+    // Starts in "Not contacted" -> Mark invited -> Mark confirmed.
+    await page.getByRole("button", { name: /mark invited/i }).click();
+    await expect(page.getByRole("button", { name: /mark confirmed/i })).toBeVisible();
+
+    const { data: after } = await admin
+      .from("children")
+      .select("shop_day_status")
+      .eq("id", childId)
+      .single();
+    expect((after as Json).shop_day_status).toBe("invited");
   });
 
   test("a hand-inserted grade-11 child is auto-classified by the trigger", async () => {

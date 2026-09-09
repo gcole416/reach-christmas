@@ -288,6 +288,30 @@ export function getDashboardStats(data: DataBundle): DashboardStats {
   };
 }
 
+/** The shop-day pipeline (US-35), lowest to highest. `attended` is the end. */
+export const SHOP_DAY_STATUS_ORDER = [
+  "not_contacted",
+  "invited",
+  "confirmed",
+  "attended",
+] as const satisfies readonly Child["shopDayStatus"][];
+
+export const SHOP_DAY_STATUS_LABELS: Record<Child["shopDayStatus"], string> = {
+  not_contacted: "Not contacted",
+  invited: "Invited",
+  confirmed: "Confirmed",
+  attended: "Attended",
+};
+
+/** Which status "Mark next" moves a teen to on the shop-day board. No entry = end of the line. */
+export const NEXT_SHOP_DAY_STATUS: Partial<
+  Record<Child["shopDayStatus"], Child["shopDayStatus"]>
+> = {
+  not_contacted: "invited",
+  invited: "confirmed",
+  confirmed: "attended",
+};
+
 export interface HighSchoolerRow {
   childId: string;
   familyId: string;
