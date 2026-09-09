@@ -311,8 +311,8 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     await expect(honeypot).toHaveAttribute("tabindex", "-1");
 
     // And there is no home-address question anywhere on the form (DESIGN §5).
-    // ("Email address (optional)" is a real label, so this can't just look for
-    // the word "address".)
+    // ("Email address" is a real label, so this can't just look for the word
+    // "address".)
     await expect(
       page.getByText(/street address|home address|mailing address|zip code|apartment/i)
     ).toHaveCount(0);

@@ -609,7 +609,7 @@ function Confirmation({
   const heading = definition.confirmation?.heading ?? "Thank you. Your registration is in.";
   const body =
     definition.confirmation?.body ??
-    "Your registration is with your school counselor now. They'll confirm it with Reach Church. There's nothing else you need to do.";
+    "Your registration is with your school counselor now. They'll confirm it and pass it along to OneLife Church. You will receive further information via the email you provided. If you do not have an email, your counselor will relay further information.";
 
   return (
     <PublicPage>

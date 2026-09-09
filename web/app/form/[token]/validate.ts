@@ -192,7 +192,9 @@ function validateField(
   if (field.type === "email" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text)) {
     errors.push({
       field: path,
-      message: "Please enter a valid email address, or leave it blank.",
+      message: field.required
+        ? "Please enter a valid email address."
+        : "Please enter a valid email address, or leave it blank.",
     });
   }
 }

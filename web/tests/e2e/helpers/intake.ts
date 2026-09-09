@@ -194,7 +194,7 @@ export function buildAnswers(input: TestAnswersInput): Record<string, unknown> {
     family: {
       guardian_name: input.guardianName,
       guardian_phone: input.guardianPhone ?? "555-0100",
-      ...(input.guardianEmail ? { guardian_email: input.guardianEmail } : {}),
+      guardian_email: input.guardianEmail ?? "family@demo.example.com",
       preferred_language: input.preferredLanguage ?? "en",
     },
     children: input.children.map((child) => ({
@@ -597,7 +597,7 @@ export async function fillAndSubmitFamilyForm(
 
   await sel("family.guardian_name").fill(input.guardianName);
   await sel("family.guardian_phone").fill(input.guardianPhone ?? "555-0100");
-  if (input.guardianEmail) await sel("family.guardian_email").fill(input.guardianEmail);
+  await sel("family.guardian_email").fill(input.guardianEmail ?? "family@demo.example.com");
   await sel("family.preferred_language").selectOption(input.preferredLanguage ?? "en");
 
   for (let i = 0; i < input.children.length; i += 1) {

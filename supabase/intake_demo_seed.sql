@@ -147,7 +147,7 @@ begin
   "submit_label": "Submit registration",
   "confirmation": {
     "heading": "Thank you. Your registration is in.",
-    "body": "Your registration is with your school counselor now. They'll confirm it with Reach Church. There's nothing else you need to do."
+    "body": "Your registration is with your school counselor now. They'll confirm it and pass it along to OneLife Church. You will receive further information via the email you provided. If you do not have an email, your counselor will relay further information."
   },
   "budget_per_child": "$50",
   "honeypot_field": "favorite_color",
@@ -174,9 +174,10 @@ begin
         },
         {
           "id": "guardian_email",
-          "label": "Email address (optional)",
+          "label": "Email address",
+          "help": "We send registration updates to this email. If you do not have one, ask your school counselor to add theirs so we can reach you.",
           "type": "email",
-          "required": false,
+          "required": true,
           "max_length": 200
         },
         {
@@ -393,7 +394,7 @@ begin
         },
         {
           "id": "consent",
-          "label": "I understand my household's information will be shared with Reach Church and its volunteers.",
+          "label": "I understand my household's information will be shared with OneLife Church and its volunteers.",
           "type": "checkbox",
           "required": true
         }

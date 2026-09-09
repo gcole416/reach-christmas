@@ -52,7 +52,7 @@
 |---|---|---|---|---|---|
 | 1.1 | Parent or guardian name | Nombre del padre, madre o tutor | text | ✅ | `families.guardian_name` |
 | 1.2 | Phone number | Número de teléfono | phone | ✅ | `families.guardian_phone` |
-| 1.3 | Email address (optional) | Correo electrónico (opcional) | email | — | `families.guardian_email` |
+| 1.3 | Email address | Correo electrónico | email | ✅ | `families.guardian_email` |
 | 1.4 | What language should we use to contact you? | ¿En qué idioma prefiere que le contactemos? | select: English / Español | ✅ | `families.preferred_language` |
 
 **Notes:**
@@ -62,6 +62,9 @@
   problem that Spanish-speaking families hit constantly.
 - **1.2 is required** — it's the only reliable way to reach a family about pickup, and DESIGN §7 commits
   to supporting a church pickup event.
+- **1.3 is required as of form v3 (US-39).** Registration updates are emailed. A family with no email of
+  their own enters a counselor's (or trusted contact's) address; help text on the field says so. ES help
+  text still needs a fluent translation.
 - **1.4 defaults to the link's locale** but is asked anyway, because the family filling the Spanish form
   isn't necessarily the person who answers the phone in December.
 
@@ -125,7 +128,7 @@ help text under it:
 | # | Question (EN) | Question (ES) | Type | Required | Lands in |
 |---|---|---|---|---|---|
 | 3.1 | If gifts are distributed at the church, can you get there? | Si los regalos se entregan en la iglesia, ¿puede llegar allí? | select: Yes / No / Not sure | ✅ | ⚠️ **NEW FIELD** |
-| 3.2 | I understand my family's information will be shared with Reach Church and its volunteers. | Entiendo que la información de mi familia será compartida con Reach Church y sus voluntarios. | checkbox | ✅ | `families.consent_given_at` |
+| 3.2 | I understand my family's information will be shared with OneLife Church and its volunteers. | Entiendo que la información de mi familia será compartida con OneLife Church y sus voluntarios. | checkbox | ✅ | `families.consent_given_at` |
 
 **3.1** exists because DESIGN §7 says distribution method varies year to year and isn't decided yet. If
 this year turns out to be church pickup, you need this answer, and you can't collect it retroactively
