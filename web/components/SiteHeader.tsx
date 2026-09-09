@@ -1,6 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function SiteHeader() {
+  const pathname = usePathname();
+  // Inside the staff area the AdminNav already carries a Dashboard tab, so the
+  // top-level "Staff dashboard" link here is just noise.
+  const inAdmin = pathname.startsWith("/admin");
+
   return (
     <header className="border-b border-border bg-surface">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -11,9 +19,11 @@ export function SiteHeader() {
           <Link href="/sponsor" className="hover:text-ink-primary">
             Sponsor a child
           </Link>
-          <Link href="/admin" className="hover:text-ink-primary">
-            Staff dashboard
-          </Link>
+          {!inAdmin ? (
+            <Link href="/admin" className="hover:text-ink-primary">
+              Staff dashboard
+            </Link>
+          ) : null}
         </nav>
       </div>
     </header>
