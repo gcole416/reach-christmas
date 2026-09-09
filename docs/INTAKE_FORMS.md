@@ -1,7 +1,11 @@
 # Self-Hosted Intake Forms — Design & Schema
 
-*Status: DRAFT v2 — open questions from v1 resolved. Not yet merged into [DESIGN.md](DESIGN.md) or
-[SCHEMA.md](SCHEMA.md). Nothing here has been run against a database.*
+*Status: BUILT (Phase 1). The schema is live on **dev** and merged into
+[SCHEMA.md](SCHEMA.md) §12 (US-25, 2026-09-09) — that section is now the
+canonical reference for table shape, function grants and RLS; this file remains
+the design rationale (the "why"). **Not on prod** (no Software Acceptance
+Review). Phase 2 items (Spanish, digest email, duplicate hints beyond the US-37
+phone match, the `needs_followup` report) are still design-only.*
 
 Replaces the Google Forms + volunteer-transcription step in [DESIGN.md §3](DESIGN.md#3-core-workflow)
 with forms we host, version, and import from directly.

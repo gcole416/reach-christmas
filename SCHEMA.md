@@ -1,30 +1,27 @@
-# Database Schema (draft v1)
+# Database Schema
 
-*Status: DRAFT — nothing has been run against a real database yet, so this costs nothing to change.
-Once we scaffold Supabase and real data exists, changes become "migrations" (normal, incremental,
-still very doable) rather than free edits. See [DESIGN.md](DESIGN.md) for the higher-level brainstorm
-this is built from.*
+*Status: LIVE. The base tables (§1–§11) and the counselor-vetted intake tables
+(§12) are all applied to the **dev** Supabase project. **Prod** has the base
+schema through roughly mid-August; the intake feature (`20260830120000` onward)
+and the high-schooler feature (`20260908130000`) are **not on prod** and won't
+be until a Software Acceptance Review clears them — see
+[docs/DEPLOY.md](docs/DEPLOY.md) Phase 0 for how to establish prod's exact state.
+Changes are migrations now, applied by pasting a file into the Supabase SQL
+editor (dev first, always). See [DESIGN.md](DESIGN.md) for the higher-level
+design this is built from.*
 
 Written for Postgres on Supabase (per [DESIGN.md §6](DESIGN.md#6-tech-stack--recommendation)).
 
-> ## ⚠️ This file is incomplete as of 2026-09-01 — six tables are missing
->
-> The counselor-vetted intake feature added **six tables** (`forms`,
-> `form_versions`, `form_links`, `form_submissions`, `review_tokens`,
-> `submission_events`), two enums (`submission_status`, `submission_channel`),
-> ten functions, and ~14 columns on `families`/`children`/`wishlist_items` — and
-> **all of it is applied to the dev database**. None of it is documented below yet.
->
-> Until that merge lands (**US-25** in [docs/backlog.md](docs/backlog.md)), the
-> authoritative reference for that half of the schema is
-> **[docs/INTAKE_FORMS.md](docs/INTAKE_FORMS.md) §5 (tables), §6 (functions), §9 (RLS)**.
-> Read both files before designing anything that touches families, children,
-> wishlist items, or intake — this file alone will tell you columns and tables
-> don't exist when they do.
->
-> The live SQL is always
-> [supabase/migrations/20260830120000_intake_forms.sql](supabase/migrations/20260830120000_intake_forms.sql)
-> and [20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql).
+> **Migration ledger.** There is no `schema_migrations` table (DB-25) — the
+> `supabase/migrations/` directory in filename order *is* the ledger, and every
+> file's header states its own apply status. The ones that matter most for
+> understanding the current shape:
+> [`20260830120000_intake_forms.sql`](supabase/migrations/20260830120000_intake_forms.sql)
+> (the six intake tables + ten functions + §5.7 columns),
+> [`20260903120000_review_link_recopy.sql`](supabase/migrations/20260903120000_review_link_recopy.sql)
+> (`review_tokens.token` plaintext + `issue_review_token()`),
+> [`20260908130000_high_schooler_bucket.sql`](supabase/migrations/20260908130000_high_schooler_bucket.sql)
+> (`children.is_high_schooler` + shop-day tracking + view changes).
 
 ## Conventions
 
@@ -60,6 +57,16 @@ create type drive_status as enum ('draft', 'open', 'closed', 'archived');
 create type distribution_method as enum ('school_dropoff', 'church_pickup');
 create type assignment_status as enum ('pledged', 'purchased', 'received_at_church', 'verified', 'delivered', 'cancelled');
 create type app_role as enum ('admin', 'volunteer');
+
+-- Intake forms (§12), added 20260830120000. `under_review` is a documented but
+-- currently unreachable lifecycle state (a family submission goes
+-- 'submitted' -> 'verified' in one counselor click).
+create type submission_status as enum
+  ('draft', 'submitted', 'under_review', 'verified', 'imported', 'rejected', 'duplicate');
+create type submission_channel as enum ('family', 'counselor', 'staff');
+
+-- High-schooler shop-day tracking (§6), added 20260908130000.
+create type shop_day_status as enum ('not_contacted', 'invited', 'confirmed', 'attended');
 ```
 
 ## 1. `drives` — one row per year's gift drive
@@ -164,8 +171,30 @@ create table families (
   checked_in_by uuid references profiles(id),
   created_by uuid references profiles(id),    -- who submitted this referral, see confidential-access note below
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+
+  -- --- intake-form provenance & contact (20260830120000, §12) --------------
+  -- All NULL on a hand-entered family; populated only by import_submission().
+  -- source_submission_id being set is exactly what tells the two apart.
+  source_submission_id uuid references form_submissions(id),
+  guardian_name text,          -- families had no contact info of its own before this (DB-19)
+  guardian_phone text,         -- the church-pickup workflow needs a phone
+  guardian_email text,
+  preferred_language text not null default 'en',   -- 'en' | 'es' in practice; free text, option list lives in the form definition
+  consent_given_at timestamptz,                    -- stamped from the form's consent checkbox at import
+  can_reach_church_pickup text,                    -- "Yes" | "No" | "Not sure" (INTAKE_FORM_DRAFT §3.1); free text, the answer set may change year to year
+  needs_followup boolean not null default false,   -- INTAKE_FORMS §7 — errors found after the counselor verified are flagged here, not by reopening the submission
+  followup_note text
 );
+
+-- ONE family per submission — the storage-layer floor under import_submission()'s
+-- own advisory-lock + status-re-read idempotency (both of which rest on
+-- form_submissions.status, which an admin can hand-edit). A second import of the
+-- same submission catches this unique_violation and returns the existing family
+-- as `already_imported: true`. Partial so the hundreds of hand-entered families
+-- (NULL source_submission_id) are unaffected.
+create unique index families_one_per_submission
+  on families (source_submission_id) where source_submission_id is not null;
 
 -- family_number is scoped per school, except confidential families which are
 -- scoped per drive instead. The coalesce collapses "no school" (direct
@@ -287,11 +316,56 @@ create table children (
   other_notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (family_id, child_index)
+  unique (family_id, child_index),
+
+  -- --- intake-form provenance (20260830120000, §12) -----------------------
+  source_submission_id uuid references form_submissions(id),   -- NULL = hand-entered; a uuid = came in through a form
+  specific_needs_source text,                                  -- the family's own words, kept beside the English working value (INTAKE_FORMS §4.2); identical in Phase 1 (English only), exists so INTAKE_FORMS §10's drive-close purge can't destroy them
+  other_notes_source text,
+
+  -- --- high-schooler self-shopping bucket (20260908130000, §6.1) ----------
+  is_high_schooler boolean not null default false,             -- grades 9-12; auto-set from grade on INSERT by a trigger, staff-overridable on UPDATE
+  shop_day_status shop_day_status not null default 'not_contacted',
+  shop_day_notes text
 );
 
 create index children_family_id_idx on children (family_id);
+create index children_high_schooler_idx on children (family_id) where is_high_schooler;
 ```
+
+### 6.1 High schoolers — a self-shopping bucket (20260908130000)
+
+Grades 9–12 are invited to a store shopping day to pick their own gifts instead
+of being sponsored (docs/backlog.md US-32…US-37, resolving OPEN_QUESTIONS
+**ADM-19**). They still belong to a household and are still counted, but their
+card must never enter the sponsor pool, the print run, or the fulfilment math.
+
+- **`children.is_high_schooler`** is the flag. A `BEFORE INSERT` trigger
+  (`children_classify_high_schooler`) sets it to `true` when `grade` is `'9'`,
+  `'10'`, `'11'` or `'12'`, so **both** write paths — `import_submission()` and
+  the hand-entry `addFamily`/`saveFamilyEdit` in `web/lib/store.tsx` — get it for
+  free. The trigger fires **only on INSERT**, so a staff override on the
+  family-edit form (an UPDATE) is never re-decided. It only ever sets the flag
+  *true* (fail-closed: a misclassified child drops out of the sponsor pool,
+  never into it).
+- **`is_high_school_grade(text) returns boolean`** — `immutable sql`, the single
+  source of the `('9','10','11','12')` rule. Also called by the trigger and by
+  `intake_validate_field` (§12). Mirrored in TS as `isHighSchoolGrade` /
+  `HIGH_SCHOOL_GRADES` in `web/lib/queries.ts` — keep the two lists in sync.
+- **`wishlist_items` `BEFORE INSERT` trigger** (`wishlist_items_skip_high_schooler`,
+  `security definer`) silently returns `NULL` for any wishlist row whose child is
+  a high schooler — they self-shop, there's nothing to store. Backstop for every
+  path (import of an older payload, a hand-entry mistake, a future editor).
+- **`shop_day_status` / `shop_day_notes`** back the `/admin/high-schoolers`
+  roster + board (US-35). Staff-maintained; covered by `children`'s existing RLS
+  and audit trigger, so no new policy. No-shows are handled offline — the board
+  just shows who didn't reach `attended`.
+- **Views** (`public_available_cards`, `printable_cards`, `cards_needing_print`)
+  all gain `and not ch.is_high_schooler` — see §7 and the "Public (sponsor-facing)
+  access" section below. That predicate, not the app, is what keeps a high
+  schooler out of the sponsor pool.
+- `is_high_schooler` is orthogonal to `families.is_confidential`; a confidential
+  high schooler behaves as both.
 
 **`target_card_count` — removed** in
 [supabase/migrations/20260818140000_one_card_per_child.sql](supabase/migrations/20260818140000_one_card_per_child.sql)
@@ -360,7 +434,8 @@ select
   crd.id as card_id
 from children ch
 join cards crd on crd.child_id = ch.id
-where crd.printed_at is null;
+where crd.printed_at is null
+  and not ch.is_high_schooler;   -- 20260908130000: high schoolers aren't printed
 ```
 
 And the printable label — just the base card number now; the "(1/2)" copy-count suffix this view used to
@@ -377,10 +452,15 @@ select
   crd.printed_at,
   f.drive_id
 from cards crd
-join children ch on ch.id = crd.child_id
+join children ch on ch.id = crd.child_id and not ch.is_high_schooler   -- 20260908130000
 join families f on f.id = ch.family_id
 join child_card_numbers ccn on ccn.child_id = ch.id;
 ```
+
+*Both views were last recreated in
+[20260908130000_high_schooler_bucket.sql](supabase/migrations/20260908130000_high_schooler_bucket.sql)
+(prior recreation: `20260818140000_one_card_per_child.sql`). `security_invoker`
+is unchanged; grants (`select` to `authenticated`) are reissued after the drop.*
 
 ## 8. `wishlist_items` — was 3 fixed columns, opened up
 
@@ -389,8 +469,12 @@ create table wishlist_items (
   id uuid primary key default gen_random_uuid(),
   child_id uuid not null references children(id) on delete cascade,
   position int not null,
-  description text not null,
-  unique (child_id, position)
+  description text not null,        -- always the English working value — what sponsors see and purchasers buy from
+  unique (child_id, position),
+
+  -- --- intake-form provenance (20260830120000, §12) -----------------------
+  description_source text,          -- the family's original wording; identical to description in Phase 1 (English only)
+  source_locale text                -- the submission's source_locale, for the Phase 2 translation round-trip
 );
 ```
 
@@ -400,6 +484,9 @@ section used to flag a Phase-2 gap where two sponsors could unknowingly buy the 
 multi-card child, with a proposed fix of letting a card pin to specific `wishlist_items`. There is no
 longer any such thing as a multi-card child, so that gap and its proposed fix no longer apply — not
 re-solved, just no longer a real scenario.*
+
+A `BEFORE INSERT` trigger (`wishlist_items_skip_high_schooler`, 20260908130000)
+silently drops any row whose child `is_high_schooler` — see §6.1.
 
 ## 9. `sponsors`
 
@@ -682,6 +769,223 @@ create table audit_log (
 Populated by Postgres triggers on the tables above rather than app code, so no code path can
 accidentally skip logging. We'll write the actual trigger function when we scaffold the project.
 
+## 12. Counselor-vetted intake forms (20260830120000)
+
+Replaces "a volunteer retypes a counselor's referral" with a hosted, versioned
+form the family fills out once, a counselor confirms, and staff import. Full
+design: [docs/INTAKE_FORMS.md](docs/INTAKE_FORMS.md). The questionnaire itself:
+[docs/INTAKE_FORM_DRAFT.md](docs/INTAKE_FORM_DRAFT.md) (English only in Phase 1).
+
+```
+staff publishes a form  →  counselor gets a school-scoped link  →
+  family fills it out (no login)  →  counselor reviews the roster and verifies
+  (no login, review token)  →  staff clicks Import  →  families + children + cards
+```
+
+**Every anonymous or token-bearing step goes through a `security definer`
+function — no intake table is reachable by `anon` at all.** RLS is enabled on
+all six with `revoke all ... from public, anon, authenticated` first (closing
+the DB-2 platform-default grant), then deliberate grants to `authenticated`.
+
+### 12.1 Tables
+
+```sql
+-- §5.1 — one form per drive (drive_id null = a reusable template; none in Phase 1)
+create table forms (
+  id uuid primary key default gen_random_uuid(),
+  drive_id uuid references drives(id) on delete cascade,
+  slug text not null,
+  name text not null,
+  description text,
+  is_test_data boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (drive_id, slug)
+);
+
+-- §5.2 — immutable published definitions. A published row cannot be edited or
+-- un-published — the `form_versions_immutable_once_published` BEFORE UPDATE
+-- trigger raises. To change the questionnaire, publish a NEW version row and
+-- repoint the link. `definition` is the jsonb questionnaire: sections → fields,
+-- each field's `type`/`required`/`min`/`max`/`options`/`max_length` drive BOTH
+-- the rendered control and submit_form's server-side validation.
+create table form_versions (
+  id uuid primary key default gen_random_uuid(),
+  form_id uuid not null references forms(id) on delete cascade,
+  version int not null,
+  definition jsonb not null,
+  published_at timestamptz,                 -- null = still editable
+  created_by uuid references profiles(id),
+  created_at timestamptz not null default now(),
+  unique (form_id, version)
+);
+
+-- §5.3 — a link is scoped to a drive_school, never to a family. One family link
+-- per school; the counselor forwards it freely.
+create table form_links (
+  id uuid primary key default gen_random_uuid(),
+  drive_id uuid not null references drives(id) on delete cascade,
+  drive_school_id uuid references drive_schools(id),   -- null = confidential/direct channel
+  form_version_id uuid not null references form_versions(id),
+  token text not null unique,                          -- PLAINTEXT (§2): permits only WRITING a submission, exposes no PII, staff re-copy it
+  label text,
+  locale text not null default 'en',
+  channel submission_channel not null default 'family',
+  opens_at timestamptz,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  max_submissions int,
+  submission_count int not null default 0,
+  is_test_data boolean not null default false,
+  created_by uuid references profiles(id),
+  created_at timestamptz not null default now(),
+  constraint form_links_token_length check (char_length(token) >= 16)
+);
+create index form_links_drive_school_idx on form_links (drive_school_id);
+
+-- §5.5 — review tokens are stored HASHED (they read a season of children's
+-- names/ages). US-28 (20260903120000) added the nullable `token` plaintext
+-- column + a unique index; rows issued via issue_review_token() carry both,
+-- legacy/seed rows may be hash-only. The counselor functions still match on
+-- token_hash. The bcrypt-shape CHECK is load-bearing: crypt() RAISES on a hash
+-- it can't parse, and the token functions scan every live row, so one malformed
+-- row would break every counselor at every school.
+create table review_tokens (
+  id uuid primary key default gen_random_uuid(),
+  drive_id uuid not null references drives(id) on delete cascade,
+  drive_school_id uuid references drive_schools(id),   -- null = confidential/staff queue (get_review_roster refuses to serve it)
+  token_hash text not null unique,
+  token text unique,                                   -- 20260903120000; plaintext, url-safe; null on legacy rows
+  issued_to_email text not null,
+  issued_by uuid references profiles(id),
+  expires_at timestamptz not null,                     -- drive close, not 7 days (§3)
+  last_used_at timestamptz,
+  revoked_at timestamptz,
+  is_test_data boolean not null default false,
+  created_at timestamptz not null default now(),
+  constraint review_tokens_hash_is_bcrypt check (token_hash ~ '^\$2[abxy]?\$[0-9]{2}\$')
+);
+create index review_tokens_school_idx on review_tokens (drive_school_id);
+
+-- §5.4 — the immutable provenance record. `answers` is NEVER updated after
+-- insert; a counselor's typo-fix lands in `corrections` (keyed by 1-based child
+-- position, only first_name/age/grade) and is overlaid onto answers at read
+-- time by intake_apply_corrections(). `answers_en`/`translated_at`/
+-- `translation_engine` are Phase 2 stubs (no translation logic exists).
+-- `ip_hash` is ALWAYS NULL — an unsalted IPv4 digest is reversible PII; before
+-- anything writes here again it must be a Vault-keyed HMAC covered by the
+-- INTAKE_FORMS §10 drive-close purge.
+create table form_submissions (
+  id uuid primary key default gen_random_uuid(),
+  form_link_id uuid not null references form_links(id),
+  form_version_id uuid not null references form_versions(id),
+  drive_id uuid not null references drives(id) on delete cascade,
+  drive_school_id uuid references drive_schools(id),   -- denormalized from the link at submit; null = confidential channel
+  channel submission_channel not null default 'family',
+  status submission_status not null default 'draft',
+  source_locale text not null default 'en',
+  answers jsonb not null default '{}'::jsonb,          -- exactly as submitted, never modified
+  answers_en jsonb,
+  translated_at timestamptz,
+  translation_engine text,
+  corrections jsonb not null default '{}'::jsonb,      -- counselor typo-fixes, overlaid at read time
+  submitter_name text,
+  submitter_phone text,
+  submitter_email text,
+  submitted_at timestamptz,
+  first_viewed_at timestamptz,
+  verified_at timestamptz,
+  verified_by_label text,                              -- counselor's typed name (they have no profile row)
+  verified_via_review_token uuid references review_tokens(id),
+  imported_at timestamptz,
+  imported_by uuid references profiles(id),
+  imported_family_id uuid references families(id),
+  resolution_note text,
+  ip_hash text,                                        -- ALWAYS NULL, see above
+  user_agent text,
+  is_test_data boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index form_submissions_queue_idx on form_submissions (drive_school_id, status);
+create index form_submissions_drive_status_idx on form_submissions (drive_id, status);
+
+-- §5.6 — this feature's event trail. Separate from audit_log because most
+-- actors here are NOT profiles rows (anonymous families, token-bearing
+-- counselors), which audit_log.changed_by can't represent. form_submissions
+-- and submission_events deliberately have NO audit_log trigger — it would copy
+-- the whole `answers` PII blob into a table the INTAKE_FORMS §10 drive-close
+-- purge never reaches.
+create table submission_events (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid not null references form_submissions(id) on delete cascade,
+  event text not null,               -- 'submitted' | 'viewed' | 'verified' | 'rejected' | 'imported'
+  actor_kind text not null,          -- 'family' | 'counselor' | 'staff' | 'system'
+  actor_profile_id uuid references profiles(id),
+  actor_label text,
+  detail jsonb,
+  created_at timestamptz not null default now()
+);
+create index submission_events_submission_idx on submission_events (submission_id, created_at);
+```
+
+`form_links` and `review_tokens` **do** carry the generic `audit_log_change()`
+trigger (their actors are always real `profiles` rows, they hold no child PII,
+and "who issued/revoked a roster key" is exactly what an audit log is for).
+`submit_form` bumps `form_links.submission_count`, so a normal family submission
+writes one `audit_log` row — expected noise, bounded by `max_submissions`.
+
+### 12.2 Functions
+
+Anonymous/token callers get **no table access** — everything is a
+`security definer` function with an explicit `search_path`, `execute` revoked
+from `public`, then granted deliberately.
+
+| Function | Caller (grant) | Does |
+|---|---|---|
+| `get_form(token)` | `anon`, `authenticated` | Returns the pinned version's `definition` + the school's display name. **No PII.** Friendly reason codes for revoked/expired/not-open/full/unpublished/drive-closed (a revoked link reports `not_found` — an anon lookup must not confirm a token was real). |
+| `submit_form(token, answers, contact, honeypot)` | `anon`, `authenticated` | Validates **server-side against the pinned `form_versions.definition`** (required, age 0–19, grade in list, 1–3 wishlist, sizes…) via `intake_validate_field()`; inserts `form_submissions`; increments `submission_count` atomically under `max_submissions`; writes a `submitted` event. A non-empty honeypot returns the same success shape and writes nothing. `counselor`/`staff` channels auto-verify at submit. |
+| `get_review_roster(review_token)` | `anon`, `authenticated` | Whole-season roster for that token's **school only**: per child `first_name`/`age`/`grade` + status/dates, **nothing else** (no wishlist, sizes, needs, notes, guardian contact — built field-by-field, not passed through). Also returns `correction_fields` (the pinned definition's rule for the three correctable fields). Stamps `first_viewed_at` / `last_used_at`. Refuses a school-less token. |
+| `verify_submission(review_token, id, verifier_name, corrections?)` | `anon`, `authenticated` | Sets `verified`, stamps `verified_at`/`verified_by_label`/`verified_via_review_token`, writes a `verified` event. `corrections` accepts **only** `first_name`/`age`/`grade` per child — any other key **raises** (a client bug can't widen it). |
+| `reject_submission(review_token, id, reason, as_duplicate?)` | `anon`, `authenticated` | Sets `rejected` (or `duplicate`), records the reason, writes an event. |
+| `import_submission(id, is_confidential?)` | `authenticated` only (+ `is_admin()` in-body; confidential-channel also needs `can_view_confidential()`) | Creates `families` + `children` + `cards` + `wishlist_items` from `coalesce(answers_en, answers)` with `corrections` overlaid, sets `source_submission_id` everywhere, copies the family's words into `*_source`, stamps `imported*`. **Idempotent** at three depths (advisory lock on the submission id, status re-read inside it, `families_one_per_submission` unique index). Family numbering goes through `create_family()`. `is_confidential` defaults to the channel (a confidential-channel submission → a confidential family) and can be overridden either way. |
+| `issue_review_token(drive_school_id, email, expires_at?)` | `authenticated` only (+ `is_admin()` in-body) | US-28 (`20260903120000`). Mints ≥32 bytes server-side, writes both `token` and `token_hash`. **Idempotent per school** — a live token is returned (`reused: true`), not a second one minted. School links only. Default expiry = end of the drive's year. |
+
+**Internal helpers** (pure jsonb/constant transforms, not `security definer`;
+execute revoked from `public`, `anon` **and** `authenticated` — called only from
+inside the functions above): `intake_apply_corrections`, `intake_validate_field`,
+`intake_repeating_section_id`, `intake_correctable_field_ids`,
+`intake_repeating_field_options`, `intake_repeating_field_def`. The one exception
+is **`submission_is_confidential_channel(uuid)`** — `security definer`, granted
+to `authenticated`, because it's evaluated inside `submission_events`' RLS policy
+and must see rows the calling volunteer can't. (`import_submission` also leans on
+the pre-existing `security definer` helpers `create_family()` and
+`next_confidential_family_number()` — see §5.)
+
+**`intake_validate_field`** was re-issued by `20260908130000` with a single
+added early-return: a field flagged `self_shopper_hidden` in the definition is
+not validated when the child's grade is 9–12 (`is_high_school_grade()`), so the
+v2+ form can stop collecting the gift fields for a high schooler. The rest of
+the function body is unchanged. `import_submission` / `submit_form` themselves
+were **not** touched by the high-schooler work — the triggers and views in §6.1
+carry it.
+
+### 12.3 The `answers` / `corrections` split
+
+`form_submissions.answers` is the byte-for-byte provenance record and is never
+rewritten. A counselor's fix lands in `corrections` and is overlaid only at read
+time:
+
+```
+effective = intake_apply_corrections(coalesce(answers_en, answers),
+                                     corrections,
+                                     <repeating section id, from the pinned definition>)
+```
+
+Both `get_review_roster` and `import_submission` read through that overlay. The
+staff queue can therefore show "the family said X, the counselor corrected it to
+Y" rather than silently displaying Y.
+
 ## How this maps to the 2021 spreadsheet
 
 | Old spreadsheet | New schema |
@@ -712,6 +1016,10 @@ is a locked-down public view, listing individual **cards** (not children — a c
 appear as two separate claimable listings), plus a controlled claim action rather than raw table access:
 
 ```sql
+-- Current definition, last recreated in 20260908130000_high_schooler_bucket.sql
+-- (prior: 20260818120000_fix_public_available_cards_anon_bug.sql). NOT
+-- security_invoker — its base-table reads run as the view owner, which is the
+-- whole point (anon has no policies on children/families/drive_schools).
 create view public_available_cards as
 select
   crd.id as card_id,
@@ -722,15 +1030,22 @@ select
   ch.specific_needs,
   wi.description as wishlist_description
 from cards crd
-join children ch on ch.id = crd.child_id
-join families f on f.id = ch.family_id and not f.is_confidential
-join drives d on d.id = f.drive_id and d.status = 'open'
+join children ch on ch.id = crd.child_id and not ch.is_high_schooler   -- 20260908130000
+join families f on f.id = ch.family_id and not f.is_confidential        -- literal, NOT family_is_confidential() — anon has no execute on it
+join drives d on d.id = f.drive_id and d.status = 'open'                 -- SPN-1: open drive only
 left join drive_schools ds on ds.id = f.drive_school_id
 left join wishlist_items wi on wi.child_id = ch.id
 where not exists (
   select 1 from assignments a where a.card_id = crd.id and a.status <> 'cancelled'
 );
+
+grant select on public_available_cards to anon, authenticated;
 ```
+
+**`and not ch.is_high_schooler` (20260908130000) is the entire mechanism that
+keeps a high schooler out of the sponsor pool** — a predicate in the view, at
+the database layer, not a UI filter. `reach-reviewer` gate passed 2026-09-08:
+character-identical to the prior version apart from that one inner predicate.
 
 **Correction:** the copy count (`crd.copy_number`/`crd.total_copies`, the "1 of 2" notation) was
 deliberately left out of this view. It was print-room information — it told staff which physical card to
@@ -789,11 +1104,31 @@ sponsor_name, sponsor_phone, sponsor_email)` function still exists but is no lon
 | `card_claim_verifications` | no access at all (not even the two functions' own callers — everything routes through `security definer`) | no access at all | no access at all |
 | `profiles` | no access | own row only | read/write |
 | `audit_log` | no access | no access | read |
+| `forms`, `form_versions` (§12) | no access (anon path is `get_form()` only) | read | read/write |
+| `form_links` (§12) | no access | read **school links only** (`drive_school_id is not null or can_view_confidential()`) | read/write, same confidential gate |
+| `form_submissions` (§12) | no access (functions only) | read **non-confidential-channel only** | read/write, same confidential gate |
+| `review_tokens` (§12) | no access | no access | **admin** read (school rows, or confidential-cleared) + write; see below |
+| `submission_events` (§12) | no access | read, gated on the parent submission's channel | read, same gate |
 
 This is enforced with Postgres Row Level Security policies (not just app-code checks), so a bug in the
 frontend can't leak a confidential family or someone's home info. A `cards` row inherits its
 confidentiality from its child's family (via a join), rather than carrying its own flag — one source of
 truth for "is this confidential," not two that could disagree.
+
+**Every intake-table confidential gate is `drive_school_id is not null or
+can_view_confidential()`** — never a hand-written `role = 'admin'` check
+(INTAKE_FORMS §8; the natural mistake, and it silently widens access to every
+admin). A confidential-channel row is the one with `drive_school_id is null`.
+
+**`review_tokens` started write-only (no SELECT policy at all).** US-28
+(`20260903120000`) added `review_tokens.token text` (plaintext, unique) and an
+**admin-only** SELECT policy, so staff can re-copy a counselor's roster link
+without re-issuing it. Deliberate trade-off, on the record in that migration's
+header: a DB leak now exposes working review links → a season's roster of first
+name / age / grade per school (no last names, no addresses, no confidential
+families — roughly the tier `public_available_cards` already serves anon). The
+three counselor functions still match on `token_hash`; `issue_review_token()`
+writes both columns.
 
 **`profiles.email` is a synced copy, not a live source.** `auth.users` (where the real email lives) has no
 grant at all for the client API — not even for admins — so without a copy here, the staff management page
@@ -876,16 +1211,26 @@ newer year. Now the database rejects it outright.
   `pledged`?~~ → **Resolved** (OPEN_QUESTIONS.md SPN-3, 2026-08-18): yes, via a 6-digit code typed back on
   the same claiming page. Implemented in
   [supabase/migrations/20260818160000_email_verified_claims.sql](supabase/migrations/20260818160000_email_verified_claims.sql)
-  — see the `card_claim_verifications` section above. Not yet applied to any live database (written and
-  waiting for the usual manual apply step); the sponsor-page UI to actually collect/submit the code is
-  frontend-designer's follow-up, not built as part of this change.
+  — see the `card_claim_verifications` section above. **Applied to dev and confirmed working live
+  2026-08-19** (two follow-up fix migrations exercised once real email-sending ran:
+  `20260818170000` schema-qualified pgcrypto, `20260818180000` attempt-cap off-by-one). The two-step
+  send-code/enter-code sponsor UI shipped in `web/app/sponsor/SponsorBrowser.tsx`. **Not on prod.**
 - Is one `scheduled_pickup_at` per family enough, or do we need multiple distinct distribution events
   (e.g. different pickup days per school)? If the latter, we'll want a `distribution_events` table rather
   than a single timestamp on `families`. Low cost to add later if it turns out to be needed.
 - ~~Does a referral ever split siblings across two different `drive_school_id`s?~~ → **Resolved** (see
-  DESIGN.md §8): yes, in practice, and the answer is to let it split — a cross-school household becomes
-  multiple `Family` records, one per school, rather than changing the model. `Family` was never meant to be
-  a strict household grouping, just a distribution-day convenience.
+  DESIGN.md §8, OPEN_QUESTIONS DB-23; re-confirmed by Grant 2026-09-08). Yes, in practice, and the answer
+  is to let it split — a cross-school household becomes multiple `families` records, one per school,
+  because `families` is a distribution-day grouping and not a household model, and merging would break
+  per-school card/household numbering. Per-school links stay (each counselor vouches for their own kids).
+  The staff import queue carries a **soft cross-school hint** (`findHouseholdMatches` in
+  `web/app/admin/submissions/shared.ts`, US-37) — matched on guardian phone, never a blocker. The
+  high-schooler split (§6.1) softens the common case anyway: an elementary household goes to church
+  pickup while its high-school sibling goes to the shop day.
+- ~~Are high-school-age kids collected in a family's intake submission, and if so how are they handled?~~
+  → **Resolved** (OPEN_QUESTIONS ADM-19, Grant 2026-09-08). Yes — every child is listed, grades 9–12 are
+  flagged `children.is_high_schooler` and routed to a store shopping day instead of a sponsor. See §6.1.
+  Migration `20260908130000` applied to dev, `reach-reviewer` gate passed; **not on prod.**
 - **PII retention — decided (for now): keep indefinitely, revisit later.** Asked directly; the answer as of
   2026-07 is not to build any automatic purge/anonymization yet. `audit_log` keeps a full jsonb copy of
   every insert/update forever (see §11), with no cascade tied to the source record, so this applies there

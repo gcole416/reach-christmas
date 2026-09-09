@@ -735,15 +735,18 @@ Deliberately **not** blocked on for the 9/9 demo — it's a docs task, and
 INTAKE_FORMS.md already documents all of it accurately.
 
 Acceptance criteria:
-- [ ] The six tables (`forms`, `form_versions`, `form_links`, `form_submissions`, `review_tokens`, `submission_events`) are documented in SCHEMA.md in the same style as the existing eleven, including the `review_tokens_hash_is_bcrypt` constraint and why review tokens are hashed while form-link tokens are plaintext.
-- [ ] The two new enums and the ~14 new columns on `families`/`children`/`wishlist_items` (§5.7) are folded into those tables' existing sections rather than bolted on as an appendix.
-- [ ] The ten new functions are covered wherever SCHEMA.md documents `claim_card`/`create_family` today, including which are `security definer` and who holds `execute`.
-- [ ] SCHEMA.md's "Row Level Security — who sees what" table gains rows for the six new tables, matching INTAKE_FORMS.md §9.
-- [ ] The warning banner added at the top of SCHEMA.md on 2026-09-01 is removed as part of this, and INTAKE_FORMS.md's "not yet merged into DESIGN.md or SCHEMA.md" status line is updated.
-- [ ] SCHEMA.md's own draft disclaimer ("nothing has been run against a real database yet") is corrected — that has been false since the first migration was applied.
+- [x] The six tables (`forms`, `form_versions`, `form_links`, `form_submissions`, `review_tokens`, `submission_events`) are documented in SCHEMA.md §12 in the same style as the existing eleven, including the `review_tokens_hash_is_bcrypt` constraint and why review tokens are hashed while form-link tokens are plaintext.
+- [x] The new enums (`submission_status`, `submission_channel`, plus `shop_day_status` from the high-schooler work) and the new columns on `families`/`children`/`wishlist_items` are folded into those tables' existing DDL blocks (§5, §6, §8), not an appendix. `families_one_per_submission` documented in §5.
+- [x] All the intake functions covered in §12.2 as a table (caller + grant + what it does), plus the internal-helper list and which are `security definer`. `issue_review_token` (US-28) included.
+- [x] The RLS "who sees what" table gains five rows for the intake tables, with the `drive_school_id is not null or can_view_confidential()` gate spelled out and the US-28 `review_tokens` plaintext/admin-read change noted.
+- [x] Warning banner removed; replaced with a short migration-ledger pointer. INTAKE_FORMS.md status line updated to "BUILT (Phase 1), merged into SCHEMA.md §12".
+- [x] Draft disclaimer corrected to "LIVE" with the dev/prod split stated.
+- [x] Also folded in (beyond the original scope, since the schema moved on): the high-schooler feature (`20260908130000` — §6.1, view changes in §7/§9), `20260903120000` (`review_tokens.token` + `issue_review_token`), and corrected the stale SPN-3 "not yet applied to any live database" note.
 
-Status: Backlog
-Owner: unassigned (database-engineer when picked up)
+Status: **Done** — 2026-09-09. Docs-only, no code/DB change. SCHEMA.md is now
+current with dev. Resolves DB-23 and ADM-19 in the "Open schema questions"
+section too.
+Owner: (this session)
 
 ---
 
