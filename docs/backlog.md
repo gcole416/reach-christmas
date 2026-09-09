@@ -937,6 +937,252 @@ files. Key files: [web/app/admin/AdminPageHeader.tsx](../web/app/admin/AdminPage
 
 ---
 
+# Epic: High schoolers as a self-shopping bucket (US-32 … US-36)
+
+Requested by Grant, 2026-09-08. Resolves [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)
+**ADM-19**.
+
+GitLab: US-32 → [#24](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/24),
+US-33 → [#25](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/25),
+US-34 → [#26](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/26),
+US-35 → [#27](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/27),
+US-36 → [#28](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/28).
+US-33/34/35/36 are linked as blocked by #24; #28 also blocked by #25.
+
+**The change.** High schoolers (grades 9–12) are invited to a shopping day at a
+local store to pick their own gifts (Target, 12/19, last year) instead of being
+sponsored. They still belong to a household and still need to be *counted and
+organised*, but they must never enter the sponsor pool, the card-printing run, or
+the "cards claimed / gifts delivered" dashboard math. Every child grade 8 and
+below (down to babies) is unchanged — normal card, normal wishlist, normal
+sponsor flow.
+
+**Owner decisions (Grant, 2026-09-08):**
+
+1. **Staff household view** — a high schooler *is* shown in the Families Explorer
+   and family detail, still one row per child, and still gets a `cards` row so no
+   code path that assumes "every child has a card" breaks. That card is flagged
+   as a self-shopper card: excluded from `public_available_cards`, from
+   `/admin/print`, and from the claimed/delivered counts. In the household view
+   the teen shows a "High schooler — shop day" badge where a claim status would
+   normally be.
+2. **Classification** — a child is a high schooler when `grade` is `9`, `10`,
+   `11`, or `12`, set automatically at both write paths (public form import and
+   manual `/admin/intake`). Staff can override it either way on the family edit
+   screen for edge cases (held back a year, early grad, blank grade).
+3. **Public form** — when a family picks grade 9–12 for a child, that child's
+   wishlist, three sizes, specific-needs and other-notes fields disappear and are
+   replaced by a short panel explaining the teen shopping day. The child is still
+   submitted (first name, age, grade), the counselor still vets them, and import
+   still creates the household with the teen in it — just flagged and card-muted.
+4. **Tracking surface** — a dedicated high schooler view with: a count + a roster
+   filterable by school (first name, grade, guardian contact); a per-teen
+   shop-day status (invited / confirmed / attended) with a notes field; and an
+   exportable / printable roster for the store.
+
+**Timeline.** The counselor form goes out **10/1**, so US-32 and US-33 (data
+model + form) must be on dev and through the `reach-reviewer` gate before then.
+US-34–US-36 (staff UI, tracking page, tests) can follow after 10/1 but want to be
+done well before **11/1** (OneLife needs names) and the **12/19** shop day.
+
+**Cross-cutting constraints:**
+- `public_available_cards` is the whole sponsor security boundary — the exclusion
+  is a predicate *in the view*, at the DB layer, never a UI filter. Touching it
+  means the mandatory `reach-reviewer` gate and dev-only until a review clears it
+  (SCHEMA.md / [AGENTS.md](../AGENTS.md)).
+- The public form definition is **immutable and versioned**, synced byte-for-byte
+  across [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts),
+  [supabase/publish_intake_form.sql](../supabase/publish_intake_form.sql), and
+  [supabase/intake_demo_seed.sql](../supabase/intake_demo_seed.sql). Field *ids*
+  are the `import_submission` contract — see US-20. This epic cuts a **v3**.
+- `submit_form` validates server-side against the pinned definition (age 0–19,
+  grade in list, 1–3 wishlist with first required, sizes required). That
+  validation has to *relax per child* for grades 9–12 — client hiding is a
+  convenience, not the control.
+- The store/date for the shop day is **not confirmed for 2026** (Target / 12/19
+  was last year). Decision (Grant, 2026-09-08): ship the literal placeholder text
+  `[placeholder store]` and `[placeholder date]` in the form copy for now. Keep it
+  a single configurable string / definition field, not hard-coded literals in
+  three places, so swapping in the real values later is a one-line change.
+
+---
+
+## US-32: High schooler data model + sponsor-pool exclusion
+
+As the drive, I want a child in grades 9–12 to be recorded as a self-shopping
+high schooler, so that they are counted as part of their household but never
+enter the sponsor pool, the print run, or the fulfilment math.
+
+Owner decision 1 & 2 above. **Must be on dev + through `reach-reviewer` before
+2026-10-01.**
+
+Acceptance criteria:
+- [ ] One additive migration adds `children.is_high_schooler boolean not null default false` (name TBD by database-engineer; must read cleanly in RLS/views). No rename of existing columns.
+- [ ] `import_submission()` sets `is_high_schooler = true` when the imported child's `grade` is in `('9','10','11','12')`, and skips wishlist insertion for those children (there will be none from the v3 form, but the guard is explicit). A card row is **still** created — the one-card-per-child invariant is unchanged.
+- [ ] The manual intake write path (`web/lib/store.tsx` `addFamily` / child insert) sets the same flag from the same grade rule.
+- [ ] `public_available_cards` gains `and not ch.is_high_schooler` as an **inner** predicate in the view definition. A high schooler's card is confirmed absent from the anon result set (verified as a genuinely signed-out client, per the US-17 guardrails — do not add anon policies or grants to base tables).
+- [ ] `/admin/print` (`printable_cards` / `getCardsNeedingPrint`) excludes high schooler cards — they are not printed.
+- [ ] Dashboard math (`web/lib/queries.ts`): "Cards claimed / total", "Gifts delivered", overdue-sponsors, and cards-to-print all exclude high schooler cards from both numerator and denominator.
+- [ ] A high schooler can still be marked confidential (the flag is orthogonal to `families.is_confidential`); confidential + high schooler behaves as both.
+- [ ] `reach-reviewer` gate passed (touches `public_available_cards` + `import_submission`).
+- [ ] Applied to **dev** only; **prod untouched** until a Software Acceptance Review clears it.
+
+Status: **In review** — built this session on `dev`.
+[supabase/migrations/20260908130000_high_schooler_bucket.sql](../supabase/migrations/20260908130000_high_schooler_bucket.sql)
++ data layer ([web/lib/types.ts](../web/lib/types.ts), `mappers.ts`, `queries.ts`,
+`store.tsx`). `tsc` / `eslint` / `next build` clean.
+**Implementation note:** `import_submission()` and `submit_form()` were left
+*unchanged* — the flag is set by a `children` BEFORE INSERT trigger (covers both
+write paths for free), a `wishlist_items` BEFORE INSERT trigger drops any
+wishlist row for a high schooler, and the sponsor-pool exclusion is a predicate
+added to the three views. Smaller, more auditable surface for the gate.
+`is_high_schooler` is orthogonal to `is_confidential` (no code couples them).
+**Migration applied to dev by Grant 2026-09-08.** Live-verified via US-36:
+`public_available_cards` as a genuine anon client excludes a grade-10 card and
+keeps the grade-3 one; the INSERT trigger classifies a hand-inserted grade-11
+child; the wishlist trigger drops rows for a high schooler. **Outstanding:
+reach-reviewer gate; prod untouched.**
+Owner: database-engineer (migration, view, data layer — built this session), reach-reviewer (mandatory gate)
+
+---
+
+## US-33: Public form — teen block replaces wishlist with shop-day info
+
+As a parent registering a household with both younger children and a high
+schooler, I want the form to accept my teen without asking for a wishlist or
+sizes, so that I can register everyone in one submission and my teen gets pointed
+to the shopping day.
+
+Owner decision 3 above. **Must be on dev before 2026-10-01.**
+
+Acceptance criteria:
+- [ ] Form definition **v3** (all three synced copies): the child section carries conditional-visibility metadata so that when `grade` ∈ {9,10,11,12}, the `wishlist`, `shirt_size`, `pant_size`, `shoe_size`, `specific_needs`, and `other_notes` fields are hidden and a static shop-day info panel is shown instead. Field **ids** unchanged — `import_submission`'s contract is untouched.
+- [ ] `FamilyForm.tsx` renders the conditional block: picking a 9–12 grade for a child live-hides that child's gift fields and shows the shop-day panel; changing the grade back restores the fields with no data loss for the other children.
+- [ ] `submit_form` server validation relaxes per child: for a grade 9–12 child, wishlist/sizes/needs/notes are **not required** and any values sent for them are ignored (not written). Age 0–19 and grade-in-list still enforced for every child. At-least-one-child still enforced.
+- [ ] The honeypot, consent, and "everyone lives in my home" (US-30) gates are unchanged and still apply to the whole submission.
+- [ ] The shop-day panel ships the literal placeholder text `[placeholder store]` and `[placeholder date]` (Grant, 2026-09-08 — 2026 store/date not confirmed). The store and date each come from **one** place (a definition field or a single constant), so swapping in real values is a one-line change and does not require another form version if kept as a non-pinned constant.
+- [ ] `get_review_roster` / counselor view still shows the teen (first name, age, grade) — a counselor vets a high schooler exactly like any other child. No wishlist/size data exists to leak for them.
+- [ ] Mobile-first, real `<label for>` associations, inactive/expired token page unchanged.
+- [ ] dev publish: v3 cut on dev by Grant; a fresh demo registration link (or re-seed) so the demo shows v3. Existing links stay pinned to their version.
+- [ ] `tsc` / `eslint` / `next build` clean.
+
+Status: **In review** — built this session on `dev`. `tsc` / `eslint` / `next build` clean.
+Approach differs slightly from the story text: rather than "conditional-visibility
+metadata", the six gift fields carry `self_shopper_hidden: true` in the definition
+(all 3 synced copies + the TS `IntakeFormField` type + `normalizeDefinition`).
+`submit_form` needed **no change** — the skip lives in the shared
+`intake_validate_field` (migration 20260908130000 §6): a `self_shopper_hidden`
+field whose child's grade is 9–12 returns clean. `FamilyForm.tsx` filters those
+fields and shows a hardcoded `<ShopDayNote>`; store/date are
+`SHOP_DAY_STORE` / `SHOP_DAY_DATE` constants in `intakeFormDefinition.ts` (literal
+`[placeholder store]` / `[placeholder date]`), not pinned in the definition, so
+swapping real values needs no new form version. `validate.ts` mirrors the skip.
+**Form definition v3 published on dev by Grant 2026-09-08** (re-ran
+`intake_demo_seed.sql`, demo link `demo-north-family-2026` repointed to v3).
+Live-verified via US-36: `submit_form` accepts a grade-9–12 child with no gift
+fields and still rejects a grade-8 child with no wishlist; the public form
+hides/restores the gift fields on grade change. **Outstanding: prod
+(re-publish there after SAR).**
+Owner: frontend-designer (renderer + definition), database-engineer (validator + the 3-way sync) — built this session
+
+---
+
+## US-34: Staff intake + household view — high schooler badge and override
+
+As a staff member or volunteer, I want to see which children in a household are
+high schoolers and correct the classification when it's wrong, so that the split
+between sponsored kids and shop-day teens is trustworthy.
+
+Owner decisions 1 & 2 above.
+
+Acceptance criteria:
+- [ ] `web/app/admin/intake` (manual hand-entry): entering grade 9–12 for a child flags them as a high schooler, and the intake success/summary copy reflects it (e.g. "Household OL1 — 2 children, 1 high schooler").
+- [ ] Family edit screen (`web/app/admin/families/[familyId]`): a per-child "High schooler (shops their own gifts)" toggle, defaulted from the grade rule, that staff can force on or off. Covered by the US-13 concurrent-edit conflict check like any other child field.
+- [ ] Families Explorer: a high schooler row shows a "High schooler — shop day" badge in place of the claim-status badge; its card number still displays. The school/status filters still work; consider a "High schoolers" quick filter (see US-35).
+- [ ] Family detail: high schooler children are visually distinguished from sponsored children, and their (empty) wishlist/size area is replaced with a short "handled via shop day" note rather than empty fields.
+- [ ] Nothing on these screens lets a high schooler's card be claimed, printed, or advanced through fulfilment.
+- [ ] `tsc` / `eslint` / `next build` clean; e2e specs updated.
+
+Status: **In review** — built this session on `dev`. `tsc` / `eslint` / `next build` clean.
+Intake success copy now reads "…with N children (1 high schooler, tracked on the
+High schoolers page)." Family-edit toggle lives in `ChildFormFields.tsx`
+(`isHighSchooler` threaded through `ChildFormState` / `EditableChildInput`,
+`saveFamilyEdit` sends `is_high_schooler` — authoritative for existing children,
+the INSERT trigger still wins for brand-new grade-9–12 children so an unchecked
+box there sticks only on the next save; documented in `store.tsx`). Typing a 9–12
+grade auto-checks the box; it never auto-unchecks. Families Explorer shows a
+"High schooler · shop day" badge in the status column and "—" for sponsor.
+**Family-detail "handled via shop day" note is NOT done** — the edit form still
+shows the wishlist/size inputs for a high schooler (staff may want to keep sizes
+for the store roster; left deliberately). Flag for Grant.
+Owner: frontend-designer — built this session
+
+---
+
+## US-35: High schooler roster, dashboard tile, and shop-day tracking
+
+As a staff member, I want one place to see how many high schoolers have signed
+up, organise them by school, and track the shopping day, so that the 12/19 event
+can actually be run from this app.
+
+Owner decision 4 above.
+
+Acceptance criteria:
+- [ ] Dashboard: a "High schoolers registered" stat tile for the open drive, separate from "Children registered" (which now counts sponsored kids only, or shows both figures — frontend-designer's call, stated in the story when built).
+- [ ] New `/admin/high-schoolers` page in the admin nav: one row per high schooler for the open drive — first name, household tag, school, grade, age, guardian name/phone/email — filterable by school and by shop-day status. Confidential households obey the existing `can_view_confidential()` gate (a volunteer without clearance sees no confidential teens, because the query returns none).
+- [ ] Per-teen shop-day status: `invited` / `confirmed` / `attended` (plus an implicit `not_contacted` default) and a free-text notes field. Where this lives (columns on `children` vs. a small `shop_day_status` table) is database-engineer's call; if it's a new table it needs RLS mirroring `children` before it ships (AGENTS.md guardrail).
+- [ ] Status is editable inline from the roster; changes are audited (the existing `audit_log` trigger pattern).
+- [ ] An export / print view of the roster (CSV or a clean print layout) for taking to the store — first name, grade, size info if available, count. No last names beyond what staff already see; this is a staff-only artefact, never anon-reachable.
+- [ ] Counts reconcile: roster count == dashboard tile == `children` where `is_high_schooler` for the open drive.
+- [ ] `tsc` / `eslint` / `next build` clean.
+
+Status: **In review** — built this session on `dev`. `tsc` / `eslint` / `next build` clean.
+Storage: **columns on `children`** (`shop_day_status` enum `not_contacted`/`invited`/
+`confirmed`/`attended`, `shop_day_notes text`) in migration 20260908130000 — no new
+table, so the existing `children` RLS + audit trigger cover it. New
+[web/app/admin/high-schoolers/page.tsx](../web/app/admin/high-schoolers/page.tsx):
+count tiles (click to filter), school + status + search filters, inline status
+select + notes (save on change / blur via `setShopDayTracking` in `store.tsx`),
+"Copy roster (CSV)" to clipboard. Dashboard gains a "High schoolers" tile;
+"Children registered" now counts sponsored kids only (`getDashboardStats` reworked).
+`AdminNav` gains the tab. **Export is copy-to-clipboard CSV, not a download or a
+dedicated print view** — enough for Phase 1; revisit if staff want a file.
+Owner: frontend-designer (page, tile, export), database-engineer (columns + `setShopDayTracking`) — built this session
+
+---
+
+## US-36: End-to-end coverage for the high schooler split
+
+As the team, we want the sponsored-kid / high-schooler split covered by tests, so
+that a future change can't silently put a teen back in the sponsor pool.
+
+Acceptance criteria:
+- [ ] A spec submits a household with one grade-3 child and one grade-10 child through `/form/[token]`: the form hides the teen's gift fields, the submission succeeds, the counselor roster shows both, import creates one household with both children, the teen has `is_high_schooler = true` and no wishlist rows, the grade-3 child is unchanged.
+- [ ] A `public_available_cards` assertion (as a genuinely anonymous client): the grade-10 child's card never appears; the grade-3 child's does.
+- [ ] A dashboard-math assertion: the high schooler is not in "cards claimed / total" or "gifts delivered", and appears in the high schooler count.
+- [ ] A staff-override test: flipping the family-edit toggle moves a child in/out of the sponsor pool (card appears/disappears from the anon view accordingly).
+- [ ] `submit_form` server-side: a grade-10 child submitted *with* wishlist/size values still imports with those columns null; a grade-8 child submitted without a wishlist is still rejected.
+- [ ] All synthetic data, cleaned up, suite still green serially (TST-1).
+
+Status: **In review** — spec written this session:
+[web/tests/e2e/high-schoolers.spec.ts](../web/tests/e2e/high-schoolers.spec.ts)
+(6 tests: mixed-household import + flag + no-wishlist, anon `public_available_cards`
+exclusion, `submit_form` skip vs. grade-8 still-required, hidden-field junk dropped
+at import, INSERT-trigger auto-classify, and a `/form/[token]` browser test that the
+gift fields hide/restore on grade change). `tsc` / `eslint` clean.
+**6/6 green against dev 2026-09-08** (`--workers=1`). Full e2e suite: 79 passed,
+1 skipped, 3 failed — all 3 failures pre-existing and unrelated
+(`ui-flows.spec.ts:89` SPN-3 wrong-code lockout; `intake-link-management.spec.ts:162`
+and `intake-runtime-checks.spec.ts:269` — the latter provably stale, it asserts
+`authenticated` can't SELECT `review_tokens` which US-28's `20260903120000`
+migration deliberately changed; belongs to US-28's cleanup). Also fixed a
+pre-existing locator bug in US-30's walkthrough test (`getByRole("alert")` matched
+Next's route announcer). The dashboard-math assertion is covered indirectly via
+the anon-view exclusion; the staff-override toggle path is not yet a test.
+Owner: qa-tester — spec drafted + run this session
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

@@ -34,6 +34,7 @@ function seedChildren(data: DataBundle, familyId: string): ChildFormState[] {
       // Captured once, here, and carried in form state from now on — see
       // baselineUpdatedAt below for why it must not be re-read at submit time.
       updatedAt: c.updatedAt,
+      isHighSchooler: c.isHighSchooler,
       firstName: c.firstName,
       grade: c.grade ?? "",
       age: c.age !== null ? String(c.age) : "",

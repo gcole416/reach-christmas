@@ -101,6 +101,12 @@ export function mapChild(row: any): Child {
     shirtSize: row.shirt_size,
     shoeSize: row.shoe_size,
     otherNotes: row.other_notes,
+    // High schooler self-shopping bucket (20260908130000_high_schooler_bucket.sql).
+    // is_high_schooler is auto-set from grade on INSERT by a trigger; the two
+    // shop_day_* columns are staff-maintained on the /admin/high-schoolers page.
+    isHighSchooler: row.is_high_schooler ?? false,
+    shopDayStatus: (row.shop_day_status ?? "not_contacted") as Child["shopDayStatus"],
+    shopDayNotes: row.shop_day_notes ?? null,
     // Null means "a volunteer typed this child in by hand"; a uuid means the
     // child arrived through an intake-form submission (INTAKE_FORMS §5.7).
     sourceSubmissionId: row.source_submission_id ?? null,

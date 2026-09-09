@@ -13,6 +13,10 @@ export type AssignmentStatus =
   | "cancelled";
 export type AppRole = "admin" | "volunteer";
 
+// High schoolers (grades 9-12) shop for their own gifts at a store shopping
+// day (docs/backlog.md US-32/US-35). This is where staff track that.
+export type ShopDayStatus = "not_contacted" | "invited" | "confirmed" | "attended";
+
 export interface Drive {
   id: string;
   year: number;
@@ -106,6 +110,16 @@ export interface Child {
   shirtSize: string | null;
   shoeSize: string | null;
   otherNotes: string | null;
+  // --- high schooler self-shopping bucket (US-32) --------------------------
+  // Grades 9-12 shop for their own gifts. Auto-set from `grade` on INSERT by a
+  // database trigger; staff override it on the family edit screen. A high
+  // schooler still has a `cards` row (so nothing assuming one card per child
+  // breaks) but that card is excluded from `public_available_cards`, the print
+  // run, and the claimed/delivered dashboard math.
+  isHighSchooler: boolean;
+  // US-35 shop-day tracking. Only meaningful when isHighSchooler.
+  shopDayStatus: ShopDayStatus;
+  shopDayNotes: string | null;
   // --- intake-form provenance (US-20) --------------------------------------
   // Nullable ON PURPOSE (INTAKE_FORMS §5.7): null means a volunteer added this
   // child by hand, a uuid means they came in through a form submission.
@@ -289,6 +303,14 @@ export interface IntakeFormField {
   maxItems?: number;
   firstRequired?: boolean;
   itemLabels?: string[];
+  /**
+   * Not shown, and not collected, for a child whose grade is 9-12 (US-32):
+   * high schoolers self-shop at the store shopping day, so they're asked only
+   * for first name, age, and grade. `submit_form` enforces the same skip
+   * server-side (intake_validate_field), so this is a rendering hint, not the
+   * control. See HIGH_SCHOOL_GRADES in web/lib/queries.ts.
+   */
+  selfShopperHidden?: boolean;
 }
 
 export interface IntakeFormSection {

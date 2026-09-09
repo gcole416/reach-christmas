@@ -4,6 +4,7 @@ import type {
   IntakeFormDefinition,
   IntakeFormField,
 } from "@/lib/intake";
+import { isHighSchoolGrade } from "@/lib/queries";
 
 // A client-side mirror of `submit_form`'s validation, kept deliberately thin.
 //
@@ -47,7 +48,16 @@ export function validateAnswers(
         continue;
       }
       children.forEach((child, index) => {
+        // A grade-9-12 child self-shops: the gift fields aren't shown or
+        // collected, and submit_form skips validating them (US-32). Mirror
+        // that here so the client doesn't block a submission the server takes.
+        const selfShopper = isHighSchoolGrade(
+          typeof (child as Record<string, unknown>)?.grade === "string"
+            ? ((child as Record<string, unknown>).grade as string)
+            : undefined,
+        );
         for (const field of section.fields) {
+          if (selfShopper && field.selfShopperHidden) continue;
           validateField(field, child ?? {}, `${section.id}[${index}].`, errors);
         }
       });

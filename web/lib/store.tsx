@@ -15,7 +15,15 @@ import {
   mapSponsor,
   mapWishlistItem,
 } from "./supabase/mappers";
-import type { AppRole, AssignmentStatus, AuditLogEntry, DataBundle, DistributionMethod } from "./types";
+import type {
+  AppRole,
+  AssignmentStatus,
+  AuditLogEntry,
+  DataBundle,
+  DistributionMethod,
+  ShopDayStatus,
+} from "./types";
+import { isHighSchoolGrade } from "./queries";
 
 const SAVED_VIEWS_KEY = "reach-ol-saved-views-v1";
 
@@ -48,6 +56,11 @@ export interface IntakeChildInput {
   shoeSize: string;
   otherNotes: string;
   wishlistItems: string[];
+  // US-32: grades 9-12 self-shop at the store shopping day and stay out of the
+  // sponsor pool. A database trigger sets `children.is_high_schooler` from
+  // `grade` on INSERT regardless, so this is optional on the create path; the
+  // family-edit form makes it a real toggle (EditableChildInput).
+  isHighSchooler?: boolean;
 }
 
 export interface AddFamilyInput {
@@ -65,6 +78,12 @@ export type AddFamilyResult = { ok: true; familyNumber: number } | { ok: false; 
 // Same shape as IntakeChildInput, plus which row it maps to and which version
 // of that row the form was populated from.
 export interface EditableChildInput extends IntakeChildInput {
+  // The "High schooler (shops their own gifts)" toggle on the edit form.
+  // Seeded from `Child.isHighSchooler`, sent on every save. On an existing
+  // child this is authoritative (the classify trigger only fires on INSERT);
+  // on a brand-new grade-9-12 child the INSERT trigger still forces it true,
+  // and staff can then clear it on the next save.
+  isHighSchooler: boolean;
   // null means "not saved yet" (insert), a uuid means "existing child"
   // (update in place).
   id: string | null;
@@ -125,6 +144,12 @@ interface DataContextValue {
   cancelAssignment: (assignmentId: string) => Promise<Result>;
   updateAssignmentNotes: (assignmentId: string, notes: string) => Promise<Result>;
   updateCardPrinted: (cardId: string, printed: boolean) => Promise<Result>;
+  // US-35: the shop-day status/notes for one high schooler. Plain
+  // last-write-wins — a single-field staff action, same as updateAssignmentNotes.
+  setShopDayTracking: (
+    childId: string,
+    input: { status: ShopDayStatus; notes: string },
+  ) => Promise<Result>;
   updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
   checkInFamily: (familyId: string) => Promise<Result>;
   undoCheckInFamily: (familyId: string) => Promise<Result>;
@@ -535,6 +560,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           shirt_size: child.shirtSize.trim() || null,
           shoe_size: child.shoeSize.trim() || null,
           other_notes: child.otherNotes.trim() || null,
+          // The DB trigger also derives this from grade on INSERT; sending it
+          // explicitly lets a staff "high schooler" call for an off-list grade
+          // (e.g. "9th") still land. See queries.ts isHighSchoolGrade / US-32.
+          is_high_schooler: child.isHighSchooler ?? isHighSchoolGrade(child.grade),
         })
         .select()
         .single();
@@ -754,6 +783,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         shirt_size: child.shirtSize.trim() || null,
         shoe_size: child.shoeSize.trim() || null,
         other_notes: child.otherNotes.trim() || null,
+        // Authoritative for an existing child (the classify trigger is
+        // INSERT-only), so a staff toggle sticks. US-32.
+        is_high_schooler: child.isHighSchooler,
       };
 
       if (childId) {
@@ -920,6 +952,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  async function setShopDayTracking(
+    childId: string,
+    input: { status: ShopDayStatus; notes: string },
+  ): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("children")
+      .update({ shop_day_status: input.status, shop_day_notes: input.notes.trim() || null })
+      .eq("id", childId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
   async function updateFamilyDistribution(familyId: string, input: FamilyDistributionInput): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase
@@ -981,6 +1027,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         cancelAssignment,
         updateAssignmentNotes,
         updateCardPrinted,
+        setShopDayTracking,
         updateFamilyDistribution,
         checkInFamily,
         undoCheckInFamily,

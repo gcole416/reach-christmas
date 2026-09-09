@@ -40,6 +40,7 @@ export function FamiliesExplorer() {
         grade: child.grade,
         cardNumber: card.cardNumber,
         status: card.status,
+        isHighSchooler: child.isHighSchooler,
         sponsorName: card.sponsorName,
       }))
     )
@@ -58,7 +59,14 @@ export function FamiliesExplorer() {
     const statusMatches = statusFilter === "all" || row.status === statusFilter;
     const searchMatches =
       !q ||
-      [row.school, row.familyLabel, row.childName, row.cardNumber, row.sponsorName ?? ""]
+      [
+        row.school,
+        row.familyLabel,
+        row.childName,
+        row.cardNumber,
+        row.sponsorName ?? "",
+        row.isHighSchooler ? "high schooler shop day" : "",
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -206,9 +214,17 @@ export function FamiliesExplorer() {
                 <td className="px-4 py-3 text-ink-secondary">{row.grade ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-secondary">{row.cardNumber}</td>
                 <td className="px-4 py-3">
-                  <StatusBadge status={row.status} />
+                  {row.isHighSchooler ? (
+                    <span className="inline-flex items-center rounded-full bg-cat-blue/10 px-2.5 py-1 text-xs font-medium text-cat-blue">
+                      High schooler · shop day
+                    </span>
+                  ) : (
+                    <StatusBadge status={row.status} />
+                  )}
                 </td>
-                <td className="px-4 py-3 text-ink-secondary">{row.sponsorName ?? "—"}</td>
+                <td className="px-4 py-3 text-ink-secondary">
+                  {row.isHighSchooler ? "—" : row.sponsorName ?? "—"}
+                </td>
               </tr>
             ))}
             {filteredRows.length === 0 ? (

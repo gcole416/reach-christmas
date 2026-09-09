@@ -159,6 +159,7 @@ begin
           "label": "Boy or girl",
           "type": "select",
           "required": true,
+          "self_shopper_hidden": true,
           "options": [
             { "value": "M", "label": "Boy" },
             { "value": "F", "label": "Girl" },
@@ -170,6 +171,7 @@ begin
           "label": "Shirt size",
           "type": "select",
           "required": true,
+          "self_shopper_hidden": true,
           "other_field": "shirt_size_other",
           "other_value": "Other",
           "max_length": 80,
@@ -193,6 +195,7 @@ begin
           "label": "Pant size",
           "type": "select",
           "required": true,
+          "self_shopper_hidden": true,
           "other_field": "pant_size_other",
           "other_value": "Other",
           "max_length": 80,
@@ -223,6 +226,7 @@ begin
           "label": "Shoe size",
           "type": "select",
           "required": true,
+          "self_shopper_hidden": true,
           "other_field": "shoe_size_other",
           "other_value": "Other",
           "max_length": 80,
@@ -262,6 +266,7 @@ begin
           "help": "Up to 3 ideas. Be as specific as you can: brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
           "type": "text_list",
           "required": true,
+          "self_shopper_hidden": true,
           "min_items": 1,
           "max_items": 3,
           "first_required": true,
@@ -273,6 +278,7 @@ begin
           "label": "Is there anything they especially need?",
           "type": "textarea",
           "required": false,
+          "self_shopper_hidden": true,
           "max_length": 500
         },
         {
@@ -280,6 +286,7 @@ begin
           "label": "Anything else we should know?",
           "type": "textarea",
           "required": false,
+          "self_shopper_hidden": true,
           "max_length": 500
         }
       ]

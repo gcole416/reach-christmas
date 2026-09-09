@@ -27,14 +27,24 @@ export default function AdminPage() {
         title="Staff dashboard"
         description={
           <>
-            {stats.totalChildren} children registered in {data.drive.name}. This data is real and
-            shared; changes here are visible to the whole team.
+            {stats.totalChildren} children in the sponsor pool for {data.drive.name}
+            {stats.totalHighSchoolers > 0
+              ? `, plus ${stats.totalHighSchoolers} high schooler${
+                  stats.totalHighSchoolers === 1 ? "" : "s"
+                } who shop for themselves`
+              : ""}
+            . This data is real and shared; changes here are visible to the whole team.
           </>
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <StatTile label="Children registered" value={stats.totalChildren} />
+        <StatTile
+          label="High schoolers"
+          value={stats.totalHighSchoolers}
+          hint="Shop day, not sponsored"
+        />
         <StatTile
           label="Cards claimed"
           value={`${stats.cardsClaimed} / ${stats.totalCards}`}

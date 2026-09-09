@@ -19,6 +19,19 @@ import type {
 export const OVERDUE_WARNING_DAYS = 10;
 export const OVERDUE_CRITICAL_DAYS = 21;
 
+/**
+ * Grades that put a child in the self-shopping high schooler bucket (US-32).
+ * Mirrors `public.is_high_school_grade()` in
+ * supabase/migrations/20260908130000_high_schooler_bucket.sql — keep the two
+ * lists in sync. Used for the manual-intake / family-edit UI default; the
+ * database trigger is what actually sets `children.is_high_schooler`.
+ */
+export const HIGH_SCHOOL_GRADES = ["9", "10", "11", "12"] as const;
+
+export function isHighSchoolGrade(grade: string | null | undefined): boolean {
+  return HIGH_SCHOOL_GRADES.includes((grade ?? "").trim() as (typeof HIGH_SCHOOL_GRADES)[number]);
+}
+
 function daysSince(iso: string): number {
   const ms = Date.now() - new Date(iso).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
@@ -111,6 +124,9 @@ export interface CardsNeedingPrintRow {
 export function getCardsNeedingPrint(data: DataBundle): CardsNeedingPrintRow[] {
   return data.children
     .filter((child) => {
+      // High schoolers self-shop — their card is never printed (mirrors the
+      // `and not ch.is_high_schooler` in the cards_needing_print view).
+      if (child.isHighSchooler) return false;
       const card = data.cards.find((c) => c.childId === child.id);
       return card ? !card.printedAt : false;
     })
@@ -177,6 +193,8 @@ export interface AdminChildRow {
   firstName: string;
   grade: string | null;
   cardNumber: string;
+  /** Grades 9-12: self-shops at the store shopping day, not in the sponsor pool. */
+  isHighSchooler: boolean;
   cards: AdminCardRow[];
 }
 
@@ -212,6 +230,7 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
           firstName: child.firstName,
           grade: child.grade,
           cardNumber: getChildCardNumber(data, child),
+          isHighSchooler: child.isHighSchooler,
           cards: childCards.map((card) => {
             const active = getActiveAssignment(data, card.id);
             const sponsor = active ? data.sponsors.find((s) => s.id === active.sponsorId) ?? null : null;
@@ -231,7 +250,10 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
 }
 
 export interface DashboardStats {
+  /** Children in the sponsor pool — i.e. NOT high schoolers. */
   totalChildren: number;
+  /** Grades 9-12: shop for their own gifts, tracked separately (US-35). */
+  totalHighSchoolers: number;
   totalCards: number;
   cardsClaimed: number;
   cardsAvailable: number;
@@ -240,17 +262,83 @@ export interface DashboardStats {
 }
 
 export function getDashboardStats(data: DataBundle): DashboardStats {
-  const cardsClaimed = data.cards.filter((c) => getActiveAssignment(data, c.id)).length;
-  const cardsDelivered = data.assignments.filter((a) => a.status === "delivered").length;
+  // High schoolers keep a `cards` row for schema simplicity, but it's not a
+  // claimable sponsor card — every count below is over sponsored cards only,
+  // matching the `not ch.is_high_schooler` filter in public_available_cards
+  // and printable_cards.
+  const sponsoredChildIds = new Set(
+    data.children.filter((c) => !c.isHighSchooler).map((c) => c.id),
+  );
+  const sponsoredCards = data.cards.filter((c) => sponsoredChildIds.has(c.childId));
+  const sponsoredCardIds = new Set(sponsoredCards.map((c) => c.id));
+
+  const cardsClaimed = sponsoredCards.filter((c) => getActiveAssignment(data, c.id)).length;
+  const cardsDelivered = data.assignments.filter(
+    (a) => a.status === "delivered" && sponsoredCardIds.has(a.cardId),
+  ).length;
 
   return {
-    totalChildren: data.children.length,
-    totalCards: data.cards.length,
+    totalChildren: sponsoredChildIds.size,
+    totalHighSchoolers: data.children.length - sponsoredChildIds.size,
+    totalCards: sponsoredCards.length,
     cardsClaimed,
-    cardsAvailable: data.cards.length - cardsClaimed,
+    cardsAvailable: sponsoredCards.length - cardsClaimed,
     cardsDelivered,
     overdueCount: getOverdueAssignments(data).length,
   };
+}
+
+export interface HighSchoolerRow {
+  childId: string;
+  familyId: string;
+  firstName: string;
+  householdTag: string;
+  schoolName: string | null;
+  driveSchoolId: string | null;
+  isConfidential: boolean;
+  grade: string | null;
+  age: number | null;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  guardianEmail: string | null;
+  shopDayStatus: Child["shopDayStatus"];
+  shopDayNotes: string | null;
+}
+
+/**
+ * The self-shopping high schoolers for the drive — the roster behind
+ * /admin/high-schoolers and the dashboard count (US-35). One row per
+ * grade-9-12 child. Confidential households are included here for cleared
+ * staff exactly as they are in the families explorer; RLS is what actually
+ * decides whether a given `data.children` row is present at all.
+ */
+export function getHighSchoolers(data: DataBundle): HighSchoolerRow[] {
+  return data.children
+    .filter((child) => child.isHighSchooler)
+    .map((child) => {
+      const family = getFamily(data, child.familyId);
+      const driveSchool = getDriveSchool(data, family.driveSchoolId);
+      const school = driveSchool
+        ? data.schools.find((s) => s.id === driveSchool.schoolId) ?? null
+        : null;
+      return {
+        childId: child.id,
+        familyId: family.id,
+        firstName: child.firstName,
+        householdTag: getHouseholdTag(data, family),
+        schoolName: school?.name ?? null,
+        driveSchoolId: family.driveSchoolId,
+        isConfidential: family.isConfidential,
+        grade: child.grade,
+        age: child.age,
+        guardianName: family.guardianName,
+        guardianPhone: family.guardianPhone,
+        guardianEmail: family.guardianEmail,
+        shopDayStatus: child.shopDayStatus,
+        shopDayNotes: child.shopDayNotes,
+      };
+    })
+    .sort((a, b) => a.householdTag.localeCompare(b.householdTag, undefined, { numeric: true }));
 }
 
 export interface SchoolRow {
@@ -353,9 +441,11 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
   const board: FulfillmentCard[] = [];
 
   for (const card of data.cards) {
-    const active = getActiveAssignment(data, card.id);
-
     const child = data.children.find((c) => c.id === card.childId)!;
+    // High schoolers self-shop — their card is never in the fulfilment pipeline.
+    if (child.isHighSchooler) continue;
+
+    const active = getActiveAssignment(data, card.id);
     const cardNumber = getChildCardNumber(data, child);
     const isConfidential = getFamily(data, child.familyId).isConfidential;
 
@@ -517,24 +607,30 @@ export interface PrintableCardRow {
 
 /** Mirrors `printable_cards`, grouping each card's wishlist items (the view is one-row-per-item; this is one-row-per-card for a print layout). */
 export function getPrintableCards(data: DataBundle): PrintableCardRow[] {
-  return data.cards.map((card) => {
-    const child = data.children.find((c) => c.id === card.childId)!;
-    const wishlist = data.wishlistItems
-      .filter((w) => w.childId === child.id)
-      .sort((a, b) => a.position - b.position)
-      .map((w) => w.description);
-    return {
-      cardId: card.id,
-      displayLabel: getPrintableCardLabel(data, card, child),
-      firstName: child.firstName,
-      isConfidential: getFamily(data, child.familyId).isConfidential,
-      grade: child.grade,
-      wishlist,
-      pantSize: child.pantSize,
-      shirtSize: child.shirtSize,
-      shoeSize: child.shoeSize,
-      specificNeeds: child.specificNeeds,
-      printedAt: card.printedAt,
-    };
-  });
+  return data.cards
+    .filter((card) => {
+      // Mirrors `printable_cards`'s `and not ch.is_high_schooler`.
+      const child = data.children.find((c) => c.id === card.childId);
+      return child ? !child.isHighSchooler : false;
+    })
+    .map((card) => {
+      const child = data.children.find((c) => c.id === card.childId)!;
+      const wishlist = data.wishlistItems
+        .filter((w) => w.childId === child.id)
+        .sort((a, b) => a.position - b.position)
+        .map((w) => w.description);
+      return {
+        cardId: card.id,
+        displayLabel: getPrintableCardLabel(data, card, child),
+        firstName: child.firstName,
+        isConfidential: getFamily(data, child.familyId).isConfidential,
+        grade: child.grade,
+        wishlist,
+        pantSize: child.pantSize,
+        shirtSize: child.shirtSize,
+        shoeSize: child.shoeSize,
+        specificNeeds: child.specificNeeds,
+        printedAt: card.printedAt,
+      };
+    });
 }

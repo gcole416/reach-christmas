@@ -11,6 +11,8 @@ import {
   type IntakeFormSection,
 } from "@/lib/intake";
 import { friendlyMessage } from "@/components/intake/format";
+import { isHighSchoolGrade } from "@/lib/queries";
+import { SHOP_DAY_DATE, SHOP_DAY_STORE } from "@/lib/intakeFormDefinition";
 import {
   PublicCard,
   PublicMasthead,
@@ -101,6 +103,12 @@ export function FamilyForm({
           .map((e) => e.field)
           .filter((field) => field.startsWith(`${sectionId}[${index}].${key}[`)),
       ]),
+      // A grade change can hide or reveal this child's gift fields (US-32), so
+      // drop every error under this child — the next submit re-derives them
+      // against the fields that are actually shown.
+      ...("grade" in patch
+        ? errors.map((e) => e.field).filter((field) => field.startsWith(`${sectionId}[${index}].`))
+        : []),
     ]);
   }
 
@@ -431,19 +439,23 @@ function RepeatingSection({
             </div>
 
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-              {section.fields.map((field) => (
-                <div key={field.id} className={isWideField(field) ? "sm:col-span-2" : undefined}>
-                  <IntakeField
-                    field={field}
-                    path={`${section.id}[${index}].${field.id}`}
-                    values={child ?? {}}
-                    errors={errors}
-                    help={resolveHelpText(definition, field)}
-                    onPatch={(patch) => onPatchChild(section.id, index, patch)}
-                  />
-                </div>
-              ))}
+              {section.fields
+                .filter((field) => !(childIsSelfShopper(child) && field.selfShopperHidden))
+                .map((field) => (
+                  <div key={field.id} className={isWideField(field) ? "sm:col-span-2" : undefined}>
+                    <IntakeField
+                      field={field}
+                      path={`${section.id}[${index}].${field.id}`}
+                      values={child ?? {}}
+                      errors={errors}
+                      help={resolveHelpText(definition, field)}
+                      onPatch={(patch) => onPatchChild(section.id, index, patch)}
+                    />
+                  </div>
+                ))}
             </div>
+
+            {childIsSelfShopper(child) ? <ShopDayNote /> : null}
           </div>
         ))}
       </div>
@@ -462,6 +474,31 @@ function RepeatingSection({
 }
 
 // ---------------------------------------------------------------------------
+
+/** Grade 9-12 -> this child shops for their own gifts at the store shopping day. */
+function childIsSelfShopper(child: SectionValues | undefined): boolean {
+  const grade = child && typeof child.grade === "string" ? child.grade : undefined;
+  return isHighSchoolGrade(grade);
+}
+
+/**
+ * Shown in place of the wishlist/sizes fields for a grade-9-12 child. The
+ * store and date are placeholders (SHOP_DAY_STORE / SHOP_DAY_DATE) until Grant
+ * confirms the 2026 details — one string, one place.
+ */
+function ShopDayNote() {
+  return (
+    <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
+      <p className="font-semibold text-ink-primary">This child shops for their own gifts.</p>
+      <p className="mt-1">
+        High schoolers are invited to a shopping day at {SHOP_DAY_STORE} on {SHOP_DAY_DATE} to pick
+        out their own gifts, so we don&apos;t need a wish list or sizes for them here. Your school
+        counselor will share the details closer to the date.
+      </p>
+      <p className="mt-1">Just their first name, age, and grade above is all we need.</p>
+    </div>
+  );
+}
 
 function ErrorSummary({
   ref,

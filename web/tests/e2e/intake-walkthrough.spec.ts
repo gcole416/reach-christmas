@@ -267,7 +267,10 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     });
 
     // The submit is refused and the error summary lists the affirmation.
-    await expect(page.getByRole("alert")).toContainText(/everyone you.{0,3}ve listed lives in your home/i);
+    // Scope to the form: Next's __next-route-announcer__ also carries role="alert".
+    await expect(page.locator("form").getByRole("alert")).toContainText(
+      /everyone you.{0,3}ve listed lives in your home/i,
+    );
     await expect(page.getByRole("heading", { name: /thank you/i })).toHaveCount(0);
 
     const admin = await signInAs("admin");

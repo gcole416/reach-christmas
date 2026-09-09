@@ -85,7 +85,9 @@ export default function IntakePage() {
       return;
     }
 
-    const savedChildCount = children.filter((c) => c.firstName.trim()).length;
+    const savedChildren = children.filter((c) => c.firstName.trim());
+    const savedChildCount = savedChildren.length;
+    const highSchoolerCount = savedChildren.filter((c) => c.isHighSchooler).length;
     // Matches getHouseholdTag / the card-number prefix: the school's code, or
     // "Z" for a direct referral or confidential household with no school.
     const schoolCode =
@@ -93,7 +95,10 @@ export default function IntakePage() {
         ? (schools.find((s) => s.driveSchoolId === driveSchoolId)?.code ?? "Z")
         : "Z";
     setSuccessMessage(
-      `Saved as Household ${schoolCode}${result.familyNumber} with ${savedChildCount} ${savedChildCount === 1 ? "child" : "children"}.`
+      `Saved as Household ${schoolCode}${result.familyNumber} with ${savedChildCount} ${savedChildCount === 1 ? "child" : "children"}` +
+        (highSchoolerCount > 0
+          ? ` (${highSchoolerCount} high schooler${highSchoolerCount === 1 ? "" : "s"}, tracked on the High schoolers page).`
+          : ".")
     );
     setInternalNotes("");
     setChildren([emptyChild()]);

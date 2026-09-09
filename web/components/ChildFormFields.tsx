@@ -1,4 +1,5 @@
 import type { IntakeChildInput } from "@/lib/store";
+import { isHighSchoolGrade } from "@/lib/queries";
 import { FormField } from "@/components/FormField";
 import { TextAreaField } from "@/components/TextAreaField";
 
@@ -9,6 +10,10 @@ import { TextAreaField } from "@/components/TextAreaField";
 export interface ChildFormState extends IntakeChildInput {
   key: string;
   id: string | null;
+  // US-32: the "High schooler" toggle. Auto-checked when a grade of 9-12 is
+  // typed; staff can still uncheck it. Required here (the parent forms always
+  // seed it) even though it's optional on IntakeChildInput.
+  isHighSchooler: boolean;
   // The `Child.updatedAt` this block was seeded from, so the edit page can tell
   // the data layer which version of the row the user was looking at (US-13).
   // Opaque string — seed it straight from `Child.updatedAt` and pass it back
@@ -23,6 +28,7 @@ export function emptyChild(): ChildFormState {
     key: crypto.randomUUID(),
     id: null,
     updatedAt: null,
+    isHighSchooler: false,
     firstName: "",
     grade: "",
     age: "",
@@ -77,7 +83,13 @@ export function ChildFormFields({
         <FormField
           label="Grade"
           value={child.grade}
-          onChange={(v) => onChange({ grade: v })}
+          onChange={(v) =>
+            onChange(
+              // Entering a 9-12 grade auto-checks "High schooler"; it never
+              // auto-unchecks, so a deliberate override survives a later edit.
+              isHighSchoolGrade(v) ? { grade: v, isHighSchooler: true } : { grade: v },
+            )
+          }
           placeholder="e.g. K, 3, 10"
         />
         <FormField label="Age" value={child.age} onChange={(v) => onChange({ age: v })} type="number" />
@@ -86,6 +98,22 @@ export function ChildFormFields({
         <FormField label="Shirt size" value={child.shirtSize} onChange={(v) => onChange({ shirtSize: v })} />
         <FormField label="Shoe size" value={child.shoeSize} onChange={(v) => onChange({ shoeSize: v })} />
       </div>
+
+      <label className="mt-3 flex items-start gap-2 text-sm text-ink-primary">
+        <input
+          type="checkbox"
+          checked={child.isHighSchooler}
+          onChange={(e) => onChange({ isHighSchooler: e.target.checked })}
+          className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-cat-blue"
+        />
+        <span>
+          High schooler (shops their own gifts at the shopping day)
+          <span className="block text-xs text-ink-secondary">
+            Auto-set for grades 9 to 12. Keeps this child out of the sponsor pool and the print run;
+            they&apos;re tracked on the High schoolers page instead.
+          </span>
+        </span>
+      </label>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextAreaField

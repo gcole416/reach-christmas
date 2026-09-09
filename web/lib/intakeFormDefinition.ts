@@ -19,6 +19,16 @@ export const INTAKE_FORM_NAME = "Household Gift Registration";
 export const INTAKE_FORM_DESCRIPTION =
   "Phase 1 English intake questionnaire. Source: docs/INTAKE_FORM_DRAFT.md";
 
+/**
+ * The store and date for the high schooler shopping day (US-32/US-33).
+ * PLACEHOLDER pending Grant's confirmation of the 2026 store/date — one string,
+ * one place, so swapping in the real values is a one-line edit. Shown to a
+ * family only when they set a child's grade to 9-12; not part of the immutable
+ * form definition, so changing it needs no new form version.
+ */
+export const SHOP_DAY_STORE = "[placeholder store]";
+export const SHOP_DAY_DATE = "[placeholder date]";
+
 /** Written verbatim into `form_versions.definition`. */
 export const PHASE_1_FORM_DEFINITION = {
   schema_version: 1,
@@ -129,6 +139,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Boy or girl",
           type: "select",
           required: true,
+          self_shopper_hidden: true,
           options: [
             { value: "M", label: "Boy" },
             { value: "F", label: "Girl" },
@@ -140,6 +151,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Shirt size",
           type: "select",
           required: true,
+          self_shopper_hidden: true,
           other_field: "shirt_size_other",
           other_value: "Other",
           max_length: 80,
@@ -163,6 +175,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Pant size",
           type: "select",
           required: true,
+          self_shopper_hidden: true,
           other_field: "pant_size_other",
           other_value: "Other",
           max_length: 80,
@@ -193,6 +206,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Shoe size",
           type: "select",
           required: true,
+          self_shopper_hidden: true,
           other_field: "shoe_size_other",
           other_value: "Other",
           max_length: 80,
@@ -232,6 +246,7 @@ export const PHASE_1_FORM_DEFINITION = {
           help: "Up to 3 ideas. Be as specific as you can: brand, color, or size helps a lot. Gifts are usually around {budget} per child.",
           type: "text_list",
           required: true,
+          self_shopper_hidden: true,
           min_items: 1,
           max_items: 3,
           first_required: true,
@@ -247,6 +262,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Is there anything they especially need?",
           type: "textarea",
           required: false,
+          self_shopper_hidden: true,
           max_length: 500,
         },
         {
@@ -254,6 +270,7 @@ export const PHASE_1_FORM_DEFINITION = {
           label: "Anything else we should know?",
           type: "textarea",
           required: false,
+          self_shopper_hidden: true,
           max_length: 500,
         },
       ],

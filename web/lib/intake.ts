@@ -1165,6 +1165,9 @@ function normalizeField(raw: any): IntakeFormField {
     maxItems: raw?.max_items ?? undefined,
     firstRequired: Boolean(raw?.first_required),
     itemLabels: Array.isArray(raw?.item_labels) ? raw.item_labels : undefined,
+    // Hidden (and not collected) for a grade-9-12 child — see US-32. The
+    // server enforces the same rule in intake_validate_field.
+    selfShopperHidden: Boolean(raw?.self_shopper_hidden),
   };
 }
 

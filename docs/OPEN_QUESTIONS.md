@@ -968,6 +968,18 @@ elementary-only demo-seed-data decision?
 - Code: [docs/INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md#section-2--each-child--cada-nio)
 - Raised by: Claude, reading Notes_8.10.txt item 3 during ADM-18 planning, 2026-08-30
 
+**Resolved (Grant, 2026-09-08).** A mixed household lists *every* child, high
+schoolers included. Grades 9–12 are classified as self-shopping high schoolers
+(invited to a store shopping day, Target / 12/19 last year), auto-detected from
+`grade` with a staff override. On the form, a grade 9–12 child's wishlist/size/
+needs fields are replaced with shop-day info but the child is still submitted,
+vetted, and imported into the household. Their card is created but excluded from
+`public_available_cards`, `/admin/print`, and the fulfilment/claimed/delivered
+math. New tracking surface: a `/admin/high-schoolers` roster + dashboard count +
+per-teen shop-day status. Full breakdown: **Epic US-32…US-36** in
+[backlog.md](backlog.md). Form + data-model half (US-32, US-33) must land on dev
+before the 10/1 counselor form goes out.
+
 ---
 
 ## Docs, deploy & ops
