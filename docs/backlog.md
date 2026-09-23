@@ -1447,6 +1447,347 @@ Owner: (built this session) — frontend-designer surface. Files:
 
 ---
 
+# Epic: Automated counselor email (US-41 … US-43)
+
+Today every link reaches a counselor by hand: a staff member opens
+[FormLinkPanel](../web/app/admin/submissions/FormLinkPanel.tsx), clicks Copy,
+and pastes into their own mail client. That works and **must keep working** —
+[INTAKE_FORMS §11](INTAKE_FORMS.md#11-operational-risks) says to build the
+manual fallback on day one and assume you'll need it. This epic adds sending
+*from the app* alongside it, so a 12-school drive isn't two dozen hand-written
+emails, and so "did they ever open it" is answerable without asking.
+
+The infrastructure already exists and is proven: `request_claim_code()` sends
+the sponsor's verification code through **pg_net → Resend** with the API key in
+**Supabase Vault**
+([20260818160000](../supabase/migrations/20260818160000_email_verified_claims.sql)).
+Three more facts make this small rather than large:
+
+- `schools.liaison_email` exists and is captured on the Add School form.
+- `review_tokens.token` is stored in plaintext as of US-28 and is admin-readable,
+  so a database function can read the link itself — the token never passes
+  through the browser.
+- `review_tokens.last_used_at` already records whether the counselor opened it.
+
+Planned 2026-09-23 with Grant. Phasing: US-41 (send on demand) and US-42 (daily
+digest) this season; US-43 (sponsor lifecycle) is the separate, larger piece
+that shares the same plumbing.
+
+### Prerequisite for all three: a verified sending domain · **Grant, ops**
+
+Every send today goes out as `Reach Christmas <onboarding@resend.dev>` — Resend's
+shared sandbox sender, carrying a `TODO(Grant)` since
+[20260818160000](../supabase/migrations/20260818160000_email_verified_claims.sql).
+It limps along for sponsor codes to consumer inboxes. It will **not** survive a
+school district's mail filter, and §11 names that as the single biggest practical
+threat: a review link in quarantine is indistinguishable from a counselor
+ignoring you.
+
+Decision (Grant, 2026-09-23): **verify a real OneLife domain in Resend** — SPF,
+DKIM and DMARC on the church domain or a `mail.` subdomain. Needs DNS access.
+This is an ops task, not code, and it fixes sponsor claim emails at the same
+time. US-41/US-42 can be built and tested on dev against the sandbox sender, but
+neither is *usable for real counselors* until this lands. The swap is one string
+in one migration.
+
+Also on the onboarding list from §11: have counselors allowlist the sending
+address before the drive opens.
+
+---
+
+## US-41: Email a school's links to its counselor from the app
+
+As staff setting up a school, I want to send that school's counselor their
+registration link(s) and their review link from the links page, and then see
+what was sent and when, so that link distribution isn't two dozen hand-written
+emails and silent failures aren't invisible.
+
+Requested by Grant, 2026-09-23.
+
+Decisions (Grant, 2026-09-23):
+- **Three independent buttons, not two.** Registration splits by locale —
+  "Email English link" and "Email Spanish link" are separate sends, each
+  including every live `family`-channel link for that school in that locale.
+  A school might have only one language live, and a counselor who only handles
+  one shouldn't get both bundled into a single message. Review stays a single
+  button — `review_tokens` carries no locale of its own (the counselor roster
+  is a staff-side confirmation view, not a translated family-facing form), so
+  there is only ever one thing to send.
+- **Recipient is `schools.liaison_email` only** — never a free-text address box.
+  An admin-only function that cannot be pointed at an arbitrary inbox closes the
+  abuse hole OPEN_QUESTIONS **SPN-4** flags on `request_claim_code` (unbounded
+  sends to any address a caller names). A wrong address is fixed by editing the
+  school record.
+- **The copy buttons stay.** The manual fallback is a requirement, not a leftover.
+
+Acceptance criteria:
+- [x] Migration (dev only, **reach-reviewer gate required** — new functions read
+      `review_tokens`/`form_links`, new table, new outbound path):
+      [20260923120000_counselor_email_links.sql](../supabase/migrations/20260923120000_counselor_email_links.sql).
+  - `app_settings` — a one-row config table holding `site_url`. Nothing in the
+    database knew the site's own origin before this; `formPath()`/`reviewPath()`
+    return relative paths built client-side. Chose a plain admin-RLS'd table over
+    a Vault secret since this isn't a secret, just per-environment config. **No
+    admin UI yet** — set once via SQL, same as the Resend Vault key:
+    `update app_settings set site_url = '...';`. **Grant still needs to run this
+    on dev before any send will work.**
+  - `counselor_emails` log table: `drive_school_id`, `kind`
+    (`registration_link` | `review_link` | `review_digest`), `locale`, `sent_to`,
+    `sent_by`, `created_at`, and which link(s) were included (`form_link_ids` /
+    `review_token_id` — a reference, not a second copy of the plaintext token).
+    One row per send, not a timestamp column on `review_tokens`/`form_links` —
+    staff need "sent three times," and US-42 writes to the same table with kind
+    `review_digest`. RLS mirrors `review_tokens` (`is_admin()`, plus
+    `can_view_confidential()` for a null-school row, though this feature never
+    produces one); audited like every other table here.
+- [x] `send_counselor_registration_link(p_drive_school_id, p_locale)` and
+      `send_counselor_review_link(p_drive_school_id)` — security definer,
+      `is_admin()` re-checked in the body, explicit `search_path`, execute revoked
+      from `public`/`anon` and granted to `authenticated` only (SCHEMA.md §12.2).
+      Each reads the school, its liaison email, and its own live link(s); composes
+      the body; fires `net.http_post` to Resend exactly as `request_claim_code`
+      does; writes the log row. The Vault key is fetched **before** any write —
+      that ordering bug is already fixed once in 20260818160000, because an
+      uncaught raise rolls back the whole invocation.
+- [x] Refuses, with a message naming what is missing, when: the school has no
+      `liaison_email`; there is no live link of that locale/kind; `site_url` is
+      not configured; or the same kind+locale went to the same school in the
+      last 60 seconds (double-click guard, same shape as the claim-code cooldown).
+- [x] **No child data in either email.** School name, the link(s), what each is
+      for, and who to reply to. Nothing else. A counselor's review link is already
+      a key to that school's roster; the email must not add to it.
+- [x] `sendCounselorRegistrationLink(driveSchoolId, locale)` /
+      `sendCounselorReviewLink(driveSchoolId)` / `listCounselorEmails(driveId)` in
+      [web/lib/intake.ts](../web/lib/intake.ts).
+- [x] [FormLinkPanel.tsx](../web/app/admin/submissions/FormLinkPanel.tsx): a
+      "Counselor email" block per school — "Email English link" / "Email Spanish
+      link" / "Email review link", each disabled with an explanatory line when
+      there's nothing live to send or no liaison email (linking to
+      [/admin/schools](../web/app/admin/schools/page.tsx) to add one).
+- [x] The status line, not the button, is the point: **"Emailed Sept 24 to
+      counselor@school.org."** For the **review** link only, also **"· opened"**
+      or **"· not opened yet"**, from `review_tokens.last_used_at` — the one link
+      that column actually exists on. `form_links` has no equivalent "opened"
+      signal (a family visiting `/form/[token]` never touches the row, only an
+      actual submission does), so the registration-link status line stays
+      honestly limited to "sent," not "opened."
+- [x] e2e: a non-admin is refused; a school with no liaison email is refused; a
+      successful send writes exactly one log row with the right kind/locale and
+      recipient; sending the same kind twice within 60s is refused. Delivery
+      itself is not assertable — `pg_net` is fire-and-forget (below), so the test
+      stops at "the request was queued and logged."
+      → [web/tests/e2e/counselor-email.spec.ts](../web/tests/e2e/counselor-email.spec.ts).
+      **Green against dev, 2026-09-23** (6/6 for this story — individually
+      confirmed; the review-link-send test and its own cooldown re-fire if run
+      twice inside 60s of each other, which is the guard working as designed,
+      not a flake). Rewritten to not depend on `intake_demo_seed.sql` at
+      all — Grant had real, non-test work
+      sitting on dev (two real schools, three real families) and didn't want
+      to touch it to re-seed, and the suite's own dependency on the demo seed
+      turned out to be incidental, not load-bearing. It now creates its own
+      throwaway fixture schools (deleted in `afterAll`) for the registration-
+      link cases, plus one small **persistent** fixture school — "AutoTest
+      CounselorEmail ReviewFixture", clearly labeled, never deleted — for the
+      review-link case, because `review_tokens` rows can never be deleted once
+      issued (SCHEMA.md) so a fresh one every run would strand a new orphaned
+      school each time. That fixture will sit in the schools dropdown from now
+      on; harmless, and named so nobody mistakes it for a real one.
+- [x] `tsc` / `eslint` / `next build` clean.
+- [x] **Migration applied to dev** (Grant, 2026-09-23).
+- [ ] **dev only; prod untouched** until a Software Acceptance Review, the same
+      rule as every intake migration.
+
+Two caveats written into the migration header so reach-reviewer isn't surprised:
+
+- **`pg_net` is fire-and-forget.** It queues the request and returns a request id,
+  not the HTTP response. Nothing here knows whether Resend accepted the mail, let
+  alone whether the district delivered it. The sent/opened line is the cheap 80%
+  answer. Real bounce handling needs a Resend webhook endpoint, and the Next app
+  has **zero route handlers and no server actions** today — that is a genuinely
+  new surface and it is deliberately out of scope.
+- **`pg_net` persists request bodies** in its own `net` schema tables, so a
+  review-link send's request body carries that token in plaintext alongside the
+  Resend key. That is the same exposure class US-28 accepted deliberately when it
+  started storing the token in plaintext for re-copying — consistent rather than
+  new, but stated here rather than left for review to find.
+
+Not done (deliberate):
+- **No free-text recipient**, no cc field. See the decision above.
+- **No bounce or delivery webhook.** Out of scope; needs a server route.
+- **No unsubscribe.** These are transactional messages to a partner the church
+  already has a relationship with. US-42's recurring digest is where an opt-out
+  becomes a fair question.
+- **No admin settings UI for `site_url`.** One-time SQL for now (see above).
+
+Status: **Migration applied to dev, `site_url` set, e2e green — 2026-09-23.**
+`tsc`/`eslint`/`next build` clean. Dev IS deployed —
+`https://reach-christmas.vercel.app` (Vercel's Production Branch is
+deliberately `dev`, confirmed with Grant 2026-09-23; verified independently by
+finding `thvyntrxmahygesltgft.supabase.co` — the dev project id — baked into
+that deployment's JS bundle). Grant ran
+`update app_settings set site_url = 'https://reach-christmas.vercel.app';`.
+6/6 e2e green live against dev (see the checkbox above — the suite no longer
+needs `intake_demo_seed.sql`). Still to do before Done: **reach-reviewer
+gate** (mandatory — new function reads `review_tokens`), code-reviewer pass,
+and Grant's sending-domain work before any send is relied on for a real
+counselor.
+Owner: database-engineer (migration + functions + `web/lib`), frontend-designer
+(the panel controls and status line), reach-reviewer (mandatory gate), Grant
+(the sending domain, the `site_url` value — done: applying the migration).
+
+---
+
+## US-42: Daily "households waiting for your review" digest
+
+As a counselor in November with a day job, I want one email a day telling me how
+many households are waiting on me and linking straight to my review page, so that
+confirming registrations doesn't depend on someone at the church chasing me.
+
+Requested by Grant, 2026-09-23. [INTAKE_FORMS §11](INTAKE_FORMS.md#11-operational-risks)
+specifies this shape directly: a **daily digest**, never one email per submission
+— "one email per submission means forty emails to a counselor with forty
+families." §11 also calls counselor follow-up a first-class workflow and asks for
+the "N families waiting since [date]" report early.
+
+Depends on US-41 (the send path, the log table, `site_url`, the verified domain).
+
+Acceptance criteria:
+- [x] Migration (dev only, **reach-reviewer gate required**):
+      [20260923130000_counselor_email_digest.sql](../supabase/migrations/20260923130000_counselor_email_digest.sql).
+  - `pg_cron` enabled. Supabase supports it; **nothing else in this repo uses
+    it**, so this is a new operational dependency — the migration fails loudly
+    at `create extension` time rather than degrading silently, the same way
+    20260818160000 did for `pg_net` and Vault.
+  - `send_counselor_digests()` — one run, iterating schools.
+- [x] **The security shape is the hard part and needs calling out.** `pg_cron`
+      invokes as a privileged role with no `auth.uid()`, so this function cannot
+      be `is_admin()`-gated the way US-41's are. It takes **no caller-supplied
+      parameter that chooses a recipient**, has execute revoked from `public`,
+      `anon` **and** `authenticated`, and derives every address from
+      `schools.liaison_email`. Its blast radius if it ever became callable is
+      then "sends the digest it was going to send anyway." Built the
+      admin-triggered variant too — `send_counselor_digests_now()`, is_admin()-
+      gated, no recipient parameter either, just runs the identical school loop
+      on demand — so staff and tests don't have to wait on the clock.
+- [x] Digest content per school: the count of submissions in `submitted` or
+      `under_review` for that `drive_school_id` (the two states the counselor
+      owns — `verified` they have already confirmed, `imported` is staff's, see
+      [shared.ts](../web/app/admin/submissions/shared.ts)), the date of the
+      oldest one still waiting, and their review link. **Counts and dates
+      only — no child names**, unlike the roster the link itself opens.
+- [x] **Sends nothing when nothing is pending.** No "0 waiting" mail, ever
+      (`continue when v_count = 0`). Skips schools with no liaison email, no
+      live review link, a paused school, or a drive that is not open. Writes a
+      `counselor_emails` row with kind `review_digest` per send.
+- [x] A per-school **`digest_paused`** column on `drive_schools` (per-drive, not
+      per-school — same reasoning as `distribution_method` already living
+      there), surfaced as a checkbox in the links panel next to each school's
+      counselor-email block. `setSchoolDigestPaused()` in
+      [store.tsx](../web/lib/store.tsx) — a plain RLS-gated table write, no new
+      function needed; this isn't a security boundary, just a preference the
+      digest reads.
+- [x] Staff-side view of the same numbers — "N household(s) waiting since
+      [date]" per school in the links panel, next to the US-41 send controls.
+      Computed client-side in
+      [SubmissionsQueue.tsx](../web/app/admin/submissions/SubmissionsQueue.tsx)
+      from the `submissions` list it already loads — no extra query. §11 asks
+      for this report in its own right, and it is how staff know whether the
+      digest is working.
+- [x] e2e: `send_counselor_digests()` itself is refused for every authenticated
+      caller, admin included (proves the security shape above, not just
+      documents it); `send_counselor_digests_now()` refuses a non-admin; an
+      admin-triggered run emails a school with a pending submission and stamps
+      `sent_by null` (the cron-shaped signature); a paused school is skipped
+      even with a pending submission. A "0 pending → no send" case is covered
+      implicitly (fixture schools that never receive a submission never appear
+      in a digest run) rather than asserted directly.
+      → [web/tests/e2e/counselor-email.spec.ts](../web/tests/e2e/counselor-email.spec.ts).
+      **Green against dev, 2026-09-23** (4/4 for this story). One thing this
+      run surfaced worth flagging rather than fixing here: because
+      `send_counselor_digests_now()` runs the real, global loop — every school
+      in the drive, not just a fixture — calling it from a test is only safe
+      *because* neither of Grant's two real schools currently has a submission
+      in `submitted`/`under_review`. If one ever does while these tests run,
+      it WOULD also get a real digest. Noted in the spec's own comment; not a
+      reason to change the function, since "digest whoever is actually
+      pending" is exactly what it's supposed to do.
+- [x] **5-minute-minimum per-school cooldown on `send_counselor_digests()`**
+      (Grant, 2026-09-23, found while writing the e2e above — not in the
+      original acceptance criteria). Same idea as the 60s guard on the two
+      US-41 send functions, longer window since this one can fire unattended:
+      skip (not raise — this loop has no caller to report an error to) a
+      school whose most recent `review_digest` row is under 5 minutes old,
+      checked per school inside the loop so one school's cooldown never blocks
+      another's. Lives entirely in `send_counselor_digests()`, so it covers
+      both the daily cron call and `send_counselor_digests_now()` from one
+      place — no change needed to the admin-triggered wrapper.
+      → [supabase/migrations/20260923140000_digest_cooldown.sql](../supabase/migrations/20260923140000_digest_cooldown.sql).
+      **Written, not yet applied to dev.**
+- [x] `tsc` / `eslint` / `next build` clean.
+- [x] **Migration applied to dev** (Grant, 2026-09-23) — the original
+      `20260923130000`; the cooldown follow-up (`20260923140000`) above is
+      still pending.
+- [ ] **dev only; prod untouched.**
+
+~~Open — needs an answer before this is relied on:~~
+- ~~**What hour, in what timezone?**~~ **Resolved** (Grant, 2026-09-23): Central
+  US. `13:00 UTC` (already the value in the migration) lands at 7:00 AM CST
+  Nov-Mar — the bulk of the season this digest actually matters for — or
+  8:00 AM CDT the rest of the year. Good enough either way; not adjusted twice
+  a year for one hour of drift.
+- **Deadline reminder.** §11 pairs the digest with "immediate sends reserved for
+  their first submission and the deadline reminder." The deadline reminder is a
+  natural third `kind` on the same table — in this story or the next one?
+- ~~**No per-school cooldown on `send_counselor_digests()`/`_now()`**~~
+  **Resolved** (Grant, 2026-09-23) — see the acceptance criterion above.
+
+Status: **`20260923130000` applied to dev, e2e green — 2026-09-23.** The
+`20260923140000` cooldown follow-up is **written but not yet applied** — the
+e2e run below confirms it isn't live yet (its cooldown assertion currently
+fails, exactly as expected against the un-patched function; will re-verify
+once applied). `tsc`/`eslint`/`next build` clean. 9/10 e2e green live against
+dev (the 10th is the pending-cooldown assertion above).
+
+**Cron infrastructure confirmed live** (Grant, 2026-09-23): `pg_extension`
+shows `pg_cron` version 1.6.4 genuinely enabled (not just the extension's SQL
+objects present with the background worker never loaded — a real risk on
+Supabase specifically, since `create extension pg_cron` via raw SQL doesn't
+always imply the worker is running the way toggling it on in the dashboard
+does), and the `counselor-review-digest` job is registered in `cron.job`.
+Neither is checkable from this session — PostgREST only exposes the `public`
+schema, so `cron.*` is invisible to any client-side/test-account query; both
+had to be confirmed by Grant directly in the SQL Editor / dashboard.
+
+Still to do before Done: apply `20260923140000`, re-verify that test goes
+green, **reach-reviewer gate** (mandatory — new always-on scheduled job with
+database-wide reach, and the cooldown migration is a second
+`create or replace` on that same function worth a second look), code-reviewer
+pass.
+Owner: database-engineer (cron + function + `web/lib` — done, live-verified
+except the cooldown migration), frontend-designer (pause toggle, waiting-count
+line — done), reach-reviewer (mandatory gate).
+
+---
+
+## US-43: Sponsor lifecycle emails (placeholder — not yet scoped)
+
+The answer Grant already gave to OPEN_QUESTIONS **SPN-6**: "1. Thanks for signing
+up, here's who you volunteered to buy for 2. Reminder 1 week until due 3. Reminder
+1 day out 4. if overdue, emails should go out again."
+
+Same Resend/Vault/pg_net path, the same `pg_cron` dependency as US-42, and the
+same verified-domain prerequisite — which is the argument for designing US-41's
+`counselor_emails` table as a reusable outbound log (a `kind` column, a nullable
+subject reference) rather than something counselor-shaped that has to be rebuilt.
+Today the only follow-up mechanism is the "Sponsors running late" table on the
+dashboard, which a human has to read and act on.
+
+Not scoped here. Written down so US-41's schema is chosen with it in mind.
+
+Status: **Backlog** — not scoped. Owner: unassigned.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

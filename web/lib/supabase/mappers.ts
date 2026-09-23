@@ -52,6 +52,7 @@ export function mapDriveSchool(row: any): DriveSchool {
     schoolId: row.school_id,
     code: row.code,
     distributionMethod: row.distribution_method as DistributionMethod | null,
+    digestPaused: Boolean(row.digest_paused),
   };
 }
 

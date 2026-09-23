@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useData } from "@/lib/store";
 import {
+  listCounselorEmails,
   listDriveFormVersions,
   listFormLinks,
   listReviewLinks,
   listSubmissions,
   reviewLinkIsLive,
+  type CounselorEmailRecord,
   type DriveFormVersionRecord,
   type FormLinkRecord,
   type ReviewLinkRecord,
@@ -17,7 +19,7 @@ import {
 import type { DataBundle } from "@/lib/types";
 import { childCountLabel, formatDate } from "@/components/intake/format";
 import { SubmissionStatusBadge } from "@/components/intake/SubmissionStatusBadge";
-import { FormLinkPanel } from "./FormLinkPanel";
+import { FormLinkPanel, type PendingReviewCounts } from "./FormLinkPanel";
 import { CopyLinkButton } from "./CopyLinkButton";
 import { STATUS_GROUPS, channelLabel, findHouseholdMatches, guardianName } from "./shared";
 
@@ -87,15 +89,17 @@ export function SubmissionsQueue() {
   const [links, setLinks] = useState<FormLinkRecord[]>([]);
   const [reviewLinks, setReviewLinks] = useState<ReviewLinkRecord[]>([]);
   const [formVersions, setFormVersions] = useState<DriveFormVersionRecord[]>([]);
+  const [counselorEmails, setCounselorEmails] = useState<CounselorEmailRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!driveId) return;
-    const [subs, formLinks, revLinks, versions] = await Promise.all([
+    const [subs, formLinks, revLinks, versions, emails] = await Promise.all([
       listSubmissions(driveId),
       listFormLinks(driveId),
       listReviewLinks(driveId),
       listDriveFormVersions(driveId),
+      listCounselorEmails(driveId),
     ]);
     if (!subs.ok) {
       setError(subs.error);
@@ -107,6 +111,7 @@ export function SubmissionsQueue() {
     setLinks(formLinks.ok ? formLinks.items : []);
     setReviewLinks(revLinks.ok ? revLinks.items : []);
     setFormVersions(versions.ok ? versions.items : []);
+    setCounselorEmails(emails.ok ? emails.items : []);
   }, [driveId]);
 
   useEffect(() => {
@@ -128,6 +133,25 @@ export function SubmissionsQueue() {
     }
     return map;
   }, [reviewLinks]);
+
+  // US-42's "N households waiting since [date]" line, per school — computed
+  // from the same `submissions` list above rather than a new query. Mirrors
+  // send_counselor_digests()'s own definition of "waiting": submitted or
+  // under_review, the two states a counselor (not staff) owns.
+  const pendingBySchool = useMemo(() => {
+    const map = new Map<string, PendingReviewCounts>();
+    for (const s of submissions ?? []) {
+      if (!s.driveSchoolId) continue;
+      if (s.status !== "submitted" && s.status !== "under_review") continue;
+      const current = map.get(s.driveSchoolId) ?? { count: 0, oldestIso: null };
+      current.count += 1;
+      if (!current.oldestIso || (s.submittedAt && s.submittedAt < current.oldestIso)) {
+        current.oldestIso = s.submittedAt ?? current.oldestIso;
+      }
+      map.set(s.driveSchoolId, current);
+    }
+    return map;
+  }, [submissions]);
 
   if (!data) return null;
 
@@ -249,6 +273,8 @@ export function SubmissionsQueue() {
         links={links}
         reviewLinks={reviewLinks}
         formVersions={formVersions}
+        counselorEmails={counselorEmails}
+        pendingBySchool={pendingBySchool}
         onChanged={load}
       />
     </div>

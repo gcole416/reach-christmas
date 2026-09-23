@@ -158,6 +158,8 @@ interface DataContextValue {
   // the held child drops out of the pool/print/board derivations immediately.
   setChildHold: (childId: string, reason: string) => Promise<Result>;
   releaseChildHold: (childId: string) => Promise<Result>;
+  // US-42: pause/resume a school's daily counselor review digest.
+  setSchoolDigestPaused: (driveSchoolId: string, paused: boolean) => Promise<Result>;
   updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
   checkInFamily: (familyId: string) => Promise<Result>;
   undoCheckInFamily: (familyId: string) => Promise<Result>;
@@ -993,6 +995,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  // US-42: pause/resume this school's daily counselor review digest. Plain
+  // RLS-gated table write (the existing "admin update drive_schools" policy
+  // already requires is_admin()) — no server function needed, this isn't a
+  // security boundary, just a preference send_counselor_digests() reads.
+  async function setSchoolDigestPaused(driveSchoolId: string, paused: boolean): Promise<Result> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("drive_schools")
+      .update({ digest_paused: paused })
+      .eq("id", driveSchoolId);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
   async function updateFamilyDistribution(familyId: string, input: FamilyDistributionInput): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase
@@ -1057,6 +1074,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setShopDayTracking,
         setChildHold,
         releaseChildHold,
+        setSchoolDigestPaused,
         updateFamilyDistribution,
         checkInFamily,
         undoCheckInFamily,

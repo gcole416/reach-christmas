@@ -44,6 +44,10 @@ export interface DriveSchool {
   schoolId: string;
   code: string;
   distributionMethod: DistributionMethod | null;
+  /** US-42: skip this school in the daily counselor review digest, even when
+   *  households are pending. Per-drive, not per-school — a school might want
+   *  digests one season and not the next. */
+  digestPaused: boolean;
 }
 
 export interface Family {

@@ -7,15 +7,26 @@ import {
   issueReviewLink,
   reviewLinkIsLive,
   revokeFormLink,
+  sendCounselorRegistrationLink,
+  sendCounselorReviewLink,
+  type CounselorEmailRecord,
   type DriveFormVersionRecord,
   type FormLinkRecord,
   type ReviewLinkRecord,
 } from "@/lib/intake";
+import { useData } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
 import type { DataBundle } from "@/lib/types";
 import { formatDate } from "@/components/intake/format";
 import { channelLabel } from "./shared";
 import { CopyLinkButton } from "./CopyLinkButton";
+
+/** Per-school pending-review counts (US-42), computed by the caller from the
+ *  same `submissions` list SubmissionsQueue already loads — no extra query. */
+export interface PendingReviewCounts {
+  count: number;
+  oldestIso: string | null;
+}
 
 // The staff surface for registration links (ADM-24, US-28): every link on
 // screen, copyable, sendable by hand — the family form link AND the counselor
@@ -251,6 +262,63 @@ function ReviewLinkRow({
   );
 }
 
+// One send-to-counselor action (US-41): "Email English link" / "Email Spanish
+// link" / "Email review link". Three of these render per school — see the
+// "Counselor email" block in renderSchoolGroup. Sending itself, and every
+// notice/error, is handled by the parent (FormLinkPanel) the same way
+// handleIssueReview/handleRevoke already work — this component is just the
+// row and its own busy state.
+function CounselorSendRow({
+  label,
+  hasLiveTarget,
+  noTargetReason,
+  liaisonEmail,
+  lastSend,
+  openedHint,
+  busy,
+  onSend,
+}: {
+  label: string;
+  hasLiveTarget: boolean;
+  /** Shown when there's nothing live to send yet (no liaison-email case is handled separately). */
+  noTargetReason: string;
+  liaisonEmail: string | null;
+  lastSend: CounselorEmailRecord | undefined;
+  /** "opened" / "not opened yet", or null when there's no such signal (registration links). */
+  openedHint: string | null;
+  busy: boolean;
+  onSend: () => void;
+}) {
+  const hasLiaison = Boolean(liaisonEmail && liaisonEmail.trim());
+  const disabled = busy || !hasLiaison || !hasLiveTarget;
+  const reason = !hasLiaison
+    ? "No liaison email on file for this school."
+    : !hasLiveTarget
+      ? noTargetReason
+      : null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gridline bg-background px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-ink-primary">{label}</p>
+        <p className="mt-0.5 text-xs text-ink-muted">
+          {lastSend ? `Emailed ${formatDate(lastSend.sentAt)} to ${lastSend.sentTo}` : "Not emailed yet"}
+          {openedHint ? ` · ${openedHint}` : ""}
+        </p>
+        {reason ? <p className="mt-0.5 text-xs text-ink-muted">{reason}</p> : null}
+      </div>
+      <button
+        type="button"
+        onClick={onSend}
+        disabled={disabled}
+        className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue disabled:opacity-50"
+      >
+        {busy ? "Sending…" : "Email"}
+      </button>
+    </div>
+  );
+}
+
 function CreateLinkForm({
   data,
   formVersions,
@@ -463,16 +531,26 @@ export function FormLinkPanel({
   links,
   reviewLinks,
   formVersions,
+  counselorEmails,
+  pendingBySchool,
   onChanged,
 }: {
   data: DataBundle;
   links: FormLinkRecord[];
   reviewLinks: ReviewLinkRecord[];
   formVersions: DriveFormVersionRecord[];
+  /** US-41 send log, newest first (as listCounselorEmails returns it). */
+  counselorEmails: CounselorEmailRecord[];
+  /** US-42: per-school pending-review counts, computed by the caller from the
+   *  submissions list it already has loaded. */
+  pendingBySchool: Map<string, PendingReviewCounts>;
   onChanged: () => void | Promise<void>;
 }) {
+  const { setSchoolDigestPaused } = useData();
   const [creatingFor, setCreatingFor] = useState<string | null | undefined>(undefined);
   const [busyLinkId, setBusyLinkId] = useState<string | null>(null);
+  // Keyed "<driveSchoolId>:<kind>:<locale>" (locale omitted for review sends).
+  const [busySendKey, setBusySendKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -505,6 +583,56 @@ export function FormLinkPanel({
   }, [reviewLinks]);
 
   const confidentialLinks = bySchool.get(null) ?? [];
+
+  // Newest-first per school (listCounselorEmails already orders this way, and
+  // grouping preserves that order) — CounselorSendRow's `.find` below picks
+  // up the most recent send for a given kind/locale.
+  const emailsBySchool = useMemo(() => {
+    const map = new Map<string, CounselorEmailRecord[]>();
+    for (const e of counselorEmails) {
+      if (!e.driveSchoolId) continue;
+      const list = map.get(e.driveSchoolId) ?? [];
+      list.push(e);
+      map.set(e.driveSchoolId, list);
+    }
+    return map;
+  }, [counselorEmails]);
+
+  async function handleSendRegistration(driveSchoolId: string, locale: string) {
+    setError(null);
+    setNotice(null);
+    const key = `${driveSchoolId}:registration_link:${locale}`;
+    setBusySendKey(key);
+    const result = await sendCounselorRegistrationLink(driveSchoolId, locale);
+    setBusySendKey(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setNotice("Registration link emailed to the counselor.");
+    await onChanged();
+  }
+
+  async function handleSendReview(driveSchoolId: string) {
+    setError(null);
+    setNotice(null);
+    const key = `${driveSchoolId}:review_link`;
+    setBusySendKey(key);
+    const result = await sendCounselorReviewLink(driveSchoolId);
+    setBusySendKey(null);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setNotice("Review link emailed to the counselor.");
+    await onChanged();
+  }
+
+  async function handleToggleDigest(driveSchoolId: string, paused: boolean) {
+    setError(null);
+    const result = await setSchoolDigestPaused(driveSchoolId, paused);
+    if (!result.ok) setError(result.error);
+  }
 
   async function handleCreate(input: {
     driveSchoolId: string;
@@ -567,11 +695,25 @@ export function FormLinkPanel({
     await onChanged();
   }
 
-  function renderSchoolGroup(driveSchoolId: string, name: string, liaisonEmail: string | null) {
+  function renderSchoolGroup(
+    driveSchoolId: string,
+    name: string,
+    liaisonEmail: string | null,
+    digestPaused: boolean
+  ) {
     const schoolLinks = bySchool.get(driveSchoolId) ?? [];
     const liveFamily = schoolLinks.filter((l) => linkState(l).live).length;
     const review = reviewBySchool.get(driveSchoolId);
     const hasLiveReview = Boolean(review && reviewLinkIsLive(review));
+
+    const emails = emailsBySchool.get(driveSchoolId) ?? [];
+    const hasLiveEnglish = schoolLinks.some((l) => l.locale === "en" && linkState(l).live);
+    const hasLiveSpanish = schoolLinks.some((l) => l.locale === "es" && linkState(l).live);
+    const lastEnglishSend = emails.find((e) => e.kind === "registration_link" && e.locale === "en");
+    const lastSpanishSend = emails.find((e) => e.kind === "registration_link" && e.locale === "es");
+    const lastReviewSend = emails.find((e) => e.kind === "review_link");
+    const reviewOpenedHint = review ? (review.lastUsedAt ? "opened" : "not opened yet") : null;
+    const pending = pendingBySchool.get(driveSchoolId);
 
     const bits: string[] = [];
     if (schoolLinks.length > 0) {
@@ -630,6 +772,64 @@ export function FormLinkPanel({
             liaisonEmail={liaisonEmail}
             onIssue={handleIssueReview}
           />
+
+          <div className="space-y-2 rounded-lg border border-gridline bg-background p-3">
+            <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+              Counselor email
+            </p>
+            <div className="space-y-2">
+              <CounselorSendRow
+                label="Email English registration link"
+                hasLiveTarget={hasLiveEnglish}
+                noTargetReason="No live English registration link for this school yet."
+                liaisonEmail={liaisonEmail}
+                lastSend={lastEnglishSend}
+                openedHint={null}
+                busy={busySendKey === `${driveSchoolId}:registration_link:en`}
+                onSend={() => handleSendRegistration(driveSchoolId, "en")}
+              />
+              <CounselorSendRow
+                label="Email Spanish registration link"
+                hasLiveTarget={hasLiveSpanish}
+                noTargetReason="No live Spanish registration link for this school yet."
+                liaisonEmail={liaisonEmail}
+                lastSend={lastSpanishSend}
+                openedHint={null}
+                busy={busySendKey === `${driveSchoolId}:registration_link:es`}
+                onSend={() => handleSendRegistration(driveSchoolId, "es")}
+              />
+              <CounselorSendRow
+                label="Email review link"
+                hasLiveTarget={hasLiveReview}
+                noTargetReason="Create a counselor review link above first."
+                liaisonEmail={liaisonEmail}
+                lastSend={lastReviewSend}
+                openedHint={reviewOpenedHint}
+                busy={busySendKey === `${driveSchoolId}:review_link`}
+                onSend={() => handleSendReview(driveSchoolId)}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gridline pt-2">
+              {pending && pending.count > 0 ? (
+                <p className="text-xs text-ink-secondary">
+                  {pending.count} household{pending.count > 1 ? "s" : ""} waiting since{" "}
+                  {formatDate(pending.oldestIso)}
+                </p>
+              ) : (
+                <p className="text-xs text-ink-muted">Nothing waiting on this counselor right now.</p>
+              )}
+              <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-secondary">
+                <input
+                  type="checkbox"
+                  checked={digestPaused}
+                  onChange={(e) => handleToggleDigest(driveSchoolId, e.target.checked)}
+                  className="size-3.5 rounded border-border"
+                />
+                Pause daily digest for this school
+              </label>
+            </div>
+          </div>
 
           {creatingFor === driveSchoolId ? (
             <CreateLinkForm
@@ -696,7 +896,9 @@ export function FormLinkPanel({
             This drive has no schools yet. Add one under Schools, then create its link here.
           </p>
         ) : (
-          schools.map((s) => renderSchoolGroup(s.driveSchoolId, s.name, s.liaisonEmail))
+          schools.map((s) =>
+            renderSchoolGroup(s.driveSchoolId, s.name, s.liaisonEmail, s.digestPaused)
+          )
         )}
 
         {confidentialLinks.length > 0 ? (

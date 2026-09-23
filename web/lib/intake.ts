@@ -1005,6 +1005,112 @@ export async function issueReviewLink(
 }
 
 // =============================================================================
+// Counselor email (US-41 / US-42)
+// =============================================================================
+//
+// Sending is entirely server-side — these are thin wrappers over
+// send_counselor_registration_link / send_counselor_review_link /
+// send_counselor_digests_now in supabase/migrations/20260923120000 and
+// 20260923130000. Recipient is always the school's own `liaison_email`; there
+// is no address parameter to pass here, by design (see those migrations'
+// headers on OPEN_QUESTIONS SPN-4). Every call is admin-only, enforced in the
+// database — a volunteer calling one of these gets a Postgres error, not a
+// send.
+
+/** Same shape as store.tsx's own (unexported) `Result` — repeated here rather
+ * than imported, since intake.ts doesn't otherwise depend on store.tsx. */
+type SendResult = { ok: true } | { ok: false; error: string };
+
+export type CounselorEmailKind = "registration_link" | "review_link" | "review_digest";
+
+export interface CounselorEmailRecord {
+  id: string;
+  driveSchoolId: string | null;
+  kind: CounselorEmailKind;
+  /** Set only for kind "registration_link" ("en" / "es"); null otherwise. */
+  locale: string | null;
+  sentTo: string;
+  sentAt: string;
+  /** Null for a cron-driven send (the review_digest kind) — nobody was signed in. */
+  sentBy: string | null;
+}
+
+function mapCounselorEmailRow(row: any): CounselorEmailRecord {
+  return {
+    id: row.id,
+    driveSchoolId: row.drive_school_id ?? null,
+    kind: row.kind,
+    locale: row.locale ?? null,
+    sentTo: row.sent_to,
+    sentAt: row.created_at,
+    sentBy: row.sent_by ?? null,
+  };
+}
+
+/**
+ * Every counselor email logged for a drive, newest first. Powers the
+ * "Emailed Sept 24 to counselor@school.org" status line in FormLinkPanel — RLS
+ * returns nothing to a volunteer and no confidential-channel row to an
+ * uncleared admin, same shape as listFormLinks/listReviewLinks.
+ */
+export async function listCounselorEmails(driveId: string): Promise<ListResult<CounselorEmailRecord>> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("counselor_emails")
+    .select("id, drive_school_id, kind, locale, sent_to, sent_by, created_at")
+    .eq("drive_id", driveId)
+    .order("created_at", { ascending: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, items: (data ?? []).map(mapCounselorEmailRow) };
+}
+
+/**
+ * Emails every live `family`-channel registration link for this school AND
+ * this locale to the school's liaison. English and Spanish are independent
+ * sends (Grant, 2026-09-23) — a school might have only one live, and a
+ * counselor who only handles one language doesn't need both bundled into one
+ * message.
+ */
+export async function sendCounselorRegistrationLink(
+  driveSchoolId: string,
+  locale: string
+): Promise<SendResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("send_counselor_registration_link", {
+    p_drive_school_id: driveSchoolId,
+    p_locale: locale,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Emails the school's one live counselor review link to its liaison. */
+export async function sendCounselorReviewLink(driveSchoolId: string): Promise<SendResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("send_counselor_review_link", {
+    p_drive_school_id: driveSchoolId,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Admin-triggered "send the digest now" (US-42) — runs the same school loop
+ * the daily pg_cron job does, without waiting for the clock. Useful for
+ * verifying the digest actually works, and for e2e tests. Sends nothing for a
+ * school with zero households pending, paused digests, or no liaison email —
+ * see send_counselor_digests()'s own header for why this can't take a
+ * recipient or a single-school target: it is the identical function the cron
+ * job calls, just invoked on demand.
+ */
+export async function sendCounselorDigestsNow(): Promise<SendResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc("send_counselor_digests_now");
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// =============================================================================
 // Pure helpers
 // =============================================================================
 

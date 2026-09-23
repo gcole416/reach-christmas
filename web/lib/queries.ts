@@ -499,6 +499,8 @@ export interface SchoolRow {
   liaisonEmail: string | null;
   distributionMethod: DistributionMethod | null;
   familyCount: number;
+  /** US-42: true when this school is skipped by the daily counselor digest. */
+  digestPaused: boolean;
 }
 
 /**
@@ -524,6 +526,7 @@ export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
         liaisonEmail: school.liaisonEmail,
         distributionMethod: ds.distributionMethod,
         familyCount,
+        digestPaused: ds.digestPaused,
       };
     });
 }
