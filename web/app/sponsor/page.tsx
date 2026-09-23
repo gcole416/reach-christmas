@@ -6,9 +6,8 @@ export default function SponsorPage() {
       <div className="max-w-2xl">
         <h1 className="text-3xl font-semibold text-ink-primary">Sponsor a child this Christmas</h1>
         <p className="mt-3 text-ink-secondary">
-          Browse the kids below who still need a sponsor and claim one to buy for. No account needed.
-          You see a child&apos;s first name, grade, sizes, wish list, and any specific needs. Last
-          names, schools, and addresses are never shown.
+          Browse the kids below who still need a sponsor and claim one to buy for.
+          You see a child&apos;s first name, grade, sizes, wish list, and any specific needs.
         </p>
       </div>
       <SponsorBrowser />
