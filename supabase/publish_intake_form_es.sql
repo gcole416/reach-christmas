@@ -293,18 +293,8 @@ begin
     {
       "id": "pickup_consent",
       "title": "Entrega y consentimiento",
+      "help": "Entregaremos el regalo o los regalos de su hijo o hija directamente a su escuela antes de Navidad. El consejero de su escuela coordinará con su familia cómo los recibirán.",
       "fields": [
-        {
-          "id": "can_reach_church_pickup",
-          "label": "Si los regalos se entregan en la iglesia, ¿puede usted llegar allí?",
-          "type": "select",
-          "required": true,
-          "options": [
-            { "value": "Yes", "label": "Sí" },
-            { "value": "No", "label": "No" },
-            { "value": "Not sure", "label": "No estoy seguro/a" }
-          ]
-        },
         {
           "id": "consent",
           "label": "Entiendo que la información de mi hogar será compartida con OneLife Church y sus voluntarios.",

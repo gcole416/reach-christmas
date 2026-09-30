@@ -496,7 +496,7 @@ test.describe("counselor review digest (US-42)", () => {
             wishlist: ["a soccer ball"],
           },
         ],
-        pickup_consent: { can_reach_church_pickup: "Yes", consent: true },
+        pickup_consent: { consent: true },
       },
     });
     expect(submitted.error).toBeNull();
@@ -538,7 +538,7 @@ test.describe("counselor review digest (US-42)", () => {
             wishlist: ["a soccer ball"],
           },
         ],
-        pickup_consent: { can_reach_church_pickup: "Yes", consent: true },
+        pickup_consent: { consent: true },
       },
     });
     expect(submitted.error, `submit_form raised: ${submitted.error?.message}`).toBeNull();

@@ -154,9 +154,15 @@ Alternative considered: self-hosting on church infrastructure — more control, 
   and
   [supabase/migrations/20260818180000_fix_attempt_cap_off_by_one.sql](supabase/migrations/20260818180000_fix_attempt_cap_off_by_one.sql)).
   Not yet applied to prod.
-- [ ] How will distribution actually run this year (one church pickup event, school drop-offs, or a mix)? —
-  confirmed still genuinely undecided as of 2026-07; revisit closer to the date. No code depends on this
-  being answered — the distribution page already supports any combination per-family.
+- [x] ~~How will distribution actually run this year (one church pickup event, school drop-offs, or a mix)?~~
+  → Decided 2026-09-29: school drop-off for elementary kids. The church collects gifts from sponsors as
+  usual, then delivers each family's gifts to their school counselor at the school — no family comes to the
+  church building for an elementary child's gift. Set the drive's (and/or each school's) distribution
+  method to "School drop-off" on `/admin/drives` / `/admin/schools`; the mechanism already fully supports
+  this, no code change needed there. The intake form's "can you get to church pickup" question is now moot
+  and was removed (both languages) in favor of a plain delivery-and-consent statement — see
+  `web/lib/intakeFormDefinition.ts`'s `pickup_consent` section. `families.can_reach_church_pickup` stays in
+  the schema, unused, rather than migrated away (nothing downstream read it even before this).
 - [x] ~~Deployment (Vercel now vs. staying local)~~ → Grant asked for a deploy guide 2026-08-19 — see
   [docs/DEPLOY.md](docs/DEPLOY.md). Not yet executed; that doc is the runbook for whenever it happens.
 

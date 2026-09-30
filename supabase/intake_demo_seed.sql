@@ -144,6 +144,14 @@ begin
   -- So: a version 2 may ADD sections and fields freely, but renaming or removing
   -- any id listed above is a change to `import_submission`, not to this file
   -- alone. Change both together, or don't change them.
+  --
+  -- EXCEPTION, deliberate: `can_reach_church_pickup` was DROPPED below (2026-09,
+  -- distribution plan change — the church now delivers every family's gift to
+  -- their school counselor; no family comes to the church, so the question is
+  -- moot). `import_submission` still writes that column — it's left as-is
+  -- rather than migrated, since nothing downstream reads it (see git history /
+  -- Claude session notes) — it just always resolves to NULL now. That's
+  -- intentional, not the silent-failure case above.
   -- ===========================================================================
   --
   -- `{budget}` in the wishlist help text is substituted by the renderer from
@@ -393,19 +401,9 @@ begin
     },
     {
       "id": "pickup_consent",
-      "title": "Pickup and consent",
+      "title": "Delivery and consent",
+      "help": "We'll deliver your child's gift(s) directly to your school before Christmas. Your school counselor will coordinate with your family on how you'll receive them.",
       "fields": [
-        {
-          "id": "can_reach_church_pickup",
-          "label": "If gifts are distributed at the church, can you get there?",
-          "type": "select",
-          "required": true,
-          "options": [
-            { "value": "Yes", "label": "Yes" },
-            { "value": "No", "label": "No" },
-            { "value": "Not sure", "label": "Not sure" }
-          ]
-        },
         {
           "id": "consent",
           "label": "I understand my household's information will be shared with OneLife Church and its volunteers.",
@@ -764,18 +762,8 @@ $json$::jsonb;
     {
       "id": "pickup_consent",
       "title": "Entrega y consentimiento",
+      "help": "Entregaremos el regalo o los regalos de su hijo o hija directamente a su escuela antes de Navidad. El consejero de su escuela coordinará con su familia cómo los recibirán.",
       "fields": [
-        {
-          "id": "can_reach_church_pickup",
-          "label": "Si los regalos se entregan en la iglesia, ¿puede usted llegar allí?",
-          "type": "select",
-          "required": true,
-          "options": [
-            { "value": "Yes", "label": "Sí" },
-            { "value": "No", "label": "No" },
-            { "value": "Not sure", "label": "No estoy seguro/a" }
-          ]
-        },
         {
           "id": "consent",
           "label": "Entiendo que la información de mi hogar será compartida con OneLife Church y sus voluntarios.",

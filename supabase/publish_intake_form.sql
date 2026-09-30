@@ -294,19 +294,9 @@ begin
     },
     {
       "id": "pickup_consent",
-      "title": "Pickup and consent",
+      "title": "Delivery and consent",
+      "help": "We'll deliver your child's gift(s) directly to your school before Christmas. Your school counselor will coordinate with your family on how you'll receive them.",
       "fields": [
-        {
-          "id": "can_reach_church_pickup",
-          "label": "If gifts are distributed at the church, can you get there?",
-          "type": "select",
-          "required": true,
-          "options": [
-            { "value": "Yes", "label": "Yes" },
-            { "value": "No", "label": "No" },
-            { "value": "Not sure", "label": "Not sure" }
-          ]
-        },
         {
           "id": "consent",
           "label": "I understand my household's information will be shared with OneLife Church and its volunteers.",

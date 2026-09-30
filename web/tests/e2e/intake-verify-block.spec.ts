@@ -186,7 +186,7 @@ test.describe("VERIFY block, client-drivable checks", () => {
             wishlist: ["a bike"],
           },
         ],
-        pickup_consent: { can_reach_church_pickup: "Yes", consent: true },
+        pickup_consent: { consent: true },
       },
     });
     expect(noSelect.error).toBeNull();
@@ -258,7 +258,7 @@ test.describe("VERIFY block, client-drivable checks", () => {
             wishlist: ["a bike", { junk: "y".repeat(3000) }],
           },
         ],
-        pickup_consent: { can_reach_church_pickup: "Yes", consent: true },
+        pickup_consent: { consent: true },
       },
     });
 

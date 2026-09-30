@@ -19,16 +19,6 @@ export const INTAKE_FORM_NAME = "Household Gift Registration";
 export const INTAKE_FORM_DESCRIPTION =
   "Phase 1 English intake questionnaire. Source: docs/INTAKE_FORM_DRAFT.md";
 
-/**
- * The store and date for the high schooler shopping day (US-32/US-33).
- * PLACEHOLDER pending Grant's confirmation of the 2026 store/date — one string,
- * one place, so swapping in the real values is a one-line edit. Shown to a
- * family only when they set a child's grade to 9-12; not part of the immutable
- * form definition, so changing it needs no new form version.
- */
-export const SHOP_DAY_STORE = "[placeholder store]";
-export const SHOP_DAY_DATE = "[placeholder date]";
-
 /** Written verbatim into `form_versions.definition`. */
 export const PHASE_1_FORM_DEFINITION = {
   schema_version: 1,
@@ -278,19 +268,9 @@ export const PHASE_1_FORM_DEFINITION = {
     },
     {
       id: "pickup_consent",
-      title: "Pickup and consent",
+      title: "Delivery and consent",
+      help: "We'll deliver your child's gift(s) directly to your school before Christmas. Your school counselor will coordinate with your family on how you'll receive them.",
       fields: [
-        {
-          id: "can_reach_church_pickup",
-          label: "If gifts are distributed at the church, can you get there?",
-          type: "select",
-          required: true,
-          options: [
-            { value: "Yes", label: "Yes" },
-            { value: "No", label: "No" },
-            { value: "Not sure", label: "Not sure" },
-          ],
-        },
         {
           id: "consent",
           label:
@@ -573,18 +553,8 @@ export const PHASE_1_FORM_DEFINITION_ES = {
     {
       id: "pickup_consent",
       title: "Entrega y consentimiento",
+      help: "Entregaremos el regalo o los regalos de su hijo o hija directamente a su escuela antes de Navidad. El consejero de su escuela coordinará con su familia cómo los recibirán.",
       fields: [
-        {
-          id: "can_reach_church_pickup",
-          label: "Si los regalos se entregan en la iglesia, ¿puede usted llegar allí?",
-          type: "select",
-          required: true,
-          options: [
-            { value: "Yes", label: "Sí" },
-            { value: "No", label: "No" },
-            { value: "Not sure", label: "No estoy seguro/a" },
-          ],
-        },
         {
           id: "consent",
           label:

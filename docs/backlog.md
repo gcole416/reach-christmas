@@ -1108,6 +1108,14 @@ hides/restores the gift fields on grade change. **Outstanding: prod
 (re-publish there after SAR).**
 Owner: frontend-designer (renderer + definition), database-engineer (validator + the 3-way sync) — built this session
 
+**Update 2026-09-29:** the shop-day panel no longer names a specific store or
+date at all — `SHOP_DAY_STORE`/`SHOP_DAY_DATE` were removed from
+`intakeFormDefinition.ts`. Grant decided the counselor tells each high-school
+family those details directly, closer to Christmas, rather than the family
+form. The panel now just says the counselor will reach out with the shopping
+day details. Same change made in both `PHASE_1_FORM_DEFINITION` and
+`PHASE_1_FORM_DEFINITION_ES`.
+
 ---
 
 ## US-34: Staff intake + household view — high schooler badge and override

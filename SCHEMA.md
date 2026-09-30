@@ -1280,8 +1280,9 @@ newer year. Now the database rejects it outright.
   per-school card/household numbering. Per-school links stay (each counselor vouches for their own kids).
   The staff import queue carries a **soft cross-school hint** (`findHouseholdMatches` in
   `web/app/admin/submissions/shared.ts`, US-37) — matched on guardian phone, never a blocker. The
-  high-schooler split (§6.1) softens the common case anyway: an elementary household goes to church
-  pickup while its high-school sibling goes to the shop day.
+  high-schooler split (§6.1) softens the common case anyway: an elementary household's gifts go to the
+  school counselor for delivery (§8's 2026-09-29 distribution decision) while its high-school sibling goes
+  to the shop day.
 - ~~Are high-school-age kids collected in a family's intake submission, and if so how are they handled?~~
   → **Resolved** (OPEN_QUESTIONS ADM-19, Grant 2026-09-08). Yes — every child is listed, grades 9–12 are
   flagged `children.is_high_schooler` and routed to a store shopping day instead of a sponsor. See §6.1.

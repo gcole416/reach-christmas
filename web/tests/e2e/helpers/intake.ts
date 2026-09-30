@@ -178,7 +178,6 @@ export interface TestAnswersInput {
   guardianEmail?: string;
   preferredLanguage?: "en" | "es";
   children: TestChildAnswer[];
-  canReachChurchPickup?: string;
   consent?: boolean;
   /** US-30 "everyone lives in my home" gate. Defaults to checked; set false to leave it unchecked. */
   everyoneLivesHere?: boolean;
@@ -213,7 +212,6 @@ export function buildAnswers(input: TestAnswersInput): Record<string, unknown> {
       ...(child.other_notes ? { other_notes: child.other_notes } : {}),
     })),
     pickup_consent: {
-      can_reach_church_pickup: input.canReachChurchPickup ?? "Yes",
       consent: input.consent ?? true,
     },
   };
@@ -628,9 +626,6 @@ export async function fillAndSubmitFamilyForm(
     if (child.other_notes) await sel(`children[${i}].other_notes`).fill(child.other_notes);
   }
 
-  await sel("pickup_consent.can_reach_church_pickup").selectOption(
-    input.canReachChurchPickup ?? "Yes"
-  );
   if (input.consent !== false) await sel("pickup_consent.consent").check();
 
   // Hardcoded gate on the form (US-30), not a definition field: the person must

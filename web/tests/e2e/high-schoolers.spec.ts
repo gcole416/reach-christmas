@@ -39,7 +39,7 @@ function household(guardian: string, children: Json[]) {
   return {
     family: { ...GUARDIAN_FIELDS, guardian_name: guardian },
     children,
-    pickup_consent: { can_reach_church_pickup: "Yes", consent: true },
+    pickup_consent: { consent: true },
   };
 }
 

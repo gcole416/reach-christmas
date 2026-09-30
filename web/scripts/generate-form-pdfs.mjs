@@ -64,7 +64,6 @@ async function familyFormFlow(page, { formToken, toggleTo, prefix, heading, labe
   await page.getByLabel(labels.shoeSize).selectOption({ label: options.shoeSize });
   await page.getByLabel(labels.firstIdea).fill("A building block set");
   await page.getByLabel(labels.specificNeeds).fill("Could use a warm winter coat.");
-  await page.getByLabel(labels.canReachPickup).selectOption({ label: options.yes });
   await page.getByLabel(labels.consent).check();
   await page.getByLabel(labels.livesTogether).check();
 
@@ -100,7 +99,6 @@ async function main() {
       shoeSize: "Shoe size",
       firstIdea: "First idea",
       specificNeeds: "Is there anything they especially need?",
-      canReachPickup: "If gifts are distributed at the church, can you get there?",
       consent: /I understand my household's information/,
       livesTogether: /Everyone I've listed lives in my home/,
     },
@@ -111,7 +109,6 @@ async function main() {
       shirtSize: "Youth M",
       pantSize: "Youth 8",
       shoeSize: "Youth 2",
-      yes: "Yes",
     },
   });
 
@@ -140,7 +137,6 @@ async function main() {
       shoeSize: "Talla de zapato",
       firstIdea: "Primera idea",
       specificNeeds: "¿Hay algo que necesiten especialmente?",
-      canReachPickup: "Si los regalos se entregan en la iglesia, ¿puede usted llegar allí?",
       consent: /Entiendo que la información de mi hogar/,
       livesTogether: /Todos los que he mencionado viven en mi hogar/,
     },
@@ -151,7 +147,6 @@ async function main() {
       shirtSize: "Juvenil M",
       pantSize: "Juvenil 8",
       shoeSize: "Juvenil 2",
-      yes: "Sí",
     },
   });
 

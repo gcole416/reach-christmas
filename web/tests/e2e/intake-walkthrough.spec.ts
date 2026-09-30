@@ -190,7 +190,11 @@ test.describe("intake walkthrough (US-24 AC1)", () => {
     expect(family.guardian_name).toBe(guardian);
     expect(family.is_confidential).toBe(false);
     expect(family.drive_school_id).toBe(submission!.drive_school_id);
-    expect(family.can_reach_church_pickup).toBe("Yes");
+    // The form stopped asking this (2026-09 distribution plan change: the
+    // church delivers every family's gift to their school counselor, so
+    // there's no "can you get to church" question any more) — the column
+    // stays in the schema but always imports NULL now.
+    expect(family.can_reach_church_pickup).toBeNull();
     expect(family.consent_given_at).not.toBeNull();
     // reach-reviewer runtime check 2: `select * into v_family from
     // create_family(...)` is a composite-return assignment in the same migration

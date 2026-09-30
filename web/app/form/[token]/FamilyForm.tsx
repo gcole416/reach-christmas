@@ -13,12 +13,7 @@ import {
 } from "@/lib/intake";
 import { friendlyMessage } from "@/components/intake/format";
 import { isHighSchoolGrade } from "@/lib/queries";
-import {
-  PHASE_1_FORM_DEFINITION,
-  PHASE_1_FORM_DEFINITION_ES,
-  SHOP_DAY_DATE,
-  SHOP_DAY_STORE,
-} from "@/lib/intakeFormDefinition";
+import { PHASE_1_FORM_DEFINITION, PHASE_1_FORM_DEFINITION_ES } from "@/lib/intakeFormDefinition";
 import {
   PublicCard,
   PublicMasthead,
@@ -585,9 +580,10 @@ function childIsSelfShopper(child: SectionValues | undefined): boolean {
 }
 
 /**
- * Shown in place of the wishlist/sizes fields for a grade-9-12 child. The
- * store and date are placeholders (SHOP_DAY_STORE / SHOP_DAY_DATE) until Grant
- * confirms the 2026 details — one string, one place.
+ * Shown in place of the wishlist/sizes fields for a grade-9-12 child. No
+ * store/date here on purpose — the counselor tells each family those details
+ * directly, closer to Christmas, rather than the form naming a specific store
+ * and date that could change or go stale on an old link.
  */
 function ShopDayNote({ locale }: { locale: string }) {
   if (locale === "es") {
@@ -595,10 +591,10 @@ function ShopDayNote({ locale }: { locale: string }) {
       <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
         <p className="font-semibold text-ink-primary">Este niño o niña compra sus propios regalos.</p>
         <p className="mt-1">
-          Los estudiantes de preparatoria son invitados a un día de compras en una tienda para
-          elegir sus propios regalos, así que no necesitamos una lista de deseos ni tallas para
-          ellos aquí. Será en {SHOP_DAY_STORE} el {SHOP_DAY_DATE}. El consejero de su escuela
-          compartirá los detalles más cerca de la fecha.
+          Los estudiantes de preparatoria eligen sus propios regalos en un día de compras en una
+          tienda, así que no necesitamos una lista de deseos ni tallas para ellos aquí. El
+          consejero de su escuela se pondrá en contacto con los detalles del día de compras más
+          cerca de la Navidad.
         </p>
         <p className="mt-1">Solo necesitamos su primer nombre, edad y grado, como arriba.</p>
       </div>
@@ -608,9 +604,9 @@ function ShopDayNote({ locale }: { locale: string }) {
     <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
       <p className="font-semibold text-ink-primary">This child shops for their own gifts.</p>
       <p className="mt-1">
-        High schoolers are invited to a store shopping day to pick out their own gifts, so we
-        don&apos;t need a wish list or sizes for them here. It&apos;s at {SHOP_DAY_STORE} on{" "}
-        {SHOP_DAY_DATE}. Your school counselor will share the details closer to the date.
+        High schoolers pick out their own gifts at a store shopping day, so we don&apos;t need a
+        wish list or sizes for them here. Your school counselor will reach out with the shopping
+        day details closer to Christmas.
       </p>
       <p className="mt-1">Just their first name, age, and grade above is all we need.</p>
     </div>
