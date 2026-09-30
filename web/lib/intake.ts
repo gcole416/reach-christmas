@@ -1278,6 +1278,63 @@ function normalizeField(raw: any): IntakeFormField {
 }
 
 /**
+ * `pinned` re-worded in `translation`'s language, for the family form's
+ * English/Español toggle.
+ *
+ * Structure always comes from `pinned` — the version this link was created
+ * with, which is what submit_form validates against. Only words come from
+ * `translation`, matched by section id, field id and option value. A link made
+ * before a later form change can differ from the app's bundled translation;
+ * matching this way means a family never sees a question the server won't ask
+ * or misses one it will. Anything the translation lacks keeps its pinned
+ * wording, and text the pinned version doesn't have is never added.
+ */
+export function translateDefinition(
+  pinned: IntakeFormDefinition,
+  translation: IntakeFormDefinition
+): IntakeFormDefinition {
+  const sectionsById = new Map(translation.sections.map((s) => [s.id, s]));
+  return {
+    ...pinned,
+    locale: translation.locale,
+    title: translation.title || pinned.title,
+    intro: translation.intro || pinned.intro,
+    helpFooter: pinned.helpFooter && (translation.helpFooter ?? pinned.helpFooter),
+    privacyNote: pinned.privacyNote && (translation.privacyNote ?? pinned.privacyNote),
+    submitLabel: pinned.submitLabel && (translation.submitLabel ?? pinned.submitLabel),
+    confirmation: pinned.confirmation && {
+      heading: translation.confirmation?.heading ?? pinned.confirmation.heading,
+      body: translation.confirmation?.body ?? pinned.confirmation.body,
+    },
+    sections: pinned.sections.map((section) => {
+      const tSection = sectionsById.get(section.id);
+      if (!tSection) return section;
+      const fieldsById = new Map(tSection.fields.map((f) => [f.id, f]));
+      return {
+        ...section,
+        title: tSection.title || section.title,
+        help: section.help && (tSection.help ?? section.help),
+        itemLabel: section.itemLabel && (tSection.itemLabel ?? section.itemLabel),
+        addLabel: section.addLabel && (tSection.addLabel ?? section.addLabel),
+        removeLabel: section.removeLabel && (tSection.removeLabel ?? section.removeLabel),
+        fields: section.fields.map((field) => {
+          const tField = fieldsById.get(field.id);
+          if (!tField) return field;
+          const optionLabels = new Map((tField.options ?? []).map((o) => [o.value, o.label]));
+          return {
+            ...field,
+            label: tField.label || field.label,
+            help: field.help && (tField.help ?? field.help),
+            itemLabels: field.itemLabels?.map((label, i) => tField.itemLabels?.[i] ?? label),
+            options: field.options?.map((o) => ({ ...o, label: optionLabels.get(o.value) ?? o.label })),
+          };
+        }),
+      };
+    }),
+  };
+}
+
+/**
  * `[{value,label}, ...]` off the wire, defensively. The database already
  * normalizes this (blank values dropped, label defaulted to value), so this is
  * a type boundary rather than a second implementation of the rule — but it

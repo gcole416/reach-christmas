@@ -825,8 +825,12 @@ accidentally skip logging. We'll write the actual trigger function when we scaff
 
 Replaces "a volunteer retypes a counselor's referral" with a hosted, versioned
 form the family fills out once, a counselor confirms, and staff import. Full
-design: [docs/INTAKE_FORMS.md](docs/INTAKE_FORMS.md). The questionnaire itself:
-[docs/INTAKE_FORM_DRAFT.md](docs/INTAKE_FORM_DRAFT.md) (English only in Phase 1).
+design: [docs/INTAKE_FORMS.md](docs/INTAKE_FORMS.md). The questionnaire itself, in
+English and Spanish: [web/lib/intakeFormDefinition.ts](web/lib/intakeFormDefinition.ts)
+(`PHASE_1_FORM_DEFINITION` / `_ES`; the original draft was
+[docs/INTAKE_FORM_DRAFT.md](docs/INTAKE_FORM_DRAFT.md)). Spanish needs no schema
+change: it's a second definition with the same field ids, shown through a toggle
+on the same link (backlog US-45).
 
 ```
 staff publishes a form  →  counselor gets a school-scoped link  →

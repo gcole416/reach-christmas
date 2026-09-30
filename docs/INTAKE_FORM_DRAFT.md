@@ -3,6 +3,11 @@
 *Status: DRAFT for team redline. This is the questionnaire itself, not the system design — see
 [INTAKE_FORMS.md](INTAKE_FORMS.md) for that.*
 
+> **Superseded as the source of truth (2026-09-29).** The live questionnaire, English and Spanish, is
+> [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts). It has moved on from this
+> draft: question 3.1 (church pickup) was removed when distribution became school drop-off (backlog
+> US-46), and the Spanish ships through a toggle on the same link (US-45). Kept for its reasoning.
+
 **Two things need human review before this goes anywhere:**
 
 1. **The Spanish needs a fluent speaker on staff to read it.** Form wording carries tone, and a stiff

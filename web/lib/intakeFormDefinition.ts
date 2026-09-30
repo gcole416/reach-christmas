@@ -294,8 +294,9 @@ export const PHASE_1_FORM_DEFINITION = {
  * Two ways this reaches a family:
  *   1. The English/Español toggle web/app/form/[token]/FamilyForm.tsx renders
  *      at the top of every form — the primary path. One link, either locale;
- *      the family swaps live. Safe because the two definitions are
- *      structurally identical, so the swap never changes what gets validated.
+ *      the family swaps live. Only this definition's WORDS are used there,
+ *      laid over the link's own pinned version by translateDefinition
+ *      (web/lib/intake.ts), so the questions and rules never change.
  *   2. A Spanish-pinned form_version a school link can point to directly
  *      (published via supabase/publish_intake_form_es.sql), for a counselor
  *      who wants to hand out a Spanish-only link. Not required for #1 to work.

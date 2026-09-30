@@ -380,22 +380,33 @@ decision.
 - Code: [SCHEMA.md:573-580](../SCHEMA.md#L573)
 - GitLab: [issue #16](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/16)
 
-### DB-18 — Is one `scheduled_pickup_at` per family enough? · Soon
+### DB-18 — Is one `scheduled_pickup_at` per family enough? · Whenever
 
 If distribution needs multiple distinct events (different pickup days per
 school), this wants a `distribution_events` table rather than a single timestamp
 on `families`. Low cost to add later, but it's tied to DOC-2 — answer that first.
 
+Update (2026-09-29): DOC-2 is answered with school drop-off, so there are no
+family pickup events this year and this drops to Whenever. What may matter
+instead is a delivery date per school; see backlog US-46's open item on how the
+office records gifts delivered to a school.
+
 - Code: [SCHEMA.md:566-568](../SCHEMA.md#L566)
 - GitLab: [issue #13](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/13)
 
-### DB-19 — How does staff actually reach a family to arrange a pickup? · Soon
+### ~~DB-19 — How does staff actually reach a family to arrange a pickup?~~ · Resolved
 
 `families` has no phone, email, or contact column of any kind — yet the app
 tracks `scheduled_pickup_at`. Either that coordination happens entirely off-app
 through the school liaison, or this is a genuinely missing field, especially for
 confidential/direct-referral families who have no school liaison in the loop at
 all.
+
+Answer (2026-09-29): staff don't arrange pickups this year. The school
+counselor coordinates with each family on how they receive their gifts (DOC-2).
+Since this was raised, `families` also gained `guardian_phone` /
+`guardian_email` via the intake forms. Still open: how a
+confidential/direct-referral family with no counselor gets its gifts.
 
 - Code: [supabase/migrations/20260708120000_init.sql:63-76](../supabase/migrations/20260708120000_init.sql#L63)
 - Raised by: database-engineer
@@ -709,6 +720,10 @@ single most consequential responsive question in the app.
 
 Answer (2026-08-18): Not sure yet — hold off on distribution-day responsive work until this is confirmed.
 
+Update (2026-09-29): with school drop-off (DOC-2) there's no check-in event in
+front of families, so this is much less pressing. The open question moves to how
+the office records deliveries to each school (backlog US-46).
+
 ### ADM-8 — Is the fulfillment board ever worked from a phone? · Soon
 
 It's a horizontally-scrolling Kanban of fixed-width columns — a fine desktop
@@ -901,6 +916,13 @@ The other three were closed in US-20/US-22 (counselor grade picker, age bounds,
 and the `first_name` length cap that was silently throwing away a counselor's
 approve click).
 
+Update (2026-09-29): Spanish landed (backlog US-45) without triggering this,
+because the Spanish form keeps every field id and option value, so staff still
+see the same keys with English labels. Removing `can_reach_church_pickup`
+(US-46) degrades gracefully: the ordering list skips keys a submission doesn't
+have. It still bites the first time a form version adds a field this page
+doesn't know.
+
 **Deferred deliberately, not overlooked.** It's the mildest of the four and the
 only one that degrades gracefully — an unknown field gets a humanized label and
 lands in an `extras` block rather than being lost. Phase 1 ships exactly one
@@ -1012,11 +1034,19 @@ Phase 0 is a manual prod-schema-audit procedure standing in for the still-open
 DB-1/DB-25 migration-ledger gap; worth resolving that gap for real before this
 becomes a yearly chore. Not yet executed.
 
-### DOC-2 — How does distribution actually run this year — church pickup, school drop-offs, or a mix? · Soon
+### ~~DOC-2 — How does distribution actually run this year — church pickup, school drop-offs, or a mix?~~ · Resolved
 
 Confirmed genuinely undecided as of 2026-07. No code depends on it (the
 distribution page supports any combination per family), but DB-18 is waiting on
 it, and so is any printing/logistics planning.
+
+Answer (Grant, 2026-09-29): school drop-off. The church collects gifts from
+sponsors as usual, then delivers each family's gifts to their school counselor
+at the school; the counselor coordinates with each family on how they receive
+them. No family comes to the church for an elementary child's gift. The drive
+and every school are set to `school_dropoff` on dev
+(`supabase/set_distribution_school_dropoff.sql`), and the family form no longer
+asks about church pickup (backlog US-46).
 
 - Code: [DESIGN.md:134-136](../DESIGN.md#L134), [web/app/admin/distribution/page.tsx](../web/app/admin/distribution/page.tsx)
 - GitLab: [issue #14](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/14)

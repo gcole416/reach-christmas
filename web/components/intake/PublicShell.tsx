@@ -198,7 +198,7 @@ export function ReviewLinkClosed({
             : friendlyMessage(error, REVIEW_PROBLEM_COPY[reason] ?? REVIEW_PROBLEM_COPY.unknown)}
         </p>
         <p className="mt-4 rounded-xl bg-cat-yellow/10 px-4 py-3 text-sm text-ink-secondary">
-          Ask Reach Church for a new review link, and they can issue you a fresh one. For your
+          Ask OneLife Church for a new review link, and they can issue you a fresh one. For your
           households&apos; privacy, an old link can&apos;t be reopened.
         </p>
       </PublicCard>

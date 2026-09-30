@@ -6,6 +6,7 @@ import {
   normalizeDefinition,
   resolveHelpText,
   submitForm,
+  translateDefinition,
   type IntakeAnswers,
   type IntakeFieldError,
   type IntakeFormDefinition,
@@ -95,17 +96,19 @@ export function FamilyForm({
   const [submitted, setSubmitted] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
 
-  // The language TOGGLE (top of page) is independent of which locale's
-  // form_version this link happens to be pinned to server-side. The English
-  // and Spanish definitions share identical field ids/types/options/required
-  // rules (see the "byte-for-byte" note in intakeFormDefinition.ts) — only the
-  // displayed text differs — so swapping which one renders is safe: it never
-  // changes what gets validated or what submit_form receives.
+  // The language TOGGLE (top of page) re-words the link's own pinned version
+  // rather than swapping in the app's bundled one: questions, options and
+  // rules stay exactly what submit_form validates against, even on a link
+  // created before a later form change (translateDefinition in lib/intake).
   const [displayLocale, setDisplayLocale] = useState(definition.locale);
   const [languageFieldTouched, setLanguageFieldTouched] = useState(false);
   const alternateDefinition = useMemo(
-    () => normalizeDefinition(definition.locale === "es" ? PHASE_1_FORM_DEFINITION : PHASE_1_FORM_DEFINITION_ES),
-    [definition.locale]
+    () =>
+      translateDefinition(
+        definition,
+        normalizeDefinition(definition.locale === "es" ? PHASE_1_FORM_DEFINITION : PHASE_1_FORM_DEFINITION_ES)
+      ),
+    [definition]
   );
   const activeDefinition = displayLocale === definition.locale ? definition : alternateDefinition;
 
@@ -391,9 +394,9 @@ export function FamilyForm({
 
 /**
  * The whole-page language switch (top of the form, above the title). Swaps
- * every string on the page — the English and Spanish questionnaires are
- * otherwise identical (same field ids, same validation), so this is a pure
- * display choice, not a different link or a page reload.
+ * every string on the page but never the questions or their rules (see
+ * translateDefinition), so it's a pure display choice, not a different link or
+ * a page reload.
  */
 function LanguageToggle({ active, onChange }: { active: string; onChange: (locale: string) => void }) {
   const optionClass = (locale: string) =>

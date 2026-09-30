@@ -1415,6 +1415,16 @@ Status: **Built on `dev` this session** (not yet committed at time of writing).
 `tsc` / `eslint` / `next build` clean; both SQL definition blobs re-parsed and
 verified byte-consistent with the TS copy. Outstanding: commit + push, dev
 publish by Grant, code-reviewer pass, and the app-wide "Reach Church" follow-up.
+
+**Update 2026-09-29:** the "Reach Church" follow-up is done for everything a
+counselor sees: `RosterCard.tsx` (4 strings), `RosterView.tsx`, and
+`PublicShell.tsx`'s dead-review-link page now say "OneLife Church". Two
+leftovers, both out of that scope: one staff-only sentence in
+`SubmissionDetail.tsx` ("Reach doesn't create a household…"), and the server's
+own copy of the reject-reason message in `reject_submission`
+(20260830120000), which only shows if the page's check is bypassed and needs a
+migration to change. The Spanish checkbox above is covered by US-45's draft
+translation, pending native-speaker review.
 Owner: (built this session) — frontend-designer surface + the two intake SQL
 files. Files: [web/lib/intakeFormDefinition.ts](../web/lib/intakeFormDefinition.ts),
 [web/app/form/[token]/FamilyForm.tsx](../web/app/form/[token]/FamilyForm.tsx),
@@ -1793,6 +1803,126 @@ dashboard, which a human has to read and act on.
 Not scoped here. Written down so US-41's schema is chosen with it in mind.
 
 Status: **Backlog** — not scoped. Owner: unassigned.
+
+---
+
+## US-44: Family form copy from the counselor review (no-contact reassurance, one form per household)
+
+As a parent, I want to know sponsors can't contact me and that I only fill out
+one form even if my kids go to different schools, so registering feels safe and
+I don't register twice.
+
+Requested by Grant, 2026-09-29, from Brittany Stuessy's review of the form PDFs
+(email thread 2026-09-23).
+
+Acceptance criteria:
+- [x] `privacy_note` adds that sponsors never see contact information, have no
+  way to contact the family, and only the school counselor follows up.
+- [x] `intro` gains a paragraph: a household whose children attend different
+  schools and receive the link from more than one counselor fills out only one
+  form.
+- [x] Same text in all synced copies (`web/lib/intakeFormDefinition.ts`,
+  `supabase/publish_intake_form.sql`, `supabase/intake_demo_seed.sql`) and in
+  Spanish (US-45). Field ids untouched.
+- [ ] dev publish: re-run `intake_demo_seed.sql` so the demo link shows it.
+- [ ] code-reviewer pass.
+
+Status: **In review** — commit `4634f0f` on `dev`, live on the dev site. No
+migration, no RLS/view/function change, so no reach-reviewer gate.
+Owner: built in a Claude session (form definition + the synced SQL copies).
+
+---
+
+## US-45: Spanish family form with a live English/Español toggle
+
+As a Spanish-speaking parent, I want to read and fill out the whole registration
+form in Spanish from the same link my counselor sends, so I don't need a
+separate link or help from someone who reads English.
+
+Requested by Grant, 2026-09-29. Replaces INTAKE_FORMS.md §4.1's
+locale-objects-per-field design with a sibling definition plus a toggle; see
+that section's note.
+
+Decisions (Grant, 2026-09-29):
+- **One link, a toggle at the top of the page**, not a separate Spanish link.
+  The "what language should we contact you in" field is pre-filled to match the
+  toggle but stays editable.
+- **Separate Spanish-link creation is hidden**, not removed:
+  `SPANISH_LINK_CREATION_ENABLED = false` in `FormLinkPanel.tsx` hides the
+  Spanish questionnaire choice and "Email Spanish registration link", so
+  volunteers can't send a Spanish-only link by accident.
+- **Inline validation messages and the "(optional)" badge stay English** for
+  now (`validate.ts`, `fields.tsx`).
+- **Every future form-copy change lands in both languages** (four synced
+  copies: two definitions × TS + SQL).
+
+Acceptance criteria:
+- [x] `PHASE_1_FORM_DEFINITION_ES`: full Spanish translation, same field ids and
+  option values as English, mirrored byte-for-byte in
+  `supabase/publish_intake_form_es.sql` and the Spanish block of
+  `supabase/intake_demo_seed.sql`.
+- [x] `FamilyForm.tsx` toggle swaps every definition-driven string plus the page's
+  own text (lives-together gate, buttons, error summary headings, confirmation,
+  shop-day note).
+- [x] The toggle re-words the link's own pinned version (`translateDefinition`
+  in `web/lib/intake.ts`, 2026-09-29): structure always comes from the pinned
+  version, so a link created before a later form change can't show a question
+  set that differs from what `submit_form` validates. Checked against a
+  simulated pre-change link (pickup question still required, stays in English).
+- [x] `generate-form-pdfs.mjs` produces a Spanish PDF set via the toggle.
+- [x] `publish_intake_form_es.sql` run on dev by Grant 2026-09-29.
+- [ ] Native or fluent speaker review of the Spanish (Seth Saldivar or
+  Stephanie Williams) before any real family sees it (INTAKE_FORMS §4.4).
+- [ ] Free-text answers (wish list, needs, notes) arrive in Spanish and would show
+  that way on the sponsor page. Translate-at-import (INTAKE_FORMS §4.2) isn't
+  built; until it is, the office retypes them in English on the household page.
+- [ ] Server-side validation messages (`intake_validate_field`) are English only.
+- [ ] code-reviewer pass.
+
+Status: **In review** — commit `4634f0f` (translation, toggle, hidden Spanish-link
+UI) plus the 2026-09-29 toggle fix, on `dev`. No migration, no RLS/view/function
+change.
+Owner: built in a Claude session (form definition, `FamilyForm.tsx`,
+`FormLinkPanel.tsx`, the synced SQL copies, the PDF script).
+
+---
+
+## US-46: School drop-off distribution — the form tells families how gifts reach them
+
+As the drive, I want the form to match how gifts actually get to families this
+year, so nobody plans a trip to the church that isn't needed.
+
+Decided by Grant, 2026-09-29 (resolves DESIGN.md §8's distribution question and
+OPEN_QUESTIONS DOC-2): the church collects gifts from sponsors as usual, then
+delivers each family's gifts to their school counselor at the school. The
+counselor coordinates with each family on how they receive them. No family
+comes to the church for an elementary child's gift.
+
+Acceptance criteria:
+- [x] The "If gifts are distributed at the church, can you get there?" question
+  (`can_reach_church_pickup`) is removed from both languages and all synced
+  copies. The section id `pickup_consent` is unchanged; its title becomes
+  "Delivery and consent" / "Entrega y consentimiento" with a line that the
+  counselor coordinates how each family receives the gifts.
+- [x] `families.can_reach_church_pickup` stays in the schema, unused, rather than
+  migrated away; new imports write NULL (noted in `intake_demo_seed.sql`'s
+  import-contract comment; `intake-walkthrough.spec.ts` now asserts NULL).
+- [x] Shop-day note names no store or date: the counselor reaches out with the
+  details closer to Christmas. `SHOP_DAY_STORE` / `SHOP_DAY_DATE` removed.
+- [x] `supabase/set_distribution_school_dropoff.sql` sets the drive and every
+  school to `school_dropoff`; run on dev by Grant 2026-09-29.
+- [x] Six e2e specs/helpers updated for the removed field.
+- [ ] Run the e2e suite (the edited specs haven't been run yet).
+- [ ] dev publish: re-run `intake_demo_seed.sql` so the demo link drops the
+  pickup question.
+- [ ] Decide how the office records gifts delivered to a school: the Distribution
+  page still speaks of scheduled pickups and check-ins.
+- [ ] code-reviewer pass.
+
+Status: **In review** — commit `810619c` on `dev`, live on the dev site. No
+migration, no RLS/view/function change.
+Owner: built in a Claude session (form definition, `FamilyForm.tsx`, the synced
+SQL copies, e2e helpers).
 
 ---
 

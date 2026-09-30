@@ -141,6 +141,14 @@ Field labels, help text, select options, and validation messages live as locale 
 definition. The link carries a `locale`, so a counselor hands out the Spanish link to Spanish-speaking
 families. Solved by design, no runtime work.
 
+**As built (2026-09-29, backlog US-45):** not locale objects. Spanish is a second, sibling definition
+(`PHASE_1_FORM_DEFINITION_ES` in `web/lib/intakeFormDefinition.ts`) with the same field ids and option
+values, and every link shows an English/Español toggle at the top of the form, so one link serves both
+languages. The toggle re-words the link's own pinned version (`translateDefinition` in
+`web/lib/intake.ts`), so what's validated never changes. Separate Spanish-only links still exist in the
+schema but are hidden in the staff UI. Inline validation messages (client and server) are still English,
+and §4.2's free-text translation isn't built. §4.4's review hasn't happened yet.
+
 ### 4.2 Free-text answers — the real work
 
 A family types *"una bicicleta rosa y una muñeca"*. Purchasing needs to read it in English. Affected
@@ -199,11 +207,19 @@ Neither is a Phase 1 defect: Phase 1 is English-only by design, and the
 classifier is a deliberate improvement over the blocklist it replaced (which
 failed *open*, leaking raw Postgres strings to families).
 
+Still true after Spanish shipped (2026-09-29): the Spanish form's own text is
+client-side, and every server message is still English, so the classifier hasn't
+met Spanish yet. Both points apply the day server messages get translated.
+
 ### 4.4 Get the Spanish reviewed
 
 The draft translations in [INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md) need a native or fluent speaker
 on staff to read before they go to families. Form wording carries tone — a stiff or clinical translation
 reads as bureaucratic to a family already uneasy about asking for help.
+
+The live translation is now `PHASE_1_FORM_DEFINITION_ES` in `web/lib/intakeFormDefinition.ts` (plus
+the page text in `FamilyForm.tsx`). Grant plans to have Seth Saldivar or Stephanie Williams review it;
+`web/scripts/generate-form-pdfs.mjs` prints a Spanish PDF set for them.
 
 ---
 

@@ -232,7 +232,7 @@ export function RosterCard({
   async function handleApprove() {
     const name = verifierName.trim();
     if (!name) {
-      setError("Please type your name, so Reach knows who confirmed this.");
+      setError("Please type your name, so OneLife Church knows who confirmed this.");
       return;
     }
     if (name.length > VERIFIER_NAME_MAX) {
@@ -288,7 +288,7 @@ export function RosterCard({
   async function handleReject() {
     const text = reason.trim();
     if (!text) {
-      setError("Please add a short reason so Reach knows what happened.");
+      setError("Please add a short reason so OneLife Church knows what happened.");
       return;
     }
     if (text.length > REJECT_REASON_MAX) {
@@ -358,7 +358,7 @@ export function RosterCard({
           Confirmed{submission.verifiedByLabel ? ` by ${submission.verifiedByLabel}` : ""}
           {submission.verifiedAt ? ` on ${formatDate(submission.verifiedAt)}` : ""}
           {submission.hasCorrections ? " · you corrected a detail" : ""}
-          {submission.status === "imported" ? " · Reach has added this household to the drive" : ""}
+          {submission.status === "imported" ? " · OneLife Church has added this household to the drive" : ""}
         </p>
       ) : null}
 
@@ -414,7 +414,7 @@ export function RosterCard({
                 Your name
               </label>
               <p id={`${baseId}-verifier-help`} className="mt-1 text-sm text-ink-secondary">
-                Reach records who confirmed each household.
+                OneLife Church records who confirmed each household.
                 {anyEditable ? " Fix anything wrong in the details above before you confirm." : ""}
               </p>
               <input

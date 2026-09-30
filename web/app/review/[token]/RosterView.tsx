@@ -126,7 +126,7 @@ export function RosterView({
       ) : null}
 
       <p className="mt-8 text-sm text-ink-muted print:hidden">
-        Questions about a household on this list? Contact Reach Church, and please don&apos;t forward
+        Questions about a household on this list? Contact OneLife Church, and please don&apos;t forward
         this link.
       </p>
     </PublicPage>
