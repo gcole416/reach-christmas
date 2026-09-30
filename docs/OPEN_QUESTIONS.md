@@ -18,6 +18,12 @@ questions.** Most are small; 11 are marked **Blocking**. If you only answer a
 handful, make it **SPN-1**, **SPN-2** (both gate the US-17 fix), **DOC-1**
 (deployment, the one with a real deadline) and **DOC-3** (backups).
 
+**Triaged 2026-09-29.** Every entry now carries a decision, a **Post-season** tag, or a
+pending action, with the dated note right under its heading. Still needing an answer
+for this season: **DOC-3** (Grant checks backups), **ADM-14** (who holds admin), and
+**ADM-21** (asking the counselor tester on 2026-09-30). Decided work is tracked in
+backlog US-43 and US-47 to US-51.
+
 Organized by the GitLab `area::` label scheme.
 
 | Area | Count | Jump |
@@ -111,7 +117,9 @@ up in practice.
 - Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql), [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx), [SCHEMA.md](../SCHEMA.md)
 - GitLab: [issue #12](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/12) — worth closing once applied and confirmed live
 
-### SPN-4 — Has the anonymous claim path ever actually run against live Postgres? · **Blocking**
+### ~~SPN-4 — Has the anonymous claim path ever actually run against live Postgres?~~ · Resolved on dev
+
+Resolved on dev (2026-09-29 triage): the emailed-code claim path was confirmed working live on dev 2026-08-19 (DESIGN.md §8), and the old unverified `claim_card()` path was closed on dev 2026-09-01 (DB-27). Prod has never run it; that's part of the post-review prod checklist (DB-1).
 
 Originally about `claim_card()`; that function is superseded by
 `request_claim_code()`/`claim_card_with_code()` as of SPN-3 (2026-08-18), so the
@@ -136,7 +144,9 @@ Vault.
 - Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql)
 - Raised by: database-engineer; DNS outage found by qa-tester
 
-### SPN-5 — Is `/sponsor` expected to work well on a phone? · Soon
+### ~~SPN-5 — Is `/sponsor` expected to work well on a phone?~~ · Decided, build pending
+
+Decision (Grant, 2026-09-29): before launch, add a phone-size check of `/sponsor` and the family form (backlog US-50).
 
 It's the one page real, non-technical members of the public will use, and most
 of them will open it from a phone. There is currently no mobile-viewport
@@ -147,7 +157,9 @@ testing of any kind (`playwright.config.ts` defines no device projects).
 
 Answer: Absolutely this should be optimized for phone usage. 
 
-### SPN-6 — Do sponsors get anything after claiming — a confirmation email, a receipt, a reminder? · Soon
+### ~~SPN-6 — Do sponsors get anything after claiming — a confirmation email, a receipt, a reminder?~~ · Decided, build pending
+
+Decision (Grant, 2026-09-29): for this season, one thank-you email at claim time with who they're buying for, the wish list and sizes, and drop-off instructions. The reminder sequence waits until after the season (backlog US-43, rescoped).
 
 Today the only follow-up mechanism is the "Sponsors running late" table on the
 staff dashboard, which a human has to read and act on manually. Notifications
@@ -169,7 +181,9 @@ Answer: This is ok. Most sponsors are within our church organization, so little 
 
 ## Database & data integrity
 
-### DB-1 — Which migrations does the **prod** database actually have? · **Blocking**
+### ~~DB-1 — Which migrations does the **prod** database actually have?~~ · Decided, pending the 2026-09-30 review
+
+Decision (Grant, 2026-09-29): after the 2026-09-30 review passes, Claude writes an ordered prod checklist (every migration in order, plus setup steps) and a ledger file recording what's applied where, and Grant applies it (backlog US-51).
 
 There is no migration runner and no ledger. The only record is the "Applied to
 prod" checkbox on individual backlog stories. Two migration pairs are queued for
@@ -235,7 +249,9 @@ lock needed" (2026-08-18), so there's nothing to build here.
 - Code: [supabase/migrations/20260708120000_init.sql:565-572](../supabase/migrations/20260708120000_init.sql#L565)
 - Raised by: reach-reviewer
 
-### DB-5 — Are fulfillment stage transitions a real rule, or just a UI affordance? · Soon
+### DB-5 — Are fulfillment stage transitions a real rule, or just a UI affordance? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 `NEXT_STATUS` is a client-side map. RLS on `assignments` is `using (true) with
 check (true)`, so any authenticated user can set any status to any other — jump
@@ -249,7 +265,9 @@ against the wishlist, which is exactly what US-19 built it for.
 - Code: [web/lib/queries.ts:272-277](../web/lib/queries.ts#L272), [web/lib/store.tsx:785-798](../web/lib/store.tsx#L785), [supabase/migrations/20260708120000_init.sql:401](../supabase/migrations/20260708120000_init.sql#L401)
 - Raised by: reach-reviewer, database-engineer (independently)
 
-### DB-6 — Should `volunteer_notes` writes be restricted at the database layer to assignments that have reached "received at church"? · Soon
+### DB-6 — Should `volunteer_notes` writes be restricted at the database layer to assignments that have reached "received at church"? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 `updateAssignmentNotes` writes the column unconditionally; the
 received-at-church-onward rule is a UI convention (`NOTES_VISIBLE_FROM`) with no
@@ -260,7 +278,9 @@ assignment.
 - Code: [web/lib/store.tsx:808-817](../web/lib/store.tsx#L808), [web/lib/queries.ts:302](../web/lib/queries.ts#L302)
 - Raised by: database-engineer
 
-### DB-7 — Should the volunteer-notes field carry guidance steering people to gift-only notes? · Soon
+### DB-7 — Should the volunteer-notes field carry guidance steering people to gift-only notes? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 A volunteer typing "call mom, Sarah W., 555-0134, back door only" puts
 identifying detail into the one table with no confidentiality gate — and it's
@@ -270,7 +290,9 @@ it (DB-17). Placeholder/helper text is a cheap mitigation if you want one.
 - Code: [supabase/migrations/20260812100000_assignment_notes_and_verification.sql:35](../supabase/migrations/20260812100000_assignment_notes_and_verification.sql#L35), [web/lib/store.tsx:808-817](../web/lib/store.tsx#L808)
 - Raised by: reach-reviewer
 
-### DB-8 — Should `child_index` be assigned by an advisory-lock RPC like `create_family()` is? · Soon
+### ~~DB-8 — Should `child_index` be assigned by an advisory-lock RPC like `create_family()` is?~~ · Decided, fix before launch
+
+Decision (Grant, 2026-09-29): fix before launch, together with DB-10, DB-15 and US-14 (backlog US-48). Still present in `web/lib/store.tsx` as of 2026-09-29.
 
 Adding a child does `Math.max(...child_index) + 1` from a pre-flight SELECT and
 then a separate INSERT — the exact check-then-insert race `create_family()` was
@@ -291,7 +313,9 @@ card, created once, never reconciled against a count. Nothing left to race on.
 - Code: [supabase/migrations/20260818140000_one_card_per_child.sql](../supabase/migrations/20260818140000_one_card_per_child.sql)
 - Raised by: reach-reviewer
 
-### DB-10 — Is it acceptable that saving a wishlist deletes every item before inserting the replacements, in two separate transactions? · Soon
+### ~~DB-10 — Is it acceptable that saving a wishlist deletes every item before inserting the replacements, in two separate transactions?~~ · Decided, fix before launch
+
+Decision (Grant, 2026-09-29): fix before launch as a single database call (backlog US-48). Still present in `web/lib/store.tsx` as of 2026-09-29.
 
 If the insert fails — RLS, network, one bad row — the child's wishlist is
 already gone and there is no rollback. The user sees an error and the data is
@@ -300,7 +324,9 @@ destroyed. Should be one RPC.
 - Code: [web/lib/store.tsx:745-767](../web/lib/store.tsx#L745)
 - Raised by: reach-reviewer
 
-### DB-11 — `family_is_confidential()` fails **open** for an unknown family id, and its own comment claims the opposite · Soon
+### ~~DB-11 — `family_is_confidential()` fails **open** for an unknown family id, and its own comment claims the opposite~~ · Accepted for 2026
+
+Accepted as-is for the 2026 season (Grant, 2026-09-29), alongside DB-28. Revisit after the season. Unreachable today, as described below.
 
 It returns `coalesce(..., false)`, so `not family_is_confidential(<unknown id>)`
 is TRUE and the policy grants access. The comment above it says a dangling
@@ -312,7 +338,9 @@ it be changed to fail closed?
 - Code: [supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql:71-78](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql#L71), [:95-100](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql#L95)
 - Raised by: reach-reviewer
 
-### DB-12 — Should confidential first-name redaction be a display convention or a real boundary — and which predicate should it key on? · Soon
+### ~~DB-12 — Should confidential first-name redaction be a display convention or a real boundary — and which predicate should it key on?~~ · Accepted for 2026
+
+Accepted as-is for the 2026 season (Grant, 2026-09-29), alongside DB-28. Revisit after the season.
 
 The UI redacts to "Z." for anyone who isn't `is_admin`, but RLS releases the
 real first name to anyone who passes `can_view_confidential()`. So a cleared
@@ -324,7 +352,9 @@ database uses.
 - Code: [web/lib/queries.ts:73-74](../web/lib/queries.ts#L73), [supabase/migrations/20260708120000_init.sql:249-257](../supabase/migrations/20260708120000_init.sql#L249)
 - Raised by: reach-reviewer
 
-### DB-13 — Should non-cleared volunteers be able to learn how many confidential families exist? · Whenever
+### ~~DB-13 — Should non-cleared volunteers be able to learn how many confidential families exist?~~ · Accepted for 2026
+
+Accepted as-is for the 2026 season (Grant, 2026-09-29), alongside DB-28. Revisit after the season.
 
 `next_confidential_family_number(p_drive_id)` is callable by any authenticated
 user, and its only argument is the open drive's id — which every staff member
@@ -346,7 +376,9 @@ a note on `child_card_numbers` explaining why `public_available_cards` can't joi
 - Code: [SCHEMA.md:246](../SCHEMA.md#L246), [supabase/migrations/20260708120000_init.sql:175-176](../supabase/migrations/20260708120000_init.sql#L175)
 - Raised by: reach-reviewer
 
-### DB-15 — Can the admin pages hard-crash if an assignment's card isn't visible to the viewer? · Soon
+### ~~DB-15 — Can the admin pages hard-crash if an assignment's card isn't visible to the viewer?~~ · Decided, fix before launch
+
+Decision (Grant, 2026-09-29): fix before launch (backlog US-48). The non-null assertions are still in `web/lib/queries.ts` (`getFulfillmentBoard`, `getShoppingList`) as of 2026-09-29.
 
 `getShoppingList` and `getFulfillmentBoard` do `data.cards.find(...)!` /
 `data.children.find(...)!` — a non-null assertion on the assumption that every
@@ -358,7 +390,9 @@ non-cleared volunteers.
 - Code: [web/lib/queries.ts:407-414](../web/lib/queries.ts#L407), [web/lib/queries.ts:334-336](../web/lib/queries.ts#L334)
 - Raised by: reach-reviewer
 
-### DB-16 — Is the legacy `assignments.notes` column safe to drop? · Whenever
+### DB-16 — Is the legacy `assignments.notes` column safe to drop? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Two overlapping "notes" columns on the same row, one used (`volunteer_notes`)
 and one dead. Confirmed unmapped in the client — nothing in `web/` reads or
@@ -369,7 +403,9 @@ depend on it?
 - Code: [supabase/migrations/20260708120000_init.sql:148](../supabase/migrations/20260708120000_init.sql#L148), [supabase/migrations/20260812100000_assignment_notes_and_verification.sql:17-18](../supabase/migrations/20260812100000_assignment_notes_and_verification.sql#L17), [web/lib/types.ts:119-134](../web/lib/types.ts#L119)
 - Raised by: database-engineer
 
-### DB-17 — PII retention: keep indefinitely, or archive/anonymize after N years? · Soon
+### DB-17 — PII retention: keep indefinitely, or archive/anonymize after N years? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). The current answer stays: keep indefinitely.
 
 Currently decided as "keep indefinitely, revisit later." `audit_log` keeps a
 full jsonb copy of every insert/update forever with no cascade from the source
@@ -380,7 +416,9 @@ decision.
 - Code: [SCHEMA.md:573-580](../SCHEMA.md#L573)
 - GitLab: [issue #16](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/16)
 
-### DB-18 — Is one `scheduled_pickup_at` per family enough? · Whenever
+### DB-18 — Is one `scheduled_pickup_at` per family enough? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 If distribution needs multiple distinct events (different pickup days per
 school), this wants a `distribution_events` table rather than a single timestamp
@@ -411,7 +449,9 @@ confidential/direct-referral family with no counselor gets its gifts.
 - Code: [supabase/migrations/20260708120000_init.sql:63-76](../supabase/migrations/20260708120000_init.sql#L63)
 - Raised by: database-engineer
 
-### DB-20 — Should wishlist items be pinnable to a specific card copy? · Whenever
+### ~~DB-20 — Should wishlist items be pinnable to a specific card copy?~~ · Moot
+
+Moot (2026-09-29): since ADM-2 every child has exactly one card, enforced by the database, so there's no card copy to pin a wish-list item to. GitLab #8 closed.
 
 Phase 2. Not urgent until a child has multiple cards with different sponsors,
 where today two sponsors could buy the same gift.
@@ -419,7 +459,9 @@ where today two sponsors could buy the same gift.
 - Code: [SCHEMA.md](../SCHEMA.md#8-wishlist_items--was-3-fixed-columns-opened-up)
 - GitLab: [issue #8](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/8)
 
-### DB-21 — Is `sponsors.notes` coming, or should it be dropped? · Whenever
+### DB-21 — Is `sponsors.notes` coming, or should it be dropped? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Exists in the schema, never read, shown, or written anywhere in the app — not
 even a field on the `Sponsor` type. If it's meant for staff to jot "hard to
@@ -429,7 +471,9 @@ DB-16.
 - Code: [supabase/migrations/20260708120000_init.sql:130-136](../supabase/migrations/20260708120000_init.sql#L130), [web/lib/types.ts:104-109](../web/lib/types.ts#L104)
 - Raised by: database-engineer
 
-### DB-22 — Should granting a volunteer `can_view_confidential` be logged with who and why, not just flipped as a boolean? · Soon
+### ~~DB-22 — Should granting a volunteer `can_view_confidential` be logged with who and why, not just flipped as a boolean?~~ · Accepted for 2026
+
+Accepted as-is for the 2026 season (Grant, 2026-09-29), alongside DB-28. Revisit after the season.
 
 Carried over from DESIGN.md §8. The *mechanism* is resolved (any staff member
 can create a confidential referral; only admins/cleared staff keep viewing it),
@@ -440,7 +484,7 @@ exists; the open part is "why", and whether that's worth a required note.
 - Code: [web/app/admin/staff/page.tsx](../web/app/admin/staff/page.tsx), [supabase/migrations/20260708130000_profiles_staff_management.sql](../supabase/migrations/20260708130000_profiles_staff_management.sql)
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #4
 
-### DB-23 — Can a referral ever split siblings across schools or confidential status? · ~~Whenever~~ Resolved
+### ~~DB-23 — Can a referral ever split siblings across schools or confidential status?~~ · Resolved
 
 DESIGN.md §8 treats this as **resolved** — a cross-school household becomes two
 separate `Family` records, one per school, because `Family` is a
@@ -455,13 +499,15 @@ already-imported household (or another pending one), the queue and the
 submission detail page flag "Possibly the same household as Household N3
 (different school)". It is a hint, never a blocker — staff still import both.
 See **US-37** in [backlog.md](backlog.md). The high-schooler split (US-32)
-softens the most common case anyway: an elementary household goes through
-church pickup while its high-school sibling goes to the shop day independently.
+softens the most common case anyway: an elementary household's gifts go to its
+school counselor (DOC-2) while its high-school sibling goes to the shop day independently.
 
 - Code: [DESIGN.md:121-129](../DESIGN.md#L121), [SCHEMA.md:569-572](../SCHEMA.md#L569), [web/app/admin/submissions/shared.ts](../web/app/admin/submissions/shared.ts) `findHouseholdMatches`
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #5
 
-### DB-24 — Is the school list fixed year to year, or does it need an "inactive school" flag? · Whenever
+### ~~DB-24 — Is the school list fixed year to year, or does it need an "inactive school" flag?~~ · Resolved
+
+Confirmed settled (Grant, 2026-09-29): the school list is rebuilt per drive, as DESIGN.md §8 says, with no inactive flag.
 
 DESIGN.md §8 treats this as **resolved** — schools change year to year and it's
 fine to rebuild the list per drive via "Add school", since `schools` and
@@ -473,7 +519,9 @@ change or is UI-only.
 - Code: [DESIGN.md:119](../DESIGN.md#L119), [SCHEMA.md:76](../SCHEMA.md#L76)
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #3
 
-### DB-25 — Should there be a `schema_migrations`-style ledger, or is "paste both files, dev first" fine forever? · Soon
+### ~~DB-25 — Should there be a `schema_migrations`-style ledger, or is "paste both files, dev first" fine forever?~~ · Decided, pending the 2026-09-30 review
+
+Decision (Grant, 2026-09-29): a ledger file recording what's applied to dev and to prod, created with the prod checklist (DB-1, backlog US-51).
 
 The narrower, actionable half of DB-1. The README's current instruction is
 manual, forward-only, and has no verification step. With two migration pairs
@@ -482,7 +530,9 @@ highest.
 
 - Code: [web/README.md:34-39](../web/README.md#L34)
 
-### DB-26 — Should confidential-family *creation* stay open to every staff member? · Whenever
+### ~~DB-26 — Should confidential-family *creation* stay open to every staff member?~~ · Resolved
+
+Confirmed settled (Grant, 2026-09-29): creation stays open to every staff member, as DESIGN.md §8 says.
 
 Resolved in DESIGN.md §8 (yes — whoever's entering it already knows the details
 firsthand, so it isn't new exposure), and implemented that way in RLS. Listed
@@ -491,7 +541,9 @@ half of the same topic.
 
 - Code: [supabase/migrations/20260708140000_confidential_referral_access.sql](../supabase/migrations/20260708140000_confidential_referral_access.sql)
 
-### ~~DB-27 — `anon` can still call the old `claim_card()` RPC on dev, even after the revoke and a schema-cache reload~~ · **Root-caused 2026-09-01, fix written**
+### ~~DB-27 — `anon` can still call the old `claim_card()` RPC on dev, even after the revoke and a schema-cache reload~~ · Resolved on dev (fix applied 2026-09-01)
+
+Update (2026-09-29 triage): the fix was applied to dev on 2026-09-01 (see backlog US-20 to US-24's status). Prod is pending with everything else (DB-1).
 
 **Answer: the revoke never named `public`.** `20260818160000_email_verified_claims.sql:394` says
 `revoke execute on function public.claim_card(...) from anon, authenticated;`
@@ -569,7 +621,9 @@ condition not yet understood.
 - Code: [supabase/migrations/20260818160000_email_verified_claims.sql:394](../supabase/migrations/20260818160000_email_verified_claims.sql)
 - Raised by: Grant, live on dev 2026-08-19
 
-### DB-28 — "Confidential-cleared" and "admin" are currently the same set of people. Should they be? · Soon
+### ~~DB-28 — "Confidential-cleared" and "admin" are currently the same set of people. Should they be?~~ · Decided: keep for 2026
+
+Decision (Grant, 2026-09-29): keep it. Admins stay a small trusted group and are automatically confidential-cleared; the toggle only adds volunteers. DB-11, DB-12, DB-13 and DB-22 are accepted as-is for this season with it.
 
 [INTAKE_FORMS.md §8](INTAKE_FORMS.md#8-confidential-channel) says confidential
 cases should be visible to **two named staff, not all admins**, and that the
@@ -673,7 +727,9 @@ first and manually check any school it flags.
 - From: [backlog.md](backlog.md) DESIGN.md §8 carryover #1
 - GitLab: [issue #9](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/9) — worth closing
 
-### ADM-4 — Edit a school, or also deactivate it? · Soon
+### ~~ADM-4 — Edit a school, or also deactivate it?~~ · Decided, build pending
+
+Decision (Grant, 2026-09-29): Edit only, modeled on the Drives page's Edit modal, with no deactivate flag (backlog US-49).
 
 Schools admin is add-only by design. When a liaison's phone changes or a school
 name has a typo, there's no in-app path — raw SQL only. Question: is *edit* on
@@ -687,7 +743,9 @@ has a working Edit modal for a near-identical list.
 - Raised by: frontend-designer
 - GitLab: [issue #7](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/7)
 
-### ADM-5 — What label sheet will actually be used for nametag stickers? · Soon
+### ~~ADM-5 — What label sheet will actually be used for nametag stickers?~~ · Decided for 2026
+
+Decision (Grant, 2026-09-29): plain paper this year, no sticker layout. GitLab #4 stays open for next season.
 
 Blocked purely on the physical product — brand, size, and per-sheet layout (e.g.
 an Avery number). Nothing can be designed until this lands; the current print
@@ -696,7 +754,9 @@ page is an index-card grid for plain paper.
 - Code: [web/app/admin/print/page.tsx:9-12](../web/app/admin/print/page.tsx#L9), [DESIGN.md:88-92](../DESIGN.md#L88)
 - GitLab: [issue #4](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/4)
 
-### ADM-6 — How should staff accounts get created in-app, given the service_role key is permanently off-limits? · Soon
+### ~~ADM-6 — How should staff accounts get created in-app, given the service_role key is permanently off-limits?~~ · Decided, next season
+
+Decision (Grant, 2026-09-29): this season, logins are made in the Supabase dashboard or with `web/scripts/bulk-create-volunteers.mjs`. In-app invites get built next season. Invite emails were blocked by the church's email filter on 2026-09-29, so any in-app invite needs the email-domain work first.
 
 Creating a login still means going into the Supabase dashboard. Doing it in-app
 normally requires a server-side admin API route holding the service_role key —
@@ -707,7 +767,9 @@ that dashboard-only is fine forever.
 - Code: [web/README.md:56-62](../web/README.md#L56), [web/app/admin/staff/page.tsx](../web/app/admin/staff/page.tsx)
 - GitLab: [issue #3](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/3)
 
-### ADM-7 — What device will staff be holding at the distribution event? · **Blocking** (for any distribution-day UI work)
+### ~~ADM-7 — What device will staff be holding at the distribution event?~~ · Moot
+
+Moot (2026-09-29): with school drop-off there's no check-in event in front of families. Deliveries are recorded on existing screens (Grant, 2026-09-29): Delivered on the Fulfillment board, and Check in on the Distribution page meaning "handed to the counselor".
 
 The check-in table is `min-w-[920px]` and scrolls horizontally below that. This
 is the screen most likely to be used *live, in front of families*, checking them
@@ -724,7 +786,9 @@ Update (2026-09-29): with school drop-off (DOC-2) there's no check-in event in
 front of families, so this is much less pressing. The open question moves to how
 the office records deliveries to each school (backlog US-46).
 
-### ADM-8 — Is the fulfillment board ever worked from a phone? · Soon
+### ADM-8 — Is the fulfillment board ever worked from a phone? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 It's a horizontally-scrolling Kanban of fixed-width columns — a fine desktop
 pattern, awkward one-handed on a ~360px screen with six columns. If volunteers
@@ -735,7 +799,9 @@ screens.
 - Code: [web/app/admin/fulfillment/page.tsx:144-149](../web/app/admin/fulfillment/page.tsx#L144)
 - Raised by: frontend-designer
 
-### ADM-9 — Is dark mode a deliberately supported mode, or inherited starter boilerplate? · Whenever
+### ADM-9 — Is dark mode a deliberately supported mode, or inherited starter boilerplate? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 `globals.css` has a `prefers-color-scheme: dark` block that overrides the
 background, ink, and category accent tokens — but **not** the four
@@ -747,7 +813,9 @@ give it a real visual pass, or drop the media query and ship one calm theme.
 - Code: [web/app/globals.css:14-17](../web/app/globals.css#L14), [:46-63](../web/app/globals.css#L46), [web/components/StatusBadge.tsx:23](../web/components/StatusBadge.tsx#L23)
 - Raised by: frontend-designer
 
-### ADM-10 — Should saved filter views be shared across staff instead of per-browser? · Whenever
+### ADM-10 — Should saved filter views be shared across staff instead of per-browser? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 They live in `localStorage`, so they're per-device, invisible to teammates, and
 lost if browser storage clears. Deliberate and documented — but if two
@@ -756,7 +824,9 @@ knows the other has it.
 
 - Code: [web/lib/store.tsx:18-25](../web/lib/store.tsx#L18), [:90-97](../web/lib/store.tsx#L90), [:172-178](../web/lib/store.tsx#L172)
 
-### ADM-11 — Is manual follow-up on overdue sponsors acceptable this season? · Soon
+### ADM-11 — Is manual follow-up on overdue sponsors acceptable this season? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29): staff follow up by phone, and the thresholds stay 10 and 21 days. Sponsors now get one thank-you email at claim time (SPN-6).
 
 The "Sponsors running late" report exists on the dashboard, but there is no
 email or text to staff or to the sponsor — someone has to open the page, read
@@ -765,7 +835,9 @@ it, and pick up a phone. Thresholds are currently 10 days (warning) and 21 days
 
 - Code: [web/app/admin/page.tsx:44-86](../web/app/admin/page.tsx#L44), [web/lib/queries.ts:104-126](../web/lib/queries.ts#L104)
 
-### ADM-12 — Is a drive picker needed, or is "the one open drive" always right? · Whenever
+### ADM-12 — Is a drive picker needed, or is "the one open drive" always right? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Every dashboard stat is scoped to the single drive with `status = 'open'`, with
 no picker. The one-open-drive constraint makes that safe, but it also means
@@ -773,7 +845,9 @@ there is no way to look at last year's numbers in the app at all.
 
 - Code: [web/app/admin/page.tsx:33-42](../web/app/admin/page.tsx#L33), [web/lib/queries.ts:203-215](../web/lib/queries.ts#L203)
 
-### ADM-13 — Should the audit log be exportable? · Whenever
+### ADM-13 — Should the audit log be exportable? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Deliberately has no export or copy affordance because it's a PII-bearing view.
 If an actual investigation ever needs the data out of the browser, there's
@@ -783,13 +857,17 @@ currently no supported path — confirm that's the intent.
 
 ### ADM-14 — Who else needs an admin account this season? · Soon
 
+Still open (2026-09-29): accounts are made in the dashboard or with the bulk script (ADM-6), but who holds admin this season hasn't been recorded. Admin implies confidential access (DB-28).
+
 DESIGN.md §8 records "just you for now; others TBD once contact info is
 available." With the drive approaching and volunteer intake being the main use,
 this probably needs a real answer — and it feeds ADM-6.
 
 - Code: [DESIGN.md:112](../DESIGN.md#L112)
 
-### ADM-15 — Should confidential families be visibly flagged differently anywhere else in the admin UI? · Whenever
+### ADM-15 — Should confidential families be visibly flagged differently anywhere else in the admin UI? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Today the Families Explorer swaps the school name for a "Confidential" badge.
 Every other surface (fulfillment board, shopping list, print, distribution)
@@ -798,7 +876,9 @@ distinct wherever they appear so a volunteer doesn't discuss one out loud?
 
 - Code: [web/app/admin/families/FamiliesExplorer.tsx](../web/app/admin/families/FamiliesExplorer.tsx)
 
-### ADM-16 — Does the app need a "why was this family marked confidential" field? · Whenever
+### ADM-16 — Does the app need a "why was this family marked confidential" field? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Related to DB-22. `is_confidential` is a bare boolean with no reason attached,
 so nobody downstream knows whether it's a safety situation, a staff family, or a
@@ -806,7 +886,9 @@ privacy preference — which matters for how carefully to handle it.
 
 - Code: [supabase/migrations/20260708120000_init.sql:63-76](../supabase/migrations/20260708120000_init.sql#L63)
 
-### ADM-17 — Should intake warn when a child's wishlist is empty? · Whenever
+### ADM-17 — Should intake warn when a child's wishlist is empty? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 An empty wishlist card still appears to sponsors with nothing to buy, which is a
 poor sponsor experience and probably a data-entry miss rather than a real
@@ -814,7 +896,9 @@ poor sponsor experience and probably a data-entry miss rather than a real
 
 - Code: [web/app/admin/intake/page.tsx](../web/app/admin/intake/page.tsx), [web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx)
 
-### ~~ADM-18 — How should counselor referral data reach this app?~~ · Decided, build pending
+### ~~ADM-18 — How should counselor referral data reach this app?~~ · Decided, built
+
+Built (2026-09-29 triage): the family form, counselor review list and staff import all shipped to dev (backlog US-20 to US-24, and follow-ons through US-46).
 
 Today it's Google Form → hand-consolidated spreadsheet → re-keyed into the
 app's own intake form by staff. Raised again by
@@ -856,7 +940,9 @@ See ADM-19 for one thing this surfaced that isn't decided yet.
 - Code: [docs/COUNSELOR_INTAKE_OPTIONS.md](COUNSELOR_INTAKE_OPTIONS.md), [docs/INTAKE_FORMS.md](INTAKE_FORMS.md), [docs/INTAKE_FORM_DRAFT.md](INTAKE_FORM_DRAFT.md), [AGENTS.md](../AGENTS.md)
 - Raised by: Grant, 2026-08-26 team meeting prep. Decided: Grant, 2026-08-30.
 
-### ADM-23 — Two remaining fields still silently truncate what a user types · Whenever
+### ADM-23 — Two remaining fields still silently truncate what a user types · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 The intake work (US-21/US-22) established a rule worth applying app-wide:
 **enforcing a length limit with the HTML `maxLength` attribute silently edits
@@ -881,6 +967,8 @@ look if either field ever accepts something more free-form.
 
 ### ADM-21 — Can a counselor recognize a family from its children's first names alone? · Soon (needed for the 10/1 launch, not for the 9/9 demo)
 
+Pending (2026-09-29): Grant is asking the counselor tester at the 2026-09-30 session (Sheet 3 of the role-play handouts).
+
 The counselor roster identifies each submission by its children's first names,
 age, and grade — no guardian name, by design ([INTAKE_FORMS §3](INTAKE_FORMS.md#3-verification--what-the-counselor-is-actually-doing)).
 Asked during US-22: is that actually enough for a counselor scanning a list in
@@ -901,7 +989,9 @@ person, one more question.
 - Code: [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql) (`get_review_roster`), [docs/backlog.md](backlog.md) US-22
 - Raised by: database-engineer during US-22, escalated rather than assumed, 2026-08-31
 
-### ADM-22 — Staff submission detail hard-codes labels and ordering that belong to the form definition · Whenever (bites when questionnaire v2 or Spanish lands)
+### ADM-22 — Staff submission detail hard-codes labels and ordering that belong to the form definition · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 `web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx` restates rules
 that live in `form_versions.definition`: a field-id→label map, the set of child
@@ -958,7 +1048,9 @@ two.
 - Code: [web/app/admin/submissions/[submissionId]/SubmissionDetail.tsx](../web/app/admin/submissions/%5BsubmissionId%5D/SubmissionDetail.tsx), [web/lib/intake.ts](../web/lib/intake.ts)
 - Raised by: database-engineer, 2026-08-31
 
-### ADM-20 — A volunteer can read a counselor-direct link token, and those links skip review entirely · **Blocking** (for Phase 2 / the 10/1 counselor launch)
+### ~~ADM-20 — A volunteer can read a counselor-direct link token, and those links skip review entirely~~ · Decided, build pending
+
+Decision (Grant, 2026-09-29): build the safe version. Registrations a counselor enters themselves stop auto-verifying and appear on that counselor's own review list for a confirm click (the third option below), so nothing skips review (backlog US-47). Until it ships, no counselor-direct link gets issued; the staff screen can't create one.
 
 `counselor` and `staff` channel links auto-verify at submit ([INTAKE_FORMS §2](INTAKE_FORMS.md#2-the-link-model))
 — that's the required backup path for a counselor entering a family over the
@@ -984,7 +1076,7 @@ trust assumption rather than narrowing who holds it.
 - Code: [supabase/migrations/20260830120000_intake_forms.sql](../supabase/migrations/20260830120000_intake_forms.sql), [docs/INTAKE_FORMS.md §2, §11](INTAKE_FORMS.md#2-the-link-model)
 - Raised by: reach-reviewer (L3) during the US-20 audit, 2026-08-30
 
-### ADM-19 — Do high-school-age kids get collected in a family's form submission? · Soon
+### ~~ADM-19 — Do high-school-age kids get collected in a family's form submission?~~ · Resolved
 
 Meeting notes (item 3, 8/26): roughly 200 elementary + middle school kids get
 tracked and bought for each year; high schoolers do their own shopping and
@@ -1016,7 +1108,9 @@ before the 10/1 counselor form goes out.
 
 ## Docs, deploy & ops
 
-### DOC-1 — Deploy to Vercel, or keep running locally? · **Blocking**
+### DOC-1 — Deploy to Vercel, or keep running locally? · Dev deployed; prod pending
+
+Update (2026-09-29): dev has been live on Vercel at reach-christmas.vercel.app since 2026-09-23 (Production Branch = `dev`, pointing at the dev database). Prod goes live through the post-review checklist (DB-1, backlog US-51).
 
 The one with a real deadline. If sponsors are meant to reach `/sponsor` this
 season, the app has to be on the public internet, and nothing about hosting,
@@ -1053,6 +1147,8 @@ asks about church pickup (backlog US-46).
 
 ### DOC-3 — Are database backups actually configured? · **Blocking**
 
+Decision (Grant, 2026-09-29): Grant checks Supabase → Database → Backups on the prod project before launch. It's on the prod checklist (DB-1, backlog US-51).
+
 DESIGN.md §5 lists "regular backups of the database" as a requirement. Nothing in
 the repo confirms this was ever set up on either project, and there's no restore
 procedure written down. This holds children's PII and is about to be the sole
@@ -1073,7 +1169,9 @@ Supabase projects with independent settings):
 4. If it says backups aren't enabled (common on free-tier projects — daily backups are typically a paid-plan feature), the options are: upgrade the plan, or stand up an external backup (e.g. a scheduled `pg_dump` of the prod project via a GitHub Action or cron job, stored somewhere outside Supabase).
 5. Either way, write the answer here (what's enabled, what plan, retention window) so this stops being a guess — this table holds real children's PII and is the only record of a live drive once it starts.
 
-### DOC-4 — Should GitLab issue #17 be closed? · Whenever
+### ~~DOC-4 — Should GitLab issue #17 be closed?~~ · Resolved
+
+GitLab #17 closed 2026-09-29.
 
 It tracks "confirm dev test accounts and reseed the dev database" — which
 backlog.md records as **Done, confirmed 2026-08-11**, and which qa-tester
@@ -1083,7 +1181,9 @@ suite against a seeded dev database. The issue looks stale rather than open.
 - Code: [docs/backlog.md](backlog.md) US-15
 - GitLab: [issue #17](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/17)
 
-### DOC-5 — How should backlog.md drift be prevented, not just periodically repaired? · Soon
+### DOC-5 — How should backlog.md drift be prevented, not just periodically repaired? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Known problem with a concrete example found today: US-4's acceptance criteria
 state "There is no 'mark as printed' action in the UI yet", but that button has
@@ -1094,7 +1194,9 @@ stale criteria actively mislead — someone could re-scope shipped work as new.
 - Raised by: frontend-designer
 - GitLab: [issue #5](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/5)
 
-### DOC-6 — Should there be CI, even if only manually triggered? · Soon
+### DOC-6 — Should there be CI, even if only manually triggered? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 No `.github/workflows`, no `.gitlab-ci.yml`. The 18 e2e tests only run when a
 human or an agent remembers to invoke them. Full auto-on-push isn't obviously
@@ -1104,7 +1206,9 @@ depending on someone remembering.
 
 - Raised by: qa-tester
 
-### DOC-7 — Who keeps GitLab and backlog.md in sync, and how often? · Soon
+### DOC-7 — Who keeps GitLab and backlog.md in sync, and how often? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is. GitLab was tidied on 2026-09-29: 8 stale issues closed and 6 relabeled in-review.
 
 They're deliberately two systems (GitLab for issue tracking, backlog.md for
 stories) with a manual sync step, and the product-manager agent has no GitLab
@@ -1114,7 +1218,9 @@ become the single list?
 
 - Code: [memory.md:5-11](../memory.md#L5)
 
-### DOC-8 — Should the repo keep the legacy spreadsheet at all? · Whenever
+### ~~DOC-8 — Should the repo keep the legacy spreadsheet at all?~~ · Resolved
+
+Resolved (Grant, 2026-09-29): the spreadsheet was moved out of the repo folder to a private folder beside it, outside git's reach.
 
 `Source Information/Reach Christmas Master List 2021_Unsorted.xlsx` holds real
 family PII. It is correctly gitignored and has never entered git history — that
@@ -1124,14 +1230,18 @@ all, versus somewhere outside the working tree, given how easy a
 
 - Code: [.gitignore](../.gitignore) (the `/Source Information/` rule)
 
-### DOC-9 — Can the stray zero-byte `asdf` file be deleted? · Whenever
+### ~~DOC-9 — Can the stray zero-byte `asdf` file be deleted?~~ · Resolved
+
+Deleted 2026-09-29.
 
 Committed by accident in the initial commit and tracked ever since. Zero bytes,
 no references. Trivial, just needs a yes.
 
 - Code: [asdf](../asdf)
 
-### DOC-10 — Should `web/README.md` warn against running the test suite during manual dev QA? · Whenever
+### DOC-10 — Should `web/README.md` warn against running the test suite during manual dev QA? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 The suite signs in as the same two named accounts a human uses for manual
 testing, with no session isolation, and its cleanup deletes every
@@ -1141,14 +1251,18 @@ easy footgun to document.
 - Code: [web/tests/e2e/helpers/testClient.ts:24-40](../web/tests/e2e/helpers/testClient.ts#L24), [web/README.md:64-83](../web/README.md#L64)
 - Raised by: qa-tester
 
-### DOC-11 — Is Planning Center integration still wanted eventually? · Whenever
+### DOC-11 — Is Planning Center integration still wanted eventually? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 Deferred to Phase 2 pending admin access to Church Center. Listed so it doesn't
 get silently dropped.
 
 - Code: [DESIGN.md:100](../DESIGN.md#L100)
 
-### DOC-12 — Are sponsor accounts and email/text notifications still Phase 2, or does this season need them? · Whenever
+### DOC-12 — Are sponsor accounts and email/text notifications still Phase 2, or does this season need them? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is. Sponsor notifications are partly covered by SPN-6's thank-you email.
 
 Both are on the Phase 2 list. SPN-6 and ADM-11 are the concrete places where
 their absence shows up this season.
@@ -1168,7 +1282,9 @@ was the one already recommended here.
 - Code: [web/playwright.config.ts:12-17](../web/playwright.config.ts#L12), [web/tests/e2e/helpers/cleanup.ts:12-18](../web/tests/e2e/helpers/cleanup.ts#L12), [web/README.md:76](../web/README.md#L76)
 - Raised by: qa-tester (both passes, independently)
 
-### TST-2 — Raise the dev project's auth rate limit, or switch the tests to a cached session? · Soon
+### TST-2 — Raise the dev project's auth rate limit, or switch the tests to a cached session? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 `signInAs()` does a fresh `signInWithPassword` in *every single test*, times the
 number of parallel workers. The failure mode is nasty: rate-limit errors surface
@@ -1178,7 +1294,9 @@ limit in the dashboard or move the helpers to Playwright's `storageState`.
 - Code: [web/tests/e2e/helpers/testClient.ts:24-40](../web/tests/e2e/helpers/testClient.ts#L24)
 - Raised by: qa-tester
 
-### TST-3 — Is anything else running Playwright against the dev project? · Soon
+### TST-3 — Is anything else running Playwright against the dev project? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 qa-tester found a leftover `AutoTest`-tagged family and a `.last-run.json`
 showing a passed run nobody in this session triggered. If a second machine, a
@@ -1189,7 +1307,9 @@ two accounts, that compounds TST-1 and TST-2 and could explain earlier
 - Code: `web/test-results/` (Playwright's scratch output — gitignored, so check it on the machine that ran the suite), [web/tests/e2e/helpers/cleanup.ts:12-18](../web/tests/e2e/helpers/cleanup.ts#L12)
 - Raised by: qa-tester
 
-### TST-4 — For US-18: fix the test only, or also the underlying accessibility issue? · Soon
+### TST-4 — For US-18: fix the test only, or also the underlying accessibility issue? · Post-season
+
+Parked until after the 2026 season (Grant, 2026-09-29). Current behavior stays as it is.
 
 The test bug is fully root-caused — an anchored `getByLabel(/^school$/i)` can
 never match, because the `<label>` wraps the `<select>` and so its accessible
@@ -1202,7 +1322,9 @@ Fix the test and move on, or open a small frontend ticket too?
 - Raised by: qa-tester
 - GitLab: [issue #21](https://gitlab.com/reach-christmas-group/reach-christmas-project/-/issues/21)
 
-### TST-5 — Should there be a negative test asserting the anonymous boundary holds? · Soon
+### ~~TST-5 — Should there be a negative test asserting the anonymous boundary holds?~~ · Decided, build before launch
+
+Decision (Grant, 2026-09-29): add it before launch (backlog US-50).
 
 Nothing asserts that a signed-out client gets **zero** rows from `children`,
 `families`, or `assignments`, or that a confidential child never appears in
@@ -1212,7 +1334,9 @@ all — and any fix to it without these tests is a fix nobody can prove.
 - Code: [web/tests/e2e/security.spec.ts](../web/tests/e2e/security.spec.ts), [web/tests/e2e/helpers/testClient.ts:17-19](../web/tests/e2e/helpers/testClient.ts#L17)
 - Raised by: reach-reviewer
 
-### TST-6 — What else must be covered before this goes live to real sponsors? · Soon
+### TST-6 — What else must be covered before this goes live to real sponsors? · Phone checks before launch; rest post-season
+
+Decision (Grant, 2026-09-29): the phone-size checks go in before launch (backlog US-50); the rest waits until after the season.
 
 Known gaps, all confirmed by grep today: the school duplicate-code race has
 **zero** coverage; the family edit flow is exercised only through the "Internal

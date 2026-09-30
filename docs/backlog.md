@@ -308,7 +308,9 @@ Acceptance criteria:
 - [ ] A failed *initial* load (no `data` yet) still shows the full-page error as it does today.
 - [ ] `refresh()` can tell its caller whether it succeeded, so "Reload the latest version" on the family edit form can't silently not-reload.
 
-Status: Backlog
+Status: Backlog — **fix before launch** (Grant, 2026-09-29), bundled with the
+other data-safety fixes in US-48. Still present in `AdminGate.tsx` as of
+2026-09-29 (`if (error)` has no `&& !data`).
 Owner: unassigned
 
 ---
@@ -712,7 +714,9 @@ Acceptance criteria:
 - [ ] `import_submission`'s `imported` event detail records `via_review_token`, so the event trail answers it too and not just the UI.
 - [ ] The confidential channel still works — staff verifying a confidential submission themselves is legitimate and must not be presented as an error or an anomaly.
 
-Status: Backlog — **must land before 2026-10-01**
+Status: Backlog — ~~must land before 2026-10-01~~ **gap accepted for the 2026
+season** (Grant, 2026-09-29). Import works; the audit trail just can't tell a
+counselor's confirmation from a staff one. Revisit after the season.
 Owner: unassigned (database-engineer for the select + event detail, frontend-designer for the display)
 
 ---
@@ -1649,6 +1653,12 @@ needs `intake_demo_seed.sql`). Still to do before Done: **reach-reviewer
 gate** (mandatory — new function reads `review_tokens`), code-reviewer pass,
 and Grant's sending-domain work before any send is relied on for a real
 counselor.
+
+**Season decision (Grant, 2026-09-29):** counselor links go out **by hand** this
+season (copied from the Registration links panel). The sending-domain work is
+deferred, so nothing relies on the app's counselor emails; the church's own filter
+already blocked Supabase invite emails the same day. US-42's digest is paused for
+every school to match.
 Owner: database-engineer (migration + functions + `web/lib`), frontend-designer
 (the panel controls and status line), reach-reviewer (mandatory gate), Grant
 (the sending domain, the `site_url` value — done: applying the migration).
@@ -1785,6 +1795,11 @@ Owner: database-engineer (cron + function + `web/lib` — done, live-verified
 except the cooldown migration), frontend-designer (pause toggle, waiting-count
 line — done), reach-reviewer (mandatory gate).
 
+**Season decision (Grant, 2026-09-29):** paused for every school
+(`update drive_schools set digest_paused = true where drive_id = <open drive>`),
+since it sends from the same unverified address as US-41. Turn it back on per
+school from the Registration links panel once the church email domain is set up.
+
 ---
 
 ## US-43: Sponsor lifecycle emails (placeholder — not yet scoped)
@@ -1802,7 +1817,21 @@ dashboard, which a human has to read and act on.
 
 Not scoped here. Written down so US-41's schema is chosen with it in mind.
 
-Status: **Backlog** — not scoped. Owner: unassigned.
+**Scoped for 2026 (Grant, 2026-09-29): one thank-you email only.** Sent when a
+claim is confirmed: who they're buying for (first name, grade), the wish list and
+sizes, and drop-off instructions. The 1-week, 1-day and overdue reminders wait
+until after the season; staff follow up late sponsors by phone (OPEN_QUESTIONS
+ADM-11). It rides the same email path as the claim-code email, which already
+reaches sponsors on dev.
+
+Acceptance criteria (2026 scope):
+- [ ] Drop-off location, hours and deadline from Grant.
+- [ ] Email sent once per confirmed claim, from the same function that confirms
+  the code, containing only what the sponsor already saw on the card.
+- [ ] Nothing a sponsor never sees (last name, school, address) goes in it.
+- [ ] reach-reviewer gate (new outbound email carrying child details).
+
+Status: **Backlog** — scoped for 2026 (thank-you email only). Owner: unassigned.
 
 ---
 
@@ -1873,9 +1902,10 @@ Acceptance criteria:
 - [x] `publish_intake_form_es.sql` run on dev by Grant 2026-09-29.
 - [ ] Native or fluent speaker review of the Spanish (Seth Saldivar or
   Stephanie Williams) before any real family sees it (INTAKE_FORMS §4.4).
-- [ ] Free-text answers (wish list, needs, notes) arrive in Spanish and would show
-  that way on the sponsor page. Translate-at-import (INTAKE_FORMS §4.2) isn't
-  built; until it is, the office retypes them in English on the household page.
+- [x] Free-text answers (wish list, needs, notes) arrive in Spanish. Decided
+  (Grant, 2026-09-29): the office retypes them in English on the household page
+  after import, before the cards reach sponsors. Translate-at-import
+  (INTAKE_FORMS §4.2) stays unbuilt this season.
 - [ ] Server-side validation messages (`intake_validate_field`) are English only.
 - [ ] code-reviewer pass.
 
@@ -1915,14 +1945,126 @@ Acceptance criteria:
 - [ ] Run the e2e suite (the edited specs haven't been run yet).
 - [ ] dev publish: re-run `intake_demo_seed.sql` so the demo link drops the
   pickup question.
-- [ ] Decide how the office records gifts delivered to a school: the Distribution
-  page still speaks of scheduled pickups and check-ins.
+- [x] Recording deliveries, decided (Grant, 2026-09-29): existing screens, no code
+  change. Mark each gift Delivered on the Fulfillment board, and use Check in on
+  the Distribution page to mean "handed to the counselor".
 - [ ] code-reviewer pass.
 
 Status: **In review** — commit `810619c` on `dev`, live on the dev site. No
 migration, no RLS/view/function change.
 Owner: built in a Claude session (form definition, `FamilyForm.tsx`, the synced
 SQL copies, e2e helpers).
+
+---
+
+## US-47: Counselor-entered registrations go through the counselor's own review
+
+As a counselor entering a family over the phone, I want my entry to show up on my
+own review list for a confirm click, so nothing reaches the church unreviewed and
+no volunteer can post a registration that skips review.
+
+Decided by Grant, 2026-09-29 (OPEN_QUESTIONS ADM-20, the third option). Today a
+`counselor`/`staff` channel link auto-verifies at submit, and any signed-in user
+can read its token. The staff screen already can't create one (US-27).
+
+Acceptance criteria:
+- [ ] Counselor/staff channel submissions no longer auto-verify; they land as
+  submitted, like a family's.
+- [ ] They appear on that school's review list, marked as entered by the
+  counselor, for the same confirm or "This isn't right" step.
+- [ ] Staff can create a counselor-direct link in the Registration links panel
+  only once the above ships.
+- [ ] reach-reviewer gate (changes `submit_form`'s channel handling).
+
+Status: **Backlog** — decided, not started.
+Owner: database-engineer (`submit_form`), frontend-designer (roster marker, link
+creation).
+
+---
+
+## US-48: Data-safety fixes before launch
+
+Four bugs the reviewer found, all confirmed still in the code on 2026-09-29.
+Grant decided to fix all four before launch.
+
+Acceptance criteria:
+- [ ] **DB-10:** saving a wish list is one database call that replaces the items
+  in a single transaction, so a failed save leaves the old list intact.
+- [ ] **DB-8:** adding a child assigns `child_index` inside the database under a
+  lock, like `create_family()`, so two people adding siblings at once can't
+  half-save.
+- [ ] **DB-15:** the Fulfillment board and Shopping list skip an assignment whose
+  card or child isn't visible instead of crashing the page.
+- [ ] **US-14:** its three acceptance criteria (a failed background refresh keeps
+  what the volunteer typed).
+- [ ] reach-reviewer gate for the two new database functions; e2e green.
+
+Status: **Backlog** — decided, fix before launch.
+Owner: database-engineer (DB-8, DB-10), frontend-designer (DB-15, US-14).
+
+---
+
+## US-49: Edit a school in the app
+
+As staff, I want to fix a school's name or liaison details on the Schools page,
+so a changed phone number doesn't need raw SQL.
+
+Decided by Grant, 2026-09-29 (OPEN_QUESTIONS ADM-4): edit only, no deactivate.
+
+Acceptance criteria:
+- [ ] An Edit action on the Schools page, modeled on the Drives page's Edit
+  modal: name, liaison name, phone and email, and distribution method.
+- [ ] The one-letter card code stays read-only once the school has households,
+  since card numbers embed it.
+- [ ] No schema change; e2e covers an edit.
+
+Status: **Backlog** — decided.
+Owner: frontend-designer.
+
+---
+
+## US-50: Phone-size and signed-out privacy tests before launch
+
+Decided by Grant, 2026-09-29 (OPEN_QUESTIONS SPN-5, TST-5, and the phone half of
+TST-6). The rest of TST-6 waits until after the season.
+
+Acceptance criteria:
+- [ ] A Playwright phone-size project (for example 390px wide) that loads
+  `/sponsor` and the family form: no horizontal scroll, and claiming and submitting
+  are reachable one-handed.
+- [ ] Anything that check finds on `/sponsor` is fixed (SPN-5: "absolutely this
+  should be optimized for phone usage").
+- [ ] A signed-out client gets zero rows from `children`, `families`,
+  `assignments` and `wishlist_items`, and a confidential child never appears in
+  `public_available_cards` (check `security.spec.ts` for what already exists
+  first).
+
+Status: **Backlog** — decided, before launch.
+Owner: qa-tester (tests), frontend-designer (any phone fixes).
+
+---
+
+## US-51: Prod go-live checklist and applied-migrations ledger
+
+Nothing has ever been applied to prod, and there's no record of what prod has
+(OPEN_QUESTIONS DB-1, DB-25, DOC-1, DOC-3). Decided by Grant, 2026-09-29: after
+the 2026-09-30 review passes, Claude writes the checklist and ledger and Grant
+applies it.
+
+Acceptance criteria:
+- [ ] A ledger file listing every migration with its dev and prod apply dates,
+  built from backlog records. The headers of `20260903120000`,
+  `20260923120000` and `20260923130000` still say "DEV: NOT YET APPLIED" though
+  the backlog records them applied, so the ledger becomes the source of truth.
+- [ ] `20260923140000_digest_cooldown.sql` applied to dev first.
+- [ ] An ordered prod checklist: DEPLOY.md's Phase 0 audit, every migration in
+  order (with ADM-3's backfill pre-check), the email key in Vault and `site_url`,
+  publishing both form definitions, `set_distribution_school_dropoff.sql`, the
+  digest paused, and the Vercel production branch and env vars.
+- [ ] Grant confirms prod backups in Supabase → Database → Backups (DOC-3).
+
+Status: **Backlog** — waits on the 2026-09-30 review.
+Owner: Claude (checklist + ledger), Grant (applying it, backups).
 
 ---
 
