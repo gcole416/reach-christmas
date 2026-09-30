@@ -226,8 +226,11 @@ export function AdminNav() {
       <NavMenu
         label="Account"
         align="right"
-        active={false}
-        items={[{ action: handleSignOut, label: "Sign out" }]}
+        active={isActive(pathname, "/admin/account")}
+        items={[
+          { href: "/admin/account", label: "Change password" },
+          { action: handleSignOut, label: "Sign out" },
+        ]}
       />
     </div>
   );
