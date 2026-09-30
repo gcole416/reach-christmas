@@ -123,8 +123,8 @@ export function SponsorBrowser() {
     <div className="mt-8">
       {justClaimedName ? (
         <div className="mb-6 rounded-lg border border-status-good/30 bg-status-good/10 px-4 py-3 text-sm text-ink-primary">
-          Thank you for sponsoring {justClaimedName}! In the real app you&apos;d get a confirmation email
-          with drop-off details next.
+          Thank you for sponsoring {justClaimedName}! Check your email for a confirmation with drop-off
+          details.
         </div>
       ) : null}
 

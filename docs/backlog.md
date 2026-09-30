@@ -1825,13 +1825,45 @@ ADM-11). It rides the same email path as the claim-code email, which already
 reaches sponsors on dev.
 
 Acceptance criteria (2026 scope):
-- [ ] Drop-off location, hours and deadline from Grant.
-- [ ] Email sent once per confirmed claim, from the same function that confirms
-  the code, containing only what the sponsor already saw on the card.
-- [ ] Nothing a sponsor never sees (last name, school, address) goes in it.
-- [ ] reach-reviewer gate (new outbound email carrying child details).
+- [x] Drop-off location, hours and deadline from Grant. Location is real
+  (Grant, 2026-09-30): "OneLife Church, at the Reach Christmas table." Days and
+  deadline aren't decided yet ("any service on X or X days" / "by Y time") — per
+  the US-46 shop-day-panel lesson, these are NOT baked into the migration as
+  `[placeholder]` text in the email copy. They're two `app_settings` columns
+  (`dropoff_days`, `dropoff_deadline`, alongside the existing `site_url`) with an
+  honest "not set yet" default; Grant sets the real values with one `UPDATE`, no
+  new migration needed.
+- [x] Email sent once per confirmed claim, from the same function that confirms
+  the code (`claim_card_with_code`), containing only what the sponsor already saw
+  on the card.
+- [x] Nothing a sponsor never sees (last name, school, address) goes in it —
+  pulls the exact same column whitelist `public_available_cards` uses.
+- [x] reach-reviewer gate (new outbound email carrying child details). **PASSED,
+  2026-09-30** — no blocking findings. One follow-up opened: OPEN_QUESTIONS
+  **DB-29** (`claim_card_with_code` doesn't re-check `is_high_schooler`/`held_at`
+  the way `public_available_cards` does — pre-existing, not introduced here, made
+  slightly more consequential by the new PII-bearing email on that path). One nit
+  fixed inline (a header comment overstated "byte-for-byte unchanged" for the
+  untouched portion of the function; reworded).
 
-Status: **Backlog** — scoped for 2026 (thank-you email only). Owner: unassigned.
+Status: **In review** — built this session on `dev`.
+[supabase/migrations/20260930120000_sponsor_thank_you_email.sql](../supabase/migrations/20260930120000_sponsor_thank_you_email.sql).
+Best-effort by design: the email step is wrapped in its own exception handler so
+a Vault/`app_settings`/pg_net hiccup can never turn a successful claim into a
+failure — see the migration's header comment. Also updates
+[web/app/sponsor/SponsorBrowser.tsx](../web/app/sponsor/SponsorBrowser.tsx)'s
+post-claim banner, which previously said "in the real app you'd get a
+confirmation email" — that was a leftover placeholder; it now reflects that the
+email is real. `tsc` / `eslint` clean.
+**Applied to dev by Grant, 2026-09-30. Not applied to prod** (waits on a
+Software Acceptance Review, same as every other intake/claim migration). Still
+outstanding: set the real `dropoff_days`/`dropoff_deadline` via `UPDATE
+app_settings` once Grant has them (currently the honest "not set yet"
+placeholder), and run the migration's own VERIFY section end to end — claim a
+real card as a genuinely signed-out client, confirm the thank-you email arrives
+with only sponsor-visible fields, confirm `sponsor_emails` gets a row, confirm a
+claim still succeeds if the Vault key is temporarily missing.
+Owner: built in a Claude session; reach-reviewer gate PASSED.
 
 ---
 

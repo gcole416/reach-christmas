@@ -652,6 +652,39 @@ drive-by fix. Related to DB-22 (should granting clearance be logged) and DB-26
 
 ---
 
+### DB-29 — `claim_card_with_code` never re-checks `is_high_schooler` / `held_at`, unlike `public_available_cards`
+
+Found by reach-reviewer, 2026-09-30, during the US-43 sponsor thank-you-email
+gate. Not introduced by that migration — a pre-existing gap it just made more
+consequential.
+
+`public_available_cards` excludes a card three ways: `not f.is_confidential`,
+`not ch.is_high_schooler`, and `ch.held_at is null`
+([20260909120000_child_on_hold.sql](../supabase/migrations/20260909120000_child_on_hold.sql)).
+`claim_card_with_code` (`request_claim_code` too) only re-checks the
+confidential one before completing a claim. In practice this is inert today —
+the anon browse flow only ever hands the client a `card_id` that already
+passed all three filters (`web/app/sponsor/SponsorBrowser.tsx` queries the view
+directly, never a base table) — so exploiting it needs an attacker who already
+has, or guesses, an unlisted card's UUID.
+
+US-43 (2026-09-30) raised the stakes slightly: a claim that reaches this path
+now also fires a PII-bearing thank-you email (first name, grade, sizes,
+wishlist) to whoever claimed it, where before a successful claim on such a
+card returned bare success with no PII disclosed. Still not a cross-party
+leak — the recipient is the claimer, who by design learns those details once
+they've claimed a card — but it's a reasonable moment to close the gap at the
+source rather than rely only on browse-time view filtering.
+
+Fix, when picked up: add `and not ch.is_high_schooler and ch.held_at is null`
+alongside the existing confidential check in both `claim_card_with_code` and
+`request_claim_code`.
+
+- Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql), [supabase/migrations/20260909120000_child_on_hold.sql](../supabase/migrations/20260909120000_child_on_hold.sql)
+- Raised by: reach-reviewer, during the US-43 gate, 2026-09-30
+
+---
+
 ## Admin / staff UI
 
 ### ~~ADM-1 — What is `sort_tag` (the legacy "Color" field) actually for?~~ · Resolved
