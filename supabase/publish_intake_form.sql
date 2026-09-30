@@ -56,9 +56,9 @@ begin
   "schema_version": 1,
   "locale": "en",
   "title": "Reach Christmas Gift Registration",
-  "intro": "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
+  "intro": "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nIf your children attend different schools and you receive this link from more than one counselor, please fill out only one form for your whole household.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
   "help_footer": "Questions? Contact your school counselor.",
-  "privacy_note": "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name or address.",
+  "privacy_note": "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name, address, or contact information, and they have no way to contact you. Only your school counselor follows up about your registration.",
   "submit_label": "Submit registration",
   "confirmation": {
     "heading": "Thank you. Your registration is in.",

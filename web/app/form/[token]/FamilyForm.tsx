@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import {
   emptyAnswers,
+  normalizeDefinition,
   resolveHelpText,
   submitForm,
   type IntakeAnswers,
@@ -12,7 +13,12 @@ import {
 } from "@/lib/intake";
 import { friendlyMessage } from "@/components/intake/format";
 import { isHighSchoolGrade } from "@/lib/queries";
-import { SHOP_DAY_DATE, SHOP_DAY_STORE } from "@/lib/intakeFormDefinition";
+import {
+  PHASE_1_FORM_DEFINITION,
+  PHASE_1_FORM_DEFINITION_ES,
+  SHOP_DAY_DATE,
+  SHOP_DAY_STORE,
+} from "@/lib/intakeFormDefinition";
 import {
   PublicCard,
   PublicMasthead,
@@ -33,8 +39,21 @@ import { validateAnswers } from "./validate";
 // what the family typed, so nothing is renamed, trimmed, or "cleaned up" on
 // the way out.
 
-const GENERIC_SUBMIT_ERROR =
-  "We couldn't save your registration just now. Please check your answers and try again.";
+/** Small EN/ES string swap for the UI chrome that isn't sourced from the
+ *  questionnaire definition (buttons, gates, summary headings). Content that
+ *  IS in the definition (labels, help, options) is never handled here — it
+ *  already carries its own translation per locale. */
+function t(locale: string, en: string, es: string): string {
+  return locale === "es" ? es : en;
+}
+
+function genericSubmitError(locale: string): string {
+  return t(
+    locale,
+    "We couldn't save your registration just now. Please check your answers and try again.",
+    "No pudimos guardar su registro en este momento. Por favor revise sus respuestas e intente de nuevo."
+  );
+}
 
 // A hard gate the questionnaire definition doesn't carry: the person has to
 // affirm that everyone they listed lives in their home before the form will
@@ -43,9 +62,23 @@ const GENERIC_SUBMIT_ERROR =
 // synthetic path lets the error summary list and link to it like any real
 // field error.
 const LIVES_TOGETHER_FIELD = "everyone_lives_here";
-const LIVES_TOGETHER_LABEL = "Everyone I've listed lives in my home";
-const LIVES_TOGETHER_ERROR =
-  "Please confirm that everyone you've listed lives in your home.";
+function livesTogetherLabel(locale: string): string {
+  return t(locale, "Everyone I've listed lives in my home", "Todos los que he mencionado viven en mi hogar");
+}
+function livesTogetherError(locale: string): string {
+  return t(
+    locale,
+    "Please confirm that everyone you've listed lives in your home.",
+    "Por favor confirme que todos los que mencionó viven en su hogar."
+  );
+}
+function livesTogetherHelp(locale: string): string {
+  return t(
+    locale,
+    "Only register children who live with you. Please don't list a relative's child or someone who only visits.",
+    "Registre únicamente a los niños que viven con usted. Por favor no incluya al hijo de un familiar ni a alguien que solo visita."
+  );
+}
 
 type SectionValues = Record<string, unknown>;
 
@@ -67,8 +100,36 @@ export function FamilyForm({
   const [submitted, setSubmitted] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
 
+  // The language TOGGLE (top of page) is independent of which locale's
+  // form_version this link happens to be pinned to server-side. The English
+  // and Spanish definitions share identical field ids/types/options/required
+  // rules (see the "byte-for-byte" note in intakeFormDefinition.ts) — only the
+  // displayed text differs — so swapping which one renders is safe: it never
+  // changes what gets validated or what submit_form receives.
+  const [displayLocale, setDisplayLocale] = useState(definition.locale);
+  const [languageFieldTouched, setLanguageFieldTouched] = useState(false);
+  const alternateDefinition = useMemo(
+    () => normalizeDefinition(definition.locale === "es" ? PHASE_1_FORM_DEFINITION : PHASE_1_FORM_DEFINITION_ES),
+    [definition.locale]
+  );
+  const activeDefinition = displayLocale === definition.locale ? definition : alternateDefinition;
+
+  /** Flips the whole page's language. Also pre-fills the "what language should
+   *  we contact you in" field to match, unless the family already chose one
+   *  themselves — that field is its own question and stays editable. */
+  function handleLanguageToggle(locale: string) {
+    setDisplayLocale(locale);
+    if (!languageFieldTouched) {
+      setAnswers((prev) => {
+        const current = (prev as Record<string, unknown>).family;
+        const base = current && typeof current === "object" ? (current as SectionValues) : {};
+        return { ...prev, family: { ...base, preferred_language: locale } };
+      });
+    }
+  }
+
   const errorMap = new Map(errors.map((e) => [e.field, e.message]));
-  const repeating = definition.sections.find((s) => s.repeating);
+  const repeating = activeDefinition.sections.find((s) => s.repeating);
 
   function clearErrors(paths: string[]) {
     if (paths.length === 0) return;
@@ -77,6 +138,9 @@ export function FamilyForm({
 
   /** Writes into a plain (non-repeating) section. */
   function patchSection(sectionId: string, patch: SectionValues) {
+    if (sectionId === "family" && "preferred_language" in patch) {
+      setLanguageFieldTouched(true);
+    }
     setAnswers((prev) => {
       const current = (prev as Record<string, unknown>)[sectionId];
       const base = current && typeof current === "object" ? (current as SectionValues) : {};
@@ -156,9 +220,9 @@ export function FamilyForm({
     if (submitting) return;
 
     setBanner(null);
-    const localErrors = validateAnswers(definition, answers);
+    const localErrors = validateAnswers(activeDefinition, answers);
     if (!livesTogetherConfirmed) {
-      localErrors.push({ field: LIVES_TOGETHER_FIELD, message: LIVES_TOGETHER_ERROR });
+      localErrors.push({ field: LIVES_TOGETHER_FIELD, message: livesTogetherError(activeDefinition.locale) });
     }
     if (localErrors.length > 0) {
       setErrors(localErrors);
@@ -183,40 +247,42 @@ export function FamilyForm({
     }
 
     setErrors(result.fieldErrors);
-    setBanner(friendlyMessage(result.error, GENERIC_SUBMIT_ERROR));
+    setBanner(friendlyMessage(result.error, genericSubmitError(activeDefinition.locale)));
     focusSummary();
   }
 
   if (submitted) {
-    return <Confirmation definition={definition} schoolName={schoolName} />;
+    return <Confirmation definition={activeDefinition} schoolName={schoolName} />;
   }
 
   return (
     <PublicPage>
-      <PublicMasthead title={definition.title} schoolName={schoolName}>
-        {definition.intro.split("\n\n").map((paragraph, index) => (
+      <LanguageToggle active={displayLocale} onChange={handleLanguageToggle} />
+
+      <PublicMasthead title={activeDefinition.title} schoolName={schoolName}>
+        {activeDefinition.intro.split("\n\n").map((paragraph, index) => (
           <p key={index} className={index > 0 ? "mt-3" : undefined}>
             {paragraph}
           </p>
         ))}
       </PublicMasthead>
 
-      {definition.privacyNote ? <QuietNote>{definition.privacyNote}</QuietNote> : null}
+      {activeDefinition.privacyNote ? <QuietNote>{activeDefinition.privacyNote}</QuietNote> : null}
 
       <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-6">
         <ErrorSummary
           ref={summaryRef}
           banner={banner}
           errors={errors}
-          definition={definition}
+          definition={activeDefinition}
           onJump={focusField}
         />
 
-        {definition.sections.map((section) =>
+        {activeDefinition.sections.map((section) =>
           section.repeating ? (
             <RepeatingSection
               key={section.id}
-              definition={definition}
+              definition={activeDefinition}
               section={section}
               answers={answers}
               errors={errorMap}
@@ -227,7 +293,7 @@ export function FamilyForm({
           ) : (
             <PlainSection
               key={section.id}
-              definition={definition}
+              definition={activeDefinition}
               section={section}
               answers={answers}
               errors={errorMap}
@@ -241,12 +307,12 @@ export function FamilyForm({
             screen-reader user is never asked to fill it. Whatever lands in it
             is always sent; the server answers a filled one with an ordinary
             success and writes nothing. */}
-        {definition.honeypotField ? (
+        {activeDefinition.honeypotField ? (
           <div aria-hidden="true" style={{ position: "absolute", left: "-9999px" }}>
             <label htmlFor="intake-hp">Leave this field empty</label>
             <input
               id="intake-hp"
-              name={definition.honeypotField}
+              name={activeDefinition.honeypotField}
               type="text"
               tabIndex={-1}
               autoComplete="off"
@@ -273,12 +339,9 @@ export function FamilyForm({
             />
             <div>
               <label htmlFor={fieldDomId(LIVES_TOGETHER_FIELD)} className="text-base text-ink-primary">
-                {LIVES_TOGETHER_LABEL}.
+                {livesTogetherLabel(activeDefinition.locale)}.
               </label>
-              <p className="mt-1 text-sm text-ink-secondary">
-                Only register children who live with you. Please don&apos;t list a relative&apos;s
-                child or someone who only visits.
-              </p>
+              <p className="mt-1 text-sm text-ink-secondary">{livesTogetherHelp(activeDefinition.locale)}</p>
               {errorMap.has(LIVES_TOGETHER_FIELD) ? (
                 <FieldError
                   id={`${fieldDomId(LIVES_TOGETHER_FIELD)}-error`}
@@ -293,15 +356,21 @@ export function FamilyForm({
             disabled={submitting}
             className="w-full rounded-xl bg-cat-blue px-5 py-3.5 text-base font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
           >
-            {submitting ? "Sending…" : (definition.submitLabel ?? "Submit registration")}
+            {submitting
+              ? t(activeDefinition.locale, "Sending…", "Enviando…")
+              : (activeDefinition.submitLabel ??
+                 t(activeDefinition.locale, "Submit registration", "Enviar registro"))}
           </button>
           <p className="mt-3 text-sm text-ink-secondary">
-            You won&apos;t be able to change this after you send it, so take a moment to look it
-            over.
+            {t(
+              activeDefinition.locale,
+              "You won't be able to change this after you send it, so take a moment to look it over.",
+              "No podrá cambiar esto después de enviarlo, así que tómese un momento para revisarlo."
+            )}
           </p>
-          {definition.helpFooter ? (
+          {activeDefinition.helpFooter ? (
             <p className="mt-4 border-t border-border pt-4 text-sm text-ink-muted">
-              {definition.helpFooter}
+              {activeDefinition.helpFooter}
             </p>
           ) : null}
         </PublicCard>
@@ -312,8 +381,11 @@ export function FamilyForm({
         // child, and the server would reject the submission. Better to say so
         // than to render a form that cannot succeed.
         <p className="mt-4 text-sm text-status-critical">
-          This form is missing its children section. Please ask your school counselor for a current
-          link.
+          {t(
+            activeDefinition.locale,
+            "This form is missing its children section. Please ask your school counselor for a current link.",
+            "A este formulario le falta la sección de niños. Por favor pídale a su consejero escolar un enlace actualizado."
+          )}
         </p>
       )}
     </PublicPage>
@@ -321,6 +393,37 @@ export function FamilyForm({
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * The whole-page language switch (top of the form, above the title). Swaps
+ * every string on the page — the English and Spanish questionnaires are
+ * otherwise identical (same field ids, same validation), so this is a pure
+ * display choice, not a different link or a page reload.
+ */
+function LanguageToggle({ active, onChange }: { active: string; onChange: (locale: string) => void }) {
+  const optionClass = (locale: string) =>
+    `rounded-full px-3 py-1 text-sm font-medium transition ${
+      active === locale
+        ? "bg-cat-blue text-white"
+        : "text-ink-secondary hover:text-ink-primary"
+    }`;
+  return (
+    <div className="mb-4 flex justify-end">
+      <div
+        role="group"
+        aria-label="Language / Idioma"
+        className="inline-flex items-center gap-1 rounded-full border border-border bg-surface p-1"
+      >
+        <button type="button" onClick={() => onChange("en")} className={optionClass("en")}>
+          English
+        </button>
+        <button type="button" onClick={() => onChange("es")} className={optionClass("es")}>
+          Español
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function SectionCard({
   section,
@@ -401,7 +504,7 @@ function RepeatingSection({
   const minItems = section.minItems ?? 1;
   const maxItems = section.maxItems ?? 10;
   const sectionError = errors.get(section.id);
-  const itemLabel = section.itemLabel ?? "Child";
+  const itemLabel = section.itemLabel ?? t(definition.locale, "Child", "Niño o niña");
 
   return (
     <SectionCard section={section}>
@@ -433,7 +536,7 @@ function RepeatingSection({
                   onClick={() => onRemove(index)}
                   className="ml-auto rounded-lg px-2.5 py-1.5 text-sm font-medium text-ink-secondary underline underline-offset-4 hover:text-status-critical focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
                 >
-                  {section.removeLabel ?? "Remove"}
+                  {section.removeLabel ?? t(definition.locale, "Remove", "Eliminar")}
                 </button>
               ) : null}
             </div>
@@ -455,7 +558,7 @@ function RepeatingSection({
                 ))}
             </div>
 
-            {childIsSelfShopper(child) ? <ShopDayNote /> : null}
+            {childIsSelfShopper(child) ? <ShopDayNote locale={definition.locale} /> : null}
           </div>
         ))}
       </div>
@@ -466,7 +569,7 @@ function RepeatingSection({
           onClick={onAdd}
           className="mt-5 w-full rounded-xl border border-dashed border-cat-blue/60 px-4 py-3 text-base font-medium text-cat-blue hover:bg-cat-blue/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue sm:w-auto"
         >
-          + {section.addLabel ?? "Add another child"}
+          + {section.addLabel ?? t(definition.locale, "Add another child", "Agregar otro niño o niña")}
         </button>
       ) : null}
     </SectionCard>
@@ -486,7 +589,21 @@ function childIsSelfShopper(child: SectionValues | undefined): boolean {
  * store and date are placeholders (SHOP_DAY_STORE / SHOP_DAY_DATE) until Grant
  * confirms the 2026 details — one string, one place.
  */
-function ShopDayNote() {
+function ShopDayNote({ locale }: { locale: string }) {
+  if (locale === "es") {
+    return (
+      <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
+        <p className="font-semibold text-ink-primary">Este niño o niña compra sus propios regalos.</p>
+        <p className="mt-1">
+          Los estudiantes de preparatoria son invitados a un día de compras en una tienda para
+          elegir sus propios regalos, así que no necesitamos una lista de deseos ni tallas para
+          ellos aquí. Será en {SHOP_DAY_STORE} el {SHOP_DAY_DATE}. El consejero de su escuela
+          compartirá los detalles más cerca de la fecha.
+        </p>
+        <p className="mt-1">Solo necesitamos su primer nombre, edad y grado, como arriba.</p>
+      </div>
+    );
+  }
   return (
     <div className="mt-4 rounded-xl border border-cat-blue/30 bg-cat-blue/5 p-4 text-sm text-ink-secondary">
       <p className="font-semibold text-ink-primary">This child shops for their own gifts.</p>
@@ -527,9 +644,13 @@ function ErrorSummary({
       <h2 className="text-base font-semibold text-ink-primary">
         {errors.length > 0
           ? errors.length === 1
-            ? "There's one answer to fix"
-            : `There are ${errors.length} answers to fix`
-          : "We couldn't send your registration"}
+            ? t(definition.locale, "There's one answer to fix", "Hay una respuesta que corregir")
+            : t(
+                definition.locale,
+                `There are ${errors.length} answers to fix`,
+                `Hay ${errors.length} respuestas que corregir`
+              )
+          : t(definition.locale, "We couldn't send your registration", "No pudimos enviar su registro")}
       </h2>
       {banner ? <p className="mt-2 text-sm text-ink-secondary">{banner}</p> : null}
       {errors.length > 0 ? (
@@ -557,18 +678,18 @@ function ErrorSummary({
  * without the page keeping a second map of the questionnaire.
  */
 function describeFieldPath(definition: IntakeFormDefinition, path: string): string {
-  if (path === LIVES_TOGETHER_FIELD) return LIVES_TOGETHER_LABEL;
+  if (path === LIVES_TOGETHER_FIELD) return livesTogetherLabel(definition.locale);
 
   const match = /^([a-z0-9_]+)(?:\[(\d+)\])?(?:\.([a-z0-9_]+))?(?:\[(\d+)\])?$/i.exec(path);
-  if (!match) return "This form";
+  if (!match) return t(definition.locale, "This form", "Este formulario");
   const [, sectionId, itemIndex, fieldId, listIndex] = match;
 
   const section = definition.sections.find((s) => s.id === sectionId);
-  if (!section) return "This form";
+  if (!section) return t(definition.locale, "This form", "Este formulario");
 
   const prefix =
     itemIndex !== undefined
-      ? `${section.itemLabel ?? "Child"} ${Number(itemIndex) + 1}`
+      ? `${section.itemLabel ?? t(definition.locale, "Child", "Niño o niña")} ${Number(itemIndex) + 1}`
       : section.title;
 
   if (!fieldId) return prefix;
@@ -579,12 +700,13 @@ function describeFieldPath(definition: IntakeFormDefinition, path: string): stri
   const fieldLabel = field
     ? field.id === fieldId
       ? field.label
-      : `${field.label} (description)`
+      : `${field.label} (${t(definition.locale, "description", "descripción")})`
     : fieldId;
 
   const suffix =
     listIndex !== undefined && field?.itemLabels
-      ? `, ${field.itemLabels[Number(listIndex)] ?? `Idea ${Number(listIndex) + 1}`}`
+      ? // "Idea" is spelled the same in English and Spanish, so no t() needed.
+        `, ${field.itemLabels[Number(listIndex)] ?? `Idea ${Number(listIndex) + 1}`}`
       : "";
 
   return `${prefix}: ${fieldLabel}${suffix}`;
@@ -606,10 +728,16 @@ function Confirmation({
   definition: IntakeFormDefinition;
   schoolName: string | null;
 }) {
-  const heading = definition.confirmation?.heading ?? "Thank you. Your registration is in.";
+  const heading =
+    definition.confirmation?.heading ??
+    t(definition.locale, "Thank you. Your registration is in.", "Gracias. Su registro ha sido recibido.");
   const body =
     definition.confirmation?.body ??
-    "Your registration is with your school counselor now. They'll confirm it and pass it along to OneLife Church. You will receive further information via the email you provided. If you do not have an email, your counselor will relay further information.";
+    t(
+      definition.locale,
+      "Your registration is with your school counselor now. They'll confirm it and pass it along to OneLife Church. You will receive further information via the email you provided. If you do not have an email, your counselor will relay further information.",
+      "Su registro ya está con el consejero de su escuela. Él o ella lo confirmará y lo enviará a OneLife Church. Recibirá más información por el correo electrónico que proporcionó. Si no tiene correo electrónico, su consejero le compartirá la información."
+    );
 
   return (
     <PublicPage>
@@ -635,7 +763,11 @@ function Confirmation({
         <p className="mt-3 text-ink-secondary">{body}</p>
         {schoolName ? (
           <p className="mt-4 rounded-xl bg-cat-yellow/10 px-4 py-3 text-sm text-ink-secondary">
-            Your counselor at {schoolName} will confirm it.
+            {t(
+              definition.locale,
+              `Your counselor at ${schoolName} will confirm it.`,
+              `El consejero de ${schoolName} lo confirmará.`
+            )}
           </p>
         ) : null}
         {definition.helpFooter ? (

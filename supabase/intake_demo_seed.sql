@@ -24,14 +24,20 @@
 -- run must never delete a demo someone seeded for a walkthrough.
 --
 -- =============================================================================
--- THE TWO TOKENS (dev demo only — synthetic, no real PII behind either)
+-- THE THREE TOKENS (dev demo only — synthetic, no real PII behind any of them)
 -- =============================================================================
 --
---   FAMILY FORM LINK   /form/demo-north-family-2026
---                      token: demo-north-family-2026
+--   FAMILY FORM LINK (English)  /form/demo-north-family-2026
+--                                token: demo-north-family-2026
 --
---   COUNSELOR REVIEW   /review/demo-north-review-2026
---                      token: demo-north-review-2026
+--   FAMILY FORM LINK (Spanish)  /form/demo-north-family-2026-es
+--                                token: demo-north-family-2026-es
+--
+--   COUNSELOR REVIEW             /review/demo-north-review-2026
+--                                token: demo-north-review-2026
+--
+-- One review token covers both family links — a school has one counselor
+-- roster regardless of which language(s) its households registered in.
 --
 -- The review token is stored HASHED (bcrypt) and cannot be read back out of
 -- the database — this comment is the only record of the plaintext, which is
@@ -40,26 +46,32 @@
 -- key. In production a counselor who loses theirs gets a NEW one issued; there
 -- is no "look up my link" path, for anyone.
 --
--- These two strings are readable on purpose so they can be typed at a
--- walkthrough. A real link is 32+ bytes of entropy.
+-- These strings are readable on purpose so they can be typed at a walkthrough.
+-- A real link is 32+ bytes of entropy.
 -- =============================================================================
 
 do $seed$
 declare
-  v_drive_id     uuid;
-  v_ds_id        uuid;
-  v_form_id      uuid;
-  v_version_id   uuid;
-  v_version_no   int;
-  v_link_id      uuid;
-  v_rt_id        uuid;
-  v_definition   jsonb;
-  v_school_name  constant text := 'Demo Elementary North';
-  v_form_token   constant text := 'demo-north-family-2026';
-  v_review_token constant text := 'demo-north-review-2026';
+  v_drive_id      uuid;
+  v_ds_id         uuid;
+  v_form_id       uuid;
+  v_version_id    uuid;
+  v_version_no    int;
+  v_link_id       uuid;
+  v_form_id_es    uuid;
+  v_version_id_es uuid;
+  v_version_no_es int;
+  v_link_id_es    uuid;
+  v_rt_id         uuid;
+  v_definition    jsonb;
+  v_definition_es jsonb;
+  v_school_name   constant text := 'Demo Elementary North';
+  v_form_token    constant text := 'demo-north-family-2026';
+  v_form_token_es constant text := 'demo-north-family-2026-es';
+  v_review_token  constant text := 'demo-north-review-2026';
   -- Long window so a seeded demo doesn't quietly expire between the build and
   -- the walkthrough. A real link expires at drive close (INTAKE_FORMS §3).
-  v_expires      constant timestamptz := now() + interval '180 days';
+  v_expires       constant timestamptz := now() + interval '180 days';
 begin
   select id into v_drive_id from drives where status = 'open' order by year desc limit 1;
   if v_drive_id is null then
@@ -92,8 +104,10 @@ begin
   --   * what import_submission maps onto children/wishlist_items (field `id`
   --     values are the keys it reads out of `answers`).
   --
-  -- Spanish is Phase 2 (INTAKE_FORMS §4). Labels here are English-only on
-  -- purpose; the locale-object structure lands with the Spanish link, not now.
+  -- Spanish (INTAKE_FORMS §4) ships as a separate sibling definition below
+  -- (v_definition_es / 'family-intake-es'), not as the per-field locale-object
+  -- structure §4.1 originally sketched — same field ids and option values,
+  -- own forms/form_versions row, selected by which link a family opens.
   --
   -- Field ids match the columns they end up in, which is what keeps
   -- import_submission readable: family.guardian_* -> families.guardian_*,
@@ -141,9 +155,9 @@ begin
   "schema_version": 1,
   "locale": "en",
   "title": "Reach Christmas Gift Registration",
-  "intro": "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
+  "intro": "We're glad you're here. Fill this out once for your household, adding each child who lives with you. Your school counselor will confirm it with us.\n\nIf your children attend different schools and you receive this link from more than one counselor, please fill out only one form for your whole household.\n\nThis takes about five minutes. We only ask for the children's first names, and we never ask for your address.",
   "help_footer": "Questions? Contact your school counselor.",
-  "privacy_note": "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name or address.",
+  "privacy_note": "Sponsors who provide gifts see your child's first name, grade, sizes, wish list, and any specific needs. They never see your last name, address, or contact information, and they have no way to contact you. Only your school counselor follows up about your registration.",
   "submit_label": "Submit registration",
   "confirmation": {
     "heading": "Thank you. Your registration is in.",
@@ -498,6 +512,337 @@ $json$::jsonb;
   returning id into v_link_id;
 
   -- ===========================================================================
+  -- The Spanish sibling definition — same field ids and option values as the
+  -- English one above (see the "PART OF THE IMPORT CONTRACT" note), only
+  -- labels/help/title/intro text translated. DRAFT TRANSLATION — per
+  -- DESIGN.md/INTAKE_FORMS.md §4.4 this needs a native or fluent Spanish
+  -- speaker to review before a real family sees it. Byte-identical to
+  -- PHASE_1_FORM_DEFINITION_ES in web/lib/intakeFormDefinition.ts and to
+  -- supabase/publish_intake_form_es.sql — change one, change all three.
+  -- ===========================================================================
+  v_definition_es := $json$
+{
+  "schema_version": 1,
+  "locale": "es",
+  "title": "Registro de Regalos de Reach Christmas",
+  "intro": "Nos alegra que esté aquí. Complete este formulario una vez por su hogar, agregando a cada niño o niña que vive con usted. El consejero de su escuela lo confirmará con nosotros.\n\nSi sus hijos asisten a escuelas diferentes y recibe este enlace de más de un consejero, por favor complete un solo formulario para todo su hogar.\n\nEsto toma unos cinco minutos. Solo pedimos los primeros nombres de los niños y nunca pedimos su dirección.",
+  "help_footer": "¿Preguntas? Comuníquese con el consejero de su escuela.",
+  "privacy_note": "Los patrocinadores que donan los regalos ven el primer nombre de su hijo o hija, el grado, las tallas, la lista de deseos y cualquier necesidad específica. Nunca ven su apellido, dirección ni información de contacto, y no tienen ninguna forma de comunicarse con usted. Solo el consejero de su escuela le dará seguimiento a su registro.",
+  "submit_label": "Enviar registro",
+  "confirmation": {
+    "heading": "Gracias. Su registro ha sido recibido.",
+    "body": "Su registro ya está con el consejero de su escuela. Él o ella lo confirmará y lo enviará a OneLife Church. Recibirá más información por el correo electrónico que proporcionó. Si no tiene correo electrónico, su consejero le compartirá la información."
+  },
+  "budget_per_child": "$50",
+  "honeypot_field": "favorite_color",
+  "sections": [
+    {
+      "id": "family",
+      "title": "Sobre su hogar",
+      "fields": [
+        {
+          "id": "guardian_name",
+          "label": "Nombre del padre, madre o tutor",
+          "help": "Basta con un nombre. La persona por quien debemos preguntar al momento de la entrega.",
+          "type": "text",
+          "required": true,
+          "max_length": 120
+        },
+        {
+          "id": "guardian_phone",
+          "label": "Número de teléfono",
+          "help": "Para poder comunicarnos con usted sobre la entrega en diciembre.",
+          "type": "phone",
+          "required": true,
+          "max_length": 40
+        },
+        {
+          "id": "guardian_email",
+          "label": "Correo electrónico",
+          "help": "Enviamos las actualizaciones de su registro a este correo. Si no tiene uno, pídale a su consejero escolar que agregue el suyo para que podamos comunicarnos con usted.",
+          "type": "email",
+          "required": true,
+          "max_length": 200
+        },
+        {
+          "id": "preferred_language",
+          "label": "¿En qué idioma preferiría que nos comuniquemos con usted?",
+          "type": "select",
+          "required": true,
+          "options": [
+            { "value": "en", "label": "Inglés" },
+            { "value": "es", "label": "Español" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "children",
+      "title": "Niños en su hogar",
+      "repeating": true,
+      "min_items": 1,
+      "max_items": 10,
+      "item_label": "Niño o niña",
+      "add_label": "Agregar otro niño o niña",
+      "remove_label": "Eliminar este niño o niña",
+      "fields": [
+        {
+          "id": "first_name",
+          "label": "Nombre del niño o niña",
+          "type": "text",
+          "required": true,
+          "max_length": 80
+        },
+        {
+          "id": "age",
+          "label": "Edad",
+          "type": "number",
+          "required": true,
+          "min": 0,
+          "max": 19
+        },
+        {
+          "id": "grade",
+          "label": "Grado escolar",
+          "type": "select",
+          "required": true,
+          "options": [
+            { "value": "Not in school yet", "label": "Aún no va a la escuela" },
+            { "value": "Pre-K", "label": "Pre-Kínder" },
+            { "value": "K", "label": "Kínder" },
+            { "value": "1", "label": "1er grado" },
+            { "value": "2", "label": "2do grado" },
+            { "value": "3", "label": "3er grado" },
+            { "value": "4", "label": "4to grado" },
+            { "value": "5", "label": "5to grado" },
+            { "value": "6", "label": "6to grado" },
+            { "value": "7", "label": "7mo grado" },
+            { "value": "8", "label": "8vo grado" },
+            { "value": "9", "label": "9no grado" },
+            { "value": "10", "label": "10mo grado" },
+            { "value": "11", "label": "11mo grado" },
+            { "value": "12", "label": "12mo grado" }
+          ]
+        },
+        {
+          "id": "sex",
+          "label": "Niño o niña",
+          "type": "select",
+          "required": true,
+          "self_shopper_hidden": true,
+          "options": [
+            { "value": "M", "label": "Niño" },
+            { "value": "F", "label": "Niña" },
+            { "value": "Prefer not to say", "label": "Prefiero no decir" }
+          ]
+        },
+        {
+          "id": "shirt_size",
+          "label": "Talla de camisa",
+          "type": "select",
+          "required": true,
+          "self_shopper_hidden": true,
+          "other_field": "shirt_size_other",
+          "other_value": "Other",
+          "max_length": 80,
+          "options": [
+            { "value": "Youth XS", "label": "Juvenil XS" },
+            { "value": "Youth S", "label": "Juvenil S" },
+            { "value": "Youth M", "label": "Juvenil M" },
+            { "value": "Youth L", "label": "Juvenil L" },
+            { "value": "Youth XL", "label": "Juvenil XL" },
+            { "value": "Adult XS", "label": "Adulto XS" },
+            { "value": "Adult S", "label": "Adulto S" },
+            { "value": "Adult M", "label": "Adulto M" },
+            { "value": "Adult L", "label": "Adulto L" },
+            { "value": "Adult XL", "label": "Adulto XL" },
+            { "value": "Adult XXL", "label": "Adulto XXL" },
+            { "value": "Other", "label": "Otro (describa)" }
+          ]
+        },
+        {
+          "id": "pant_size",
+          "label": "Talla de pantalón",
+          "type": "select",
+          "required": true,
+          "self_shopper_hidden": true,
+          "other_field": "pant_size_other",
+          "other_value": "Other",
+          "max_length": 80,
+          "options": [
+            { "value": "Youth 4", "label": "Juvenil 4" },
+            { "value": "Youth 6", "label": "Juvenil 6" },
+            { "value": "Youth 8", "label": "Juvenil 8" },
+            { "value": "Youth 10", "label": "Juvenil 10" },
+            { "value": "Youth 12", "label": "Juvenil 12" },
+            { "value": "Youth 14", "label": "Juvenil 14" },
+            { "value": "Youth 16", "label": "Juvenil 16" },
+            { "value": "Youth 18", "label": "Juvenil 18" },
+            { "value": "Youth 20", "label": "Juvenil 20" },
+            { "value": "Adult waist 28", "label": "Adulto cintura 28" },
+            { "value": "Adult waist 30", "label": "Adulto cintura 30" },
+            { "value": "Adult waist 32", "label": "Adulto cintura 32" },
+            { "value": "Adult waist 34", "label": "Adulto cintura 34" },
+            { "value": "Adult waist 36", "label": "Adulto cintura 36" },
+            { "value": "Adult waist 38", "label": "Adulto cintura 38" },
+            { "value": "Adult waist 40", "label": "Adulto cintura 40" },
+            { "value": "Adult waist 42", "label": "Adulto cintura 42" },
+            { "value": "Adult waist 44", "label": "Adulto cintura 44" },
+            { "value": "Other", "label": "Otro (describa)" }
+          ]
+        },
+        {
+          "id": "shoe_size",
+          "label": "Talla de zapato",
+          "type": "select",
+          "required": true,
+          "self_shopper_hidden": true,
+          "other_field": "shoe_size_other",
+          "other_value": "Other",
+          "max_length": 80,
+          "options": [
+            { "value": "Toddler 5", "label": "Infantil 5" },
+            { "value": "Toddler 6", "label": "Infantil 6" },
+            { "value": "Toddler 7", "label": "Infantil 7" },
+            { "value": "Toddler 8", "label": "Infantil 8" },
+            { "value": "Toddler 9", "label": "Infantil 9" },
+            { "value": "Toddler 10", "label": "Infantil 10" },
+            { "value": "Toddler 11", "label": "Infantil 11" },
+            { "value": "Toddler 12", "label": "Infantil 12" },
+            { "value": "Toddler 13", "label": "Infantil 13" },
+            { "value": "Youth 1", "label": "Juvenil 1" },
+            { "value": "Youth 2", "label": "Juvenil 2" },
+            { "value": "Youth 3", "label": "Juvenil 3" },
+            { "value": "Youth 4", "label": "Juvenil 4" },
+            { "value": "Youth 5", "label": "Juvenil 5" },
+            { "value": "Youth 6", "label": "Juvenil 6" },
+            { "value": "Youth 7", "label": "Juvenil 7" },
+            { "value": "Adult 5", "label": "Adulto 5" },
+            { "value": "Adult 6", "label": "Adulto 6" },
+            { "value": "Adult 7", "label": "Adulto 7" },
+            { "value": "Adult 8", "label": "Adulto 8" },
+            { "value": "Adult 9", "label": "Adulto 9" },
+            { "value": "Adult 10", "label": "Adulto 10" },
+            { "value": "Adult 11", "label": "Adulto 11" },
+            { "value": "Adult 12", "label": "Adulto 12" },
+            { "value": "Adult 13", "label": "Adulto 13" },
+            { "value": "Adult 14", "label": "Adulto 14" },
+            { "value": "Other", "label": "Otro (describa)" }
+          ]
+        },
+        {
+          "id": "wishlist",
+          "label": "¿Qué le gustaría recibir en Navidad?",
+          "help": "Hasta 3 ideas. Sea lo más específico posible: la marca, el color o la talla ayudan mucho. Los regalos suelen costar alrededor de {budget} por niño.",
+          "type": "text_list",
+          "required": true,
+          "self_shopper_hidden": true,
+          "min_items": 1,
+          "max_items": 3,
+          "first_required": true,
+          "max_length": 200,
+          "item_labels": ["Primera idea", "Segunda idea (opcional)", "Tercera idea (opcional)"]
+        },
+        {
+          "id": "specific_needs",
+          "label": "¿Hay algo que necesiten especialmente?",
+          "type": "textarea",
+          "required": false,
+          "self_shopper_hidden": true,
+          "max_length": 500
+        },
+        {
+          "id": "other_notes",
+          "label": "¿Algo más que debamos saber?",
+          "type": "textarea",
+          "required": false,
+          "self_shopper_hidden": true,
+          "max_length": 500
+        }
+      ]
+    },
+    {
+      "id": "pickup_consent",
+      "title": "Entrega y consentimiento",
+      "fields": [
+        {
+          "id": "can_reach_church_pickup",
+          "label": "Si los regalos se entregan en la iglesia, ¿puede usted llegar allí?",
+          "type": "select",
+          "required": true,
+          "options": [
+            { "value": "Yes", "label": "Sí" },
+            { "value": "No", "label": "No" },
+            { "value": "Not sure", "label": "No estoy seguro/a" }
+          ]
+        },
+        {
+          "id": "consent",
+          "label": "Entiendo que la información de mi hogar será compartida con OneLife Church y sus voluntarios.",
+          "type": "checkbox",
+          "required": true
+        }
+      ]
+    }
+  ]
+}
+$json$::jsonb;
+
+  insert into forms (drive_id, slug, name, description, is_test_data)
+  values (
+    v_drive_id,
+    'family-intake-es',
+    'Registro de Regalos para el Hogar',
+    'Phase 1 Spanish intake form (demo seed, draft translation). Questionnaire: docs/INTAKE_FORM_DRAFT.md',
+    true
+  )
+  on conflict (drive_id, slug) do update
+    set name = excluded.name,
+        description = excluded.description,
+        is_test_data = true
+  returning id into v_form_id_es;
+
+  select id into v_version_id_es
+  from form_versions
+  where form_id = v_form_id_es
+    and published_at is not null
+    and definition = v_definition_es
+  order by version desc
+  limit 1;
+
+  if v_version_id_es is null then
+    select coalesce(max(version), 0) + 1 into v_version_no_es
+    from form_versions where form_id = v_form_id_es;
+
+    insert into form_versions (form_id, version, definition, published_at)
+    values (v_form_id_es, v_version_no_es, v_definition_es, now())
+    returning id into v_version_id_es;
+
+    raise notice 'Published Spanish form definition version %.', v_version_no_es;
+  end if;
+
+  insert into form_links (
+    drive_id, drive_school_id, form_version_id, token, label,
+    locale, channel, opens_at, expires_at, max_submissions, is_test_data
+  )
+  values (
+    v_drive_id, v_ds_id, v_version_id_es, v_form_token_es,
+    'Demo Elementary North — Español — DEMO',
+    'es', 'family', null, v_expires, null, true
+  )
+  on conflict (token) do update
+    set drive_id = excluded.drive_id,
+        drive_school_id = excluded.drive_school_id,
+        form_version_id = excluded.form_version_id,
+        label = excluded.label,
+        locale = excluded.locale,
+        channel = excluded.channel,
+        expires_at = excluded.expires_at,
+        revoked_at = null,
+        is_test_data = true
+  returning id into v_link_id_es;
+
+  -- ===========================================================================
   -- review_tokens — the counselor's roster link
   --
   -- bcrypt is salted per row, so there is no way to look one up by hash
@@ -549,13 +894,15 @@ $json$::jsonb;
   end if;
 
   raise notice 'Intake demo seed complete.';
-  raise notice '  Family form:      /form/%', v_form_token;
-  raise notice '  Counselor review: /review/%', v_review_token;
+  raise notice '  Family form (English): /form/%', v_form_token;
+  raise notice '  Family form (Spanish): /form/%', v_form_token_es;
+  raise notice '  Counselor review:      /review/%', v_review_token;
 end $seed$;
 
 -- ============================================================================
--- Sanity check — run after seeding. Expect one row each, and get_form to come
--- back ok = true with only definition / school_name / locale in it.
+-- Sanity check — run after seeding. Expect two forms/versions/links (English +
+-- Spanish) and one review token, and get_form to come back ok = true with only
+-- definition / school_name / locale in it.
 -- ============================================================================
 select 'forms'         as t, count(*) from forms where is_test_data
 union all select 'form_versions', count(*) from form_versions
@@ -567,6 +914,15 @@ union all select 'review_tokens', count(*) from review_tokens where is_test_data
 -- keys_returned = 'definition, locale, ok, school_name' (and NOTHING else —
 -- no counselor email, no drive internals, no submissions), sections = 3.
 with r as (select public.get_form('demo-north-family-2026') as f)
+select r.f ->> 'ok'          as ok,
+       r.f ->> 'school_name' as school_name,
+       r.f ->> 'locale'      as locale,
+       (select string_agg(t.k, ', ' order by t.k) from jsonb_object_keys(r.f) as t(k)) as keys_returned,
+       jsonb_array_length(r.f -> 'definition' -> 'sections') as sections
+from r;
+
+-- Same check for the Spanish link. Expect locale = 'es', same key/section shape.
+with r as (select public.get_form('demo-north-family-2026-es') as f)
 select r.f ->> 'ok'          as ok,
        r.f ->> 'school_name' as school_name,
        r.f ->> 'locale'      as locale,

@@ -28,6 +28,17 @@ export interface PendingReviewCounts {
   oldestIso: string | null;
 }
 
+/**
+ * Temporarily hides the separate Spanish-link workflow (picking a Spanish
+ * questionnaire when creating a link, and "Email Spanish registration link")
+ * now that the family form has its own English/Español toggle (FamilyForm.tsx)
+ * — one link covers both languages, so a volunteer no longer needs to create
+ * or send a second, Spanish-only link. Grant asked to hide this rather than
+ * remove it: flip back to true if a school ever needs a Spanish-only link
+ * again (e.g. a counselor who only wants to hand out one language).
+ */
+const SPANISH_LINK_CREATION_ENABLED = false;
+
 // The staff surface for registration links (ADM-24, US-28): every link on
 // screen, copyable, sendable by hand — the family form link AND the counselor
 // review link — plus create/revoke.
@@ -554,6 +565,15 @@ export function FormLinkPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // While SPANISH_LINK_CREATION_ENABLED is false, "New registration link"
+  // only ever offers the English questionnaire — same as before a Spanish
+  // version existed at all, so the Questionnaire picker stays hidden whenever
+  // there's just the one (see CreateLinkForm below).
+  const creatableFormVersions = useMemo(
+    () => (SPANISH_LINK_CREATION_ENABLED ? formVersions : formVersions.filter((v) => v.locale !== "es")),
+    [formVersions]
+  );
+
   const schools = useMemo(() => getSchoolsForDrive(data), [data]);
 
   // school driveSchoolId -> its links; null key holds confidential-channel links.
@@ -788,16 +808,18 @@ export function FormLinkPanel({
                 busy={busySendKey === `${driveSchoolId}:registration_link:en`}
                 onSend={() => handleSendRegistration(driveSchoolId, "en")}
               />
-              <CounselorSendRow
-                label="Email Spanish registration link"
-                hasLiveTarget={hasLiveSpanish}
-                noTargetReason="No live Spanish registration link for this school yet."
-                liaisonEmail={liaisonEmail}
-                lastSend={lastSpanishSend}
-                openedHint={null}
-                busy={busySendKey === `${driveSchoolId}:registration_link:es`}
-                onSend={() => handleSendRegistration(driveSchoolId, "es")}
-              />
+              {SPANISH_LINK_CREATION_ENABLED ? (
+                <CounselorSendRow
+                  label="Email Spanish registration link"
+                  hasLiveTarget={hasLiveSpanish}
+                  noTargetReason="No live Spanish registration link for this school yet."
+                  liaisonEmail={liaisonEmail}
+                  lastSend={lastSpanishSend}
+                  openedHint={null}
+                  busy={busySendKey === `${driveSchoolId}:registration_link:es`}
+                  onSend={() => handleSendRegistration(driveSchoolId, "es")}
+                />
+              ) : null}
               <CounselorSendRow
                 label="Email review link"
                 hasLiveTarget={hasLiveReview}
@@ -834,7 +856,7 @@ export function FormLinkPanel({
           {creatingFor === driveSchoolId ? (
             <CreateLinkForm
               data={data}
-              formVersions={formVersions}
+              formVersions={creatableFormVersions}
               initialDriveSchoolId={driveSchoolId}
               onCreate={handleCreate}
               onCancel={() => setCreatingFor(undefined)}
@@ -883,7 +905,7 @@ export function FormLinkPanel({
       {creatingFor === null ? (
         <CreateLinkForm
           data={data}
-          formVersions={formVersions}
+          formVersions={creatableFormVersions}
           initialDriveSchoolId={null}
           onCreate={handleCreate}
           onCancel={() => setCreatingFor(undefined)}

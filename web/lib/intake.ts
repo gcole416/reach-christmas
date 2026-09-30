@@ -1223,7 +1223,7 @@ export function effectiveSize(
  * beside the columns it maps to). This is the one place it becomes a
  * camelCase app type, so nothing downstream deals with both spellings.
  */
-function normalizeDefinition(raw: any): IntakeFormDefinition {
+export function normalizeDefinition(raw: any): IntakeFormDefinition {
   return {
     schemaVersion: raw?.schema_version ?? 1,
     locale: raw?.locale ?? "en",
