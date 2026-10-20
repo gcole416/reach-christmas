@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/lib/store";
-import { displayChildGender, displayFirstName, getShoppingList } from "@/lib/queries";
+import { displayChildGender, displayFirstName, getSchoolsForDrive, getShoppingList } from "@/lib/queries";
 import { StatusBadge } from "@/components/StatusBadge";
 import { AdminPageHeader } from "../AdminPageHeader";
 
@@ -15,11 +15,13 @@ export default function ShoppingListPage() {
   const { data, viewerRole, updateAssignmentStatus } = useData();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [schoolFilter, setSchoolFilter] = useState("all");
 
   if (!data) return null;
 
   const isAdmin = viewerRole === "admin";
-  const rows = getShoppingList(data).map((row) => {
+  const schools = getSchoolsForDrive(data);
+  const allRows = getShoppingList(data).map((row) => {
     // Confidential children never reach this list (claim_card refuses
     // confidential cards), but mirror displayFirstName's gate anyway so the
     // age/gender/sizes line can't outrun the name redaction if that ever changes.
@@ -42,6 +44,10 @@ export default function ShoppingListPage() {
     };
   });
 
+  const rows = allRows.filter(
+    (row) => schoolFilter === "all" || row.driveSchoolId === schoolFilter
+  );
+
   async function handleMarkVerified(assignmentId: string) {
     setBusyId(assignmentId);
     setRowError(null);
@@ -58,8 +64,22 @@ export default function ShoppingListPage() {
           description="Every open volunteer note: what to check against the wishlist and pick up at the store. Mark a row verified once it's been checked or topped up, and it drops off this list."
         />
 
-        <div className="mb-6 flex items-center gap-3">
-          <p className="text-sm text-ink-muted">{rows.length} open note{rows.length === 1 ? "" : "s"}</p>
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <select
+            value={schoolFilter}
+            onChange={(e) => setSchoolFilter(e.target.value)}
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
+          >
+            <option value="all">All schools</option>
+            {schools.map((s) => (
+              <option key={s.driveSchoolId} value={s.driveSchoolId}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm text-ink-muted">
+            {rows.length} of {allRows.length} open note{allRows.length === 1 ? "" : "s"}
+          </p>
           {rows.length > 0 ? (
             <button
               onClick={() => window.print()}
@@ -73,7 +93,7 @@ export default function ShoppingListPage() {
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-10 text-center text-ink-secondary print:hidden">
-          Nothing to shop for right now.
+          {allRows.length === 0 ? "Nothing to shop for right now." : "No open notes match this filter."}
         </div>
       ) : (
         <ul className="space-y-3">

@@ -155,7 +155,7 @@ export function FamiliesExplorer() {
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
           >
             <option value="all">All statuses</option>
-            {STATUS_OPTIONS.map((s) => (
+            {STATUS_OPTIONS.filter((s) => s.value !== "purchased").map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
               </option>

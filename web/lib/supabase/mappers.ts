@@ -18,6 +18,7 @@ import type {
   Profile,
   School,
   Sponsor,
+  SponsorFamily,
   WishlistItem,
 } from "../types";
 
@@ -150,7 +151,34 @@ export function mapProfile(row: any): Profile {
 }
 
 export function mapSponsor(row: any): Sponsor {
-  return { id: row.id, name: row.name, phone: row.phone, email: row.email };
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    // US-55/58 (supabase/migrations/20261015140000_sponsor_families.sql). Null
+    // on every pre-existing sponsor row and every self-serve claim.
+    sponsorFamilyId: row.sponsor_family_id ?? null,
+  };
+}
+
+// US-55 (supabase/migrations/20261015140000_sponsor_families.sql). Maps the
+// raw `sponsor_families` row only — `assignedCount` is a placeholder here
+// (this function sees one row, not the assignments table); the real count is
+// computed by getSponsorFamilies in lib/queries.ts.
+export function mapSponsorFamily(row: any): SponsorFamily {
+  return {
+    id: row.id,
+    driveId: row.drive_id,
+    displayName: row.display_name,
+    contactEmail: row.contact_email ?? null,
+    contactPhone: row.contact_phone ?? null,
+    capacity: row.capacity ?? null,
+    notes: row.notes ?? null,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+    assignedCount: 0,
+  };
 }
 
 export function mapCard(row: any): CardRecord {

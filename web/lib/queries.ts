@@ -14,6 +14,7 @@ import type {
   DataBundle,
   DistributionMethod,
   Family,
+  SponsorFamily,
 } from "./types";
 
 export const OVERDUE_WARNING_DAYS = 10;
@@ -569,6 +570,8 @@ export interface FulfillmentCard {
   cardNumber: string;
   childFirstName: string;
   isConfidential: boolean;
+  driveSchoolId: string | null;
+  schoolName: string | null;
   column: FulfillmentColumn;
   assignmentId: string | null;
   sponsorName: string | null;
@@ -581,6 +584,29 @@ export interface FulfillmentCard {
   volunteerNotes: string | null;
 }
 
+/** One card, paired with the child it belongs to. */
+export interface SponsorPoolCard {
+  card: CardRecord;
+  child: Child;
+}
+
+/**
+ * Every card currently in the sponsor-pool universe — i.e. not a high
+ * schooler's (self-shops, never sponsored) and not on hold for duplicate
+ * review (mirrors `and not ch.is_high_schooler` / `and ch.held_at is null`,
+ * the same two predicates `public_available_cards`, `printable_cards`, and
+ * `cards_needing_print` all carry). Claimed AND unclaimed cards both come
+ * back here — this is the shared base `getFulfillmentBoard` builds its whole
+ * board from and `getAssignableCards` (US-58) filters further down to just
+ * the unassigned, non-confidential ones. Factored out so both stay in sync
+ * with this filter rather than each re-stating it.
+ */
+export function getSponsorPoolCards(data: DataBundle): SponsorPoolCard[] {
+  return data.cards
+    .map((card) => ({ card, child: data.children.find((c) => c.id === card.childId)! }))
+    .filter(({ child }) => !child.isHighSchooler && !isChildOnHold(child));
+}
+
 /**
  * Every card, grouped into the same five buckets staff think in — including
  * cards nobody has claimed at all, which the old assignment-only view had no
@@ -591,17 +617,15 @@ export interface FulfillmentCard {
 export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
   const board: FulfillmentCard[] = [];
 
-  for (const card of data.cards) {
-    const child = data.children.find((c) => c.id === card.childId)!;
-    // High schoolers self-shop — their card is never in the fulfilment pipeline.
-    if (child.isHighSchooler) continue;
-    // On hold for duplicate review — off the board until released (mirrors
-    // `and ch.held_at is null`).
-    if (isChildOnHold(child)) continue;
-
+  for (const { card, child } of getSponsorPoolCards(data)) {
     const active = getActiveAssignment(data, card.id);
     const cardNumber = getChildCardNumber(data, child);
-    const isConfidential = getFamily(data, child.familyId).isConfidential;
+    const family = getFamily(data, child.familyId);
+    const isConfidential = family.isConfidential;
+    const driveSchool = getDriveSchool(data, family.driveSchoolId);
+    const schoolName = driveSchool
+      ? data.schools.find((s) => s.id === driveSchool.schoolId)?.name ?? null
+      : null;
 
     if (!active) {
       board.push({
@@ -609,6 +633,8 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
         cardNumber,
         childFirstName: child.firstName,
         isConfidential,
+        driveSchoolId: family.driveSchoolId,
+        schoolName,
         column: "unassigned",
         assignmentId: null,
         sponsorName: null,
@@ -630,6 +656,8 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
       cardNumber,
       childFirstName: child.firstName,
       isConfidential,
+      driveSchoolId: family.driveSchoolId,
+      schoolName,
       column,
       assignmentId: active.id,
       sponsorName: sponsor.name,
@@ -655,6 +683,8 @@ export interface ShoppingListRow {
   cardNumber: string;
   childFirstName: string;
   isConfidential: boolean;
+  driveSchoolId: string | null;
+  schoolName: string | null;
   status: AssignmentStatus;
   notes: string;
   // Shown so the shopping team can buy clothes without opening the card.
@@ -692,11 +722,18 @@ export function getShoppingList(data: DataBundle): ShoppingListRow[] {
       // if that ever changes.
       const card = data.cards.find((c) => c.id === a.cardId)!;
       const child = data.children.find((c) => c.id === card.childId)!;
+      const family = getFamily(data, child.familyId);
+      const driveSchool = getDriveSchool(data, family.driveSchoolId);
+      const schoolName = driveSchool
+        ? data.schools.find((s) => s.id === driveSchool.schoolId)?.name ?? null
+        : null;
       return {
         assignmentId: a.id,
         cardNumber: getChildCardNumber(data, child),
         childFirstName: child.firstName,
-        isConfidential: getFamily(data, child.familyId).isConfidential,
+        isConfidential: family.isConfidential,
+        driveSchoolId: family.driveSchoolId,
+        schoolName,
         status: a.status,
         notes: (a.volunteerNotes ?? "").trim(),
         age: child.age,
@@ -807,6 +844,114 @@ export function getPrintableCards(data: DataBundle): PrintableCardRow[] {
         shoeSize: child.shoeSize,
         specificNeeds: child.specificNeeds,
         printedAt: card.printedAt,
+      };
+    });
+}
+
+// =============================================================================
+// Staff-assigned sponsors (US-55..US-58,
+// supabase/migrations/20261015140000_sponsor_families.sql /
+// 20261015150000_assign_card_to_sponsor_family.sql)
+// =============================================================================
+
+/**
+ * The sponsor sign-up roster for the current drive — mirrors
+ * `data.sponsorFamilies`, which is fetched UNFILTERED by drive (same pattern
+ * as families/children in lib/store.tsx's fetchDataBundle), filtered here the
+ * same way `getSchoolsForDrive` filters `data.driveSchools`.
+ *
+ * `assignedCount` is computed fresh here — the count of non-cancelled
+ * `assignments` reached through `sponsors.sponsorFamilyId === sponsorFamily.id`
+ * — rather than read off the raw bundle row, which always carries the mapper's
+ * placeholder `0` (see mapSponsorFamily). Because
+ * `assign_card_to_sponsor_family` inserts a brand-new `sponsors` row on every
+ * call (never reuses one for a repeat assignment to the same roster entry),
+ * counting through `sponsors` first and then assignments would double-count
+ * nothing and miss nothing either way — but counting `assignments` directly
+ * is what actually answers "how many cards has this entry taken," so that's
+ * what this does.
+ */
+export function getSponsorFamilies(data: DataBundle): SponsorFamily[] {
+  return data.sponsorFamilies
+    .filter((sf) => sf.driveId === data.drive.id)
+    .map((sf) => {
+      const assignedCount = data.assignments.filter((a) => {
+        if (a.status === "cancelled") return false;
+        const sponsor = data.sponsors.find((s) => s.id === a.sponsorId);
+        return sponsor?.sponsorFamilyId === sf.id;
+      }).length;
+      return { ...sf, assignedCount };
+    });
+}
+
+/** One sibling in the same household who already has an active assignment. */
+export interface AssignableCardSibling {
+  childFirstName: string;
+  /**
+   * The sponsor_families entry this sibling's sponsor came from, or null when
+   * the sibling was claimed self-serve (sponsors.sponsorFamilyId is null) or
+   * that roster entry no longer exists.
+   */
+  sponsorFamilyDisplayName: string | null;
+}
+
+export interface AssignableCard {
+  cardId: string;
+  cardNumber: string;
+  childFirstName: string;
+  schoolName: string | null;
+  grade: string | null;
+  sex: string | null;
+  /** The OTHER children in this card's household who already have an active assignment. */
+  siblingAssignments: AssignableCardSibling[];
+}
+
+/**
+ * The pool staff can assign a sponsor_families entry onto (US-57's picker) —
+ * `getSponsorPoolCards` (same non-high-schooler, non-held filter
+ * `getFulfillmentBoard`'s whole board is built from) narrowed to cards with
+ * no active assignment at all, same as that board's "unassigned" column,
+ * further narrowed to non-confidential households — mirroring the refusal
+ * `assign_card_to_sponsor_family` itself gives for a confidential card
+ * ("missing or confidential"), so this pool never offers a card the RPC
+ * would just reject.
+ */
+export function getAssignableCards(data: DataBundle): AssignableCard[] {
+  return getSponsorPoolCards(data)
+    .filter(({ card, child }) => !getActiveAssignment(data, card.id) && !getFamily(data, child.familyId).isConfidential)
+    .map(({ card, child }) => {
+      const family = getFamily(data, child.familyId);
+      const driveSchool = getDriveSchool(data, family.driveSchoolId);
+      const schoolName = driveSchool
+        ? data.schools.find((s) => s.id === driveSchool.schoolId)?.name ?? null
+        : null;
+
+      const siblingAssignments: AssignableCardSibling[] = data.children
+        .filter((sibling) => sibling.familyId === family.id && sibling.id !== child.id)
+        .flatMap((sibling) => {
+          const siblingCard = data.cards.find((c) => c.childId === sibling.id);
+          const active = siblingCard ? getActiveAssignment(data, siblingCard.id) : undefined;
+          if (!active) return [];
+          const sponsor = data.sponsors.find((s) => s.id === active.sponsorId);
+          const sponsorFamily = sponsor?.sponsorFamilyId
+            ? data.sponsorFamilies.find((sf) => sf.id === sponsor.sponsorFamilyId) ?? null
+            : null;
+          return [
+            {
+              childFirstName: sibling.firstName,
+              sponsorFamilyDisplayName: sponsorFamily?.displayName ?? null,
+            },
+          ];
+        });
+
+      return {
+        cardId: card.id,
+        cardNumber: getChildCardNumber(data, child),
+        childFirstName: child.firstName,
+        schoolName,
+        grade: child.grade,
+        sex: child.sex,
+        siblingAssignments,
       };
     });
 }

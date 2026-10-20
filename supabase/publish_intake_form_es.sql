@@ -92,16 +92,6 @@ begin
           "type": "email",
           "required": true,
           "max_length": 200
-        },
-        {
-          "id": "preferred_language",
-          "label": "¿En qué idioma preferiría que nos comuniquemos con usted?",
-          "type": "select",
-          "required": true,
-          "options": [
-            { "value": "en", "label": "Inglés" },
-            { "value": "es", "label": "Español" }
-          ]
         }
       ]
     },
@@ -283,6 +273,7 @@ begin
         {
           "id": "other_notes",
           "label": "¿Algo más que debamos saber?",
+          "help": "Pasatiempos favoritos, colores, juegos, o cualquier cosa que ayude a un patrocinador a elegir un buen regalo.",
           "type": "textarea",
           "required": false,
           "self_shopper_hidden": true,

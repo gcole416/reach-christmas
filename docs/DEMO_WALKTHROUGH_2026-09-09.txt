@@ -1,0 +1,608 @@
+========================================================================
+REACH CHRISTMAS  -  ADMIN TEAM WALKTHROUGH SCRIPT
+Tuesday, 9 September 2026
+========================================================================
+
+PURPOSE OF THIS SESSION
+  Walk the whole tool end to end, in the order the real drive happens:
+  a family registers -> the school counselor confirms them -> staff
+  imports them -> a sponsor claims a child -> the gift is tracked,
+  checked, printed, and handed out.
+
+  What we actually want out of the room today: does the FLOW make sense,
+  and is the WORDING on the forms right. Everything else (colours,
+  layout, missing reports) is a parking-lot item - write it down, keep
+  moving. Grant will turn the wording feedback into user stories after.
+
+  Everything you will see is fake demo data on the DEV site. Nothing here
+  is on the real (production) site yet - that sync is a separate step.
+
+------------------------------------------------------------------------
+BEFORE YOU START   (do this ~15 min early, on your own)
+------------------------------------------------------------------------
+
+1.  START THE APP
+      In a terminal, in the project folder:  cd web  &&  npm run dev
+      It opens on   http://localhost:3000
+      Leave the terminal running for the whole demo.
+      "npm run dev" always points at the DEV Supabase project - good,
+      that is what we want. (Production is only used by "npm run build".)
+
+2.  TWO BROWSER WINDOWS, side by side, is the easiest way to run this:
+      - Window A: signed in as an ADMIN  (testadmin@test.account)
+      - Window B: a plain window with no login - this is your "family",
+        your "counselor", and your "sponsor". They never log in.
+      Later, for the privacy bit, you will sign Window B in as the
+      VOLUNTEER account (testuser@test.account).
+      You have both passwords.
+
+3.  CHECK THE DEMO DATA IS THERE  (so you are not surprised live)
+      Window A -> http://localhost:3000/admin  -> sign in.
+      - Dashboard should show a handful of children and some sponsors.
+        If it is empty, the demo seed has not been run on dev - stop and
+        run the standard demo seed scripts before the meeting.
+      - Open  http://localhost:3000/form/demo-north-family-2026
+        You should see the family registration form for "Demo Elementary
+        North". If you get a "link isn't active" page, the intake demo
+        seed is not on dev.
+      - Open  http://localhost:3000/review/demo-north-review-2026
+        You should see the counselor roster for the same school.
+
+      The two demo links (safe to type on a projector, they are fake):
+        FAMILY FORM     /form/demo-north-family-2026
+        COUNSELOR VIEW  /review/demo-north-review-2026
+
+4.  ONE DECISION TO MAKE FIRST - which version of the form wording?
+      The form has been reworded a few times recently. The newest changes
+      (email now required, "OneLife Church" instead of "Reach Church" in
+      places, a reworded confirmation screen) may or may not be live on
+      the dev link yet.
+      - If you want the room to review the very latest wording, re-run
+        the existing intake form publish/seed script on dev first thing
+        this morning. That does NOT add new demo data - it just re-points
+        the demo link at the newest wording.
+      - If you would rather not touch anything, just demo what is live and
+        note "newer wording is coming" out loud.
+      Either way: know which one you are showing before you walk in.
+
+5.  THE SPONSOR EMAIL-CODE STEP - decide how you will handle it.
+      When a sponsor claims a child, the app really does email them a
+      6-digit code and makes them type it back. In the demo you have two
+      options:
+        a) Use a real email address you can pull up on screen (your own),
+           claim a child for real, read the code, paste it in. Cleanest
+           story, but depends on live email delivery in the moment.
+        b) Fill in the sponsor details, click "Send code", show the
+           "enter your code" screen, then say "in real life you'd get the
+           code by email and type it here" and close it. Then point at a
+           child in the grid that is already claimed to show the end
+           state.
+      Pick one. (a) is better if email is behaving.
+
+6.  RESETTING BETWEEN RUNS
+      Each practice run you do will leave a real (fake) submission on the
+      dev site. That is fine - it is all tagged test data and there is a
+      cleanup script. You do NOT need a clean slate to demo; a few extra
+      rows in the queue actually make the "queue" look realistic.
+
+------------------------------------------------------------------------
+THE 60-SECOND MAP   (say this before you click anything)
+------------------------------------------------------------------------
+
+  "Here is the whole life of one child's gift, start to finish:
+
+     1. Staff send a school a registration link.
+     2. The counselor forwards it to the families they've referred.
+     3. A parent fills it out on their phone. No login.
+     4. The counselor opens their own link, looks down the list, and
+        confirms 'yes, these are real kids I referred.' They can fix a
+        misspelled name. No login for them either.
+     5. Staff click Import. THAT is the moment the household becomes real
+        in the system - children, cards, everything.
+     6. A sponsor goes to the public page, picks a child, claims them.
+     7. Staff track the gift: pledged -> bought -> dropped at church ->
+        checked against the wish list -> handed out.
+
+   Old way: a Google form, a giant spreadsheet, and a volunteer retyping
+   everything. New way: no retyping, and the counselor vouches for every
+   family before it counts."
+
+========================================================================
+PART 1  -  STAFF SEND OUT THE FORMS
+Window A (admin)  ->  /admin/submissions  ("Registrations" in the nav)
+========================================================================
+
+CLICK: Nav -> Intake -> Registrations.
+
+SAY: "This is where staff manage the links that go out to schools, and
+      where registrations land when they come back."
+
+SCROLL DOWN to the "Registration links" panel.
+
+POINT OUT:
+  - Every school in the drive is listed, whether or not it has a link yet.
+  - Each school gets TWO links:
+      * a HOUSEHOLD link  - the counselor passes this to families
+      * a COUNSELOR REVIEW link - the counselor opens this themselves
+  - Both have a Copy button. Staff re-send these by hand or read them
+    over the phone - that is deliberate, because district email filters
+    eat unfamiliar links and we cannot rely on them landing.
+
+DO: Expand "Demo Elementary North". Show the household link and the
+    counselor link sitting there, both copyable.
+
+DO (optional): Click "New registration link" to show the create form -
+    school, an expiry date (required), an optional cap on submissions,
+    an optional label that only staff see. Then Cancel. Don't actually
+    create one unless you want to.
+
+SIDE NOTES for you:
+  - The review link is treated like a password - it shows a whole
+    season's worth of kids' first names. The panel says "send it to the
+    counselor only" for that reason.
+  - There is no "email it from the app" button yet. Sending is manual for
+    now. Digest emails ("6 families are waiting for you") are a later
+    phase - worth saying so nobody asks.
+  - We only make plain family links here. Counselor-fills-it-in-themselves
+    links exist in the design as a backup for families with no email, but
+    are switched off for now.
+
+========================================================================
+PART 2  -  A FAMILY REGISTERS         <<< SPEND THE MOST TIME HERE >>>
+Window B (no login)  ->  /form/demo-north-family-2026
+========================================================================
+
+This is the screen we most want the room to react to. Walk it slowly,
+top to bottom, and read the wording out loud as you go.
+
+TOP OF THE FORM
+  - The school name ("Demo Elementary North") sits above the title, in
+    yellow. SAY: "The link already knows the school, so we never ask the
+    family to pick it - one less thing to get wrong."
+  - The intro paragraph. Read it. It sets the tone - a church asking a
+    family what their kids would like, about 5 minutes, no address ever.
+  - The tinted note under it: what a sponsor will and won't see. SAY:
+    "This line is doing real work - it's the answer to the worry a family
+    has when a church asks about their kids."
+
+SECTION 1 - "About your household"
+  - Parent/guardian name (one field on purpose, not first + last).
+  - Phone - required. Help text says why: pickup in December.
+  - Email - read the help text carefully with the room. This is the one
+    that changed recently: a family with no email of their own is told to
+    put the counselor's (or a trusted contact's) address here.
+  - "What language should we use to contact you?" - English / Espanol.
+    SAY: "We ask even though the link's language is already known,
+    because whoever fills the form isn't always who answers the phone."
+
+SECTION 2 - "Children in your home"
+  - "Child 1", with "Add another child" and "Remove this child".
+    DO: add a second child so the room sees the repeat.
+  - First name, Age, Grade, Boy/Girl (with "Prefer not to say").
+  - The three sizes are dropdowns with an "Other (describe)" escape
+    hatch. DO: pick "Other" on shirt size so the "please describe" box
+    appears. SAY: "The dropdown catches most kids cleanly; the box is
+    there for the real-world 'girls 6' answers."
+  - Wish list - up to 3 ideas, first one required. Read the help text
+    (brand/colour/size helps; gifts are usually around $50).
+    SIDE NOTE for you: the $50 is still a placeholder - confirm the real
+    number with the room, it is the single best defence against "a PS5"
+    and "a puppy" answers.
+  - "Is there anything they especially need?" and "Anything else we
+    should know?" - both optional, free text.
+
+  DO THIS - the high-schooler behaviour:
+    Change one child's grade to 10. Watch the wish list and the three
+    sizes DISAPPEAR and get replaced by a short panel about the teen
+    shopping day.
+    SAY: "Grades 9 to 12 pick out their own gifts at a store shopping
+    day, so we don't collect a wish list or sizes for them. They still
+    get registered, the counselor still confirms them - they just skip
+    the sponsor pool."
+    SIDE NOTE: the store name and date in that panel are literally
+    "[placeholder store]" / "[placeholder date]" until Grant confirms
+    2026 details.
+
+SECTION 3 - "Pickup and consent"
+  - "If gifts are distributed at the church, can you get there?"
+    Yes / No / Not sure. SAY: "We don't know yet how this year's
+    hand-out runs. If it turns out to be church pickup we need this
+    answer, and we can't go back and ask 400 families in December."
+  - The consent checkbox - read it aloud. This is one to get signed off
+    by whoever owns the church's data policy. Note it says "OneLife
+    Church".
+
+THE SUBMIT CARD
+  - "Everyone I've listed lives in my home." - required checkbox, with a
+    line underneath: don't list a relative's child or someone who only
+    visits. SAY: "This is the nudge behind calling it a 'household' -
+    we're registering kids who live there, not the whole extended family."
+  - "You won't be able to change this after you send it, so take a
+    moment to look it over."
+  - "Questions? Contact your school counselor."
+
+DO - show the error handling:
+  Scroll up, clear the guardian name, hit Submit. A red summary appears
+  at the top: "There are N answers to fix", each one a link that jumps
+  you to the field. SAY: "Nothing is lost, and it tells them exactly
+  where to look."
+
+DO - show the "too long" notice:
+  Paste a very long string into a name field. An amber note appears
+  live: "That's N characters, please shorten it." SAY: "It never
+  silently chops what someone typed - a child's name is written down
+  here first, everything downstream inherits it."
+
+DO - actually submit one:
+  Fill it in properly (two young kids is a good demo - keep one for the
+  counselor to 'fix'). Submit.
+  THE CONFIRMATION SCREEN: "Thank you. Your registration is in." Read
+  the body - it tells them the counselor has it now, it goes to OneLife
+  Church, and they'll hear more by email. No submission number, no way
+  back in. SAY: "That's the end of the road for the family, on purpose."
+
+SIDE NOTES for you:
+  - There is an invisible anti-spam field on this form. A bot that fills
+    it gets the same "thank you" screen but nothing is saved. You can't
+    show it; just mention it exists.
+  - Spanish is designed but not built yet - it's the next phase.
+  - Wording watch: the form says "OneLife Church"; the counselor page
+    and a couple of other spots still say "Reach Church". That's a known
+    cleanup - capture the room's preference.
+
+========================================================================
+PART 3  -  THE COUNSELOR CONFIRMS
+Window B (no login)  ->  /review/demo-north-review-2026
+========================================================================
+
+SAY: "Same idea - no account. The counselor gets one link for their
+      school and keeps it all season."
+
+TOP OF THE PAGE
+  - "Confirm your households", school name above it.
+  - The instruction: "You're confirming that they're real households you
+    referred and that the children listed look right. Nothing more."
+  - The tinted note: "You only see each child's first name, age, and
+    grade. Gift lists, sizes, and household contact details aren't shown
+    here, on purpose."
+    SAY: "The counselor is doing a sniff test on family composition -
+    not auditing what anyone asked for. So we deliberately don't show
+    them the wish list or the parent's phone number. If this link gets
+    forwarded around, all it leaks is a list of first names."
+
+THE LIST
+  - "N waiting on you - M already handled".
+  - Two groups: "Waiting on you" and "Already handled".
+  - The registration you just submitted is at the top, "Waiting on you",
+    with a little table of first name / age / grade per child.
+
+DO - confirm one WITH a correction:
+  On the registration you submitted, the name / age / grade are editable
+  inline. Change a first name (pretend the parent typo'd it). Click
+  "Confirm this household". It asks for the counselor's name - type one -
+  and Confirm.
+  The card moves to "Already handled" and now reads "Confirmed by [name]
+  on [date] - you corrected a detail."
+  SAY: "The counselor can fix a spelling. They cannot touch anything
+  else - the family's actual answers stay exactly as submitted, and the
+  fix is recorded as a fix, not blended in."
+
+DO - reject one (if you submitted a second test one):
+  Click "This isn't right". It asks "What's wrong with this one?" with a
+  short-reason box, and a checkbox "This household already registered;
+  it's a duplicate." Give a reason, click "Don't approve".
+  SAY: "A rejected registration can never be imported. The counselor's
+  word is final."
+
+POINT OUT:
+  - Already-handled, rejected, and imported registrations all stay
+    visible here so the counselor can see the whole season at a glance.
+  - Grades are a real dropdown here (matching the form), age is bounded,
+    a name that's too long is refused with a message rather than chopped.
+
+SIDE NOTE for you:
+  - Open question for the room: is first name + age + grade enough for a
+    counselor in November to recognise a family they referred? We
+    deliberately kept the parent's name OFF this screen. If counselors
+    say they can't work without it, the fix is a shorter-lived link, not
+    quietly showing more.
+
+========================================================================
+PART 4  -  STAFF IMPORT THE CONFIRMED REGISTRATION
+Window A (admin)  ->  /admin/submissions
+========================================================================
+
+Refresh the page. The registration the counselor just confirmed is now
+in the top group.
+
+THE QUEUE
+  - Groups, in this order: "Confirmed by counselor, ready to import" ->
+    "Waiting on counselor" -> "Imported" -> "Rejected".
+    SAY: "The thing staff can actually act on is at the top."
+  - A blue banner: "N registrations are confirmed and ready to import."
+  - Each row: guardian name, school, number of children, date.
+  - If two registrations share a phone number, a hint appears:
+    "Possibly the same household (same guardian phone) as Household N3
+    (different school)." SAY: "A household with kids at two schools fills
+    the form twice, once per school, and they import as two records - by
+    design. This is just so staff aren't surprised at hand-out."
+
+DO - open the confirmed one:
+  - The full detail: THIS screen shows the wish list, sizes, and notes -
+    it's staff-only, behind a login. The counselor's screen was not.
+  - "Counselor corrections" panel (yellow) shows the fix: e.g.
+    first name "Emmaa" -> "Emma". The family's original answer is shown
+    struck through, the fix beside it tagged "counselor fix".
+  - A little audit trail: Registered / First seen by counselor /
+    Confirmed by [name] / Imported.
+  - "Ready to import" panel -> "Import this household".
+  - It then offers "Create this as a confidential household" as a
+    checkbox. SAY: "Confidential status is set at the moment of import,
+    not afterwards - a household imported normally and edited later is
+    readable by every volunteer in between."
+  - Click "Import now". Result: "Created Household N1 with N children",
+    and an "Open the household" button.
+
+DO - show it's safe to double-click:
+  Go back into the same registration, try Import again. It says "Already
+  imported" and shows the same household. No duplicate.
+
+SIDE NOTE for you:
+  - Import is admin-only. A volunteer sees the registration but is told
+    to ask an admin to import it.
+  - The counselor page and the imported records are allowed to drift
+    over time - the registration is the frozen record of what was said;
+    the household is the working record staff keep editing.
+
+========================================================================
+PART 5  -  THE HOUSEHOLD IS NOW IN THE DRIVE
+Window A (admin)  ->  /admin/families   ("Households" in the nav)
+========================================================================
+
+Click "Open the household" from the import screen, or go to Households.
+
+POINT OUT:
+  - The imported household looks EXACTLY like one a volunteer typed in
+    by hand. One row per card. It has a household tag like "N1" that
+    matches its card numbers.
+  - Filters: by school, by status (unclaimed / pledged / delivered /
+    on hold ...), plus a search box.
+  - "Saved views" - staff can save a filter combo (e.g. "North
+    unclaimed") as a pill button. These live in that person's browser
+    only, not shared.
+  - Click the household -> the edit page. Staff can fix names, sizes,
+    wish lists, add a sibling, put a child "on hold". They cannot delete
+    a household here - that's deliberately a database-only action.
+
+ALSO SHOW: Nav -> Intake -> "Add a household".
+  SAY: "This is the manual path - a volunteer entering a referral by
+  hand, the same as before. The form path we just walked replaces most
+  of this, but it's still here for direct/confidential referrals and
+  walk-ups."
+
+========================================================================
+PART 6  -  A SPONSOR CLAIMS A CHILD
+Window B (no login)  ->  /sponsor
+========================================================================
+
+SAY: "Public page. Anyone can reach it, no account. This is the only
+      part of the system a member of the public sees."
+
+POINT OUT:
+  - Each card: a card number, first name, grade, the three sizes, the
+    wish list, any specific needs. NO last name, NO school, NO address.
+  - "N of M still need a sponsor", and a search box.
+  - Confidential kids never appear here. Neither do already-claimed
+    cards, or kids from any drive that isn't the current open one, or
+    high schoolers.
+
+DO - claim one (per your Part 5 decision in the prep section):
+  - "Sponsor this gift" -> a modal: your name (required), email
+    (required), phone (optional). Read: "Leave your contact info so our
+    team can follow up about drop-off."
+  - "Send code" -> the screen changes to "We sent a code to [email].
+    Enter it below." There's a Resend link with a 30-second cooldown and
+    a "Wrong email? Edit info".
+  - Enter the code -> "Confirm" -> "Thank you for sponsoring [name]!"
+  - The claimed child drops out of the grid.
+
+SAY: "We make them confirm an email because that's how staff chase a
+      sponsor who pledges in October and goes quiet until December."
+
+SIDE NOTES for you:
+  - There is no sponsor account and no sponsor-facing history. A
+    returning sponsor is recognised by staff, not by a login.
+  - Sponsors get nothing automated after claiming yet - no confirmation
+    email, no reminders. That whole email journey is a design task Grant
+    wants to work through (thanks / 1-week reminder / 1-day / overdue).
+    Good thing to get the room talking about.
+
+========================================================================
+PART 7  -  TRACKING THE GIFT
+Window A (admin)  ->  /admin/fulfillment  and  /admin/shopping-list
+========================================================================
+
+FULFILLMENT BOARD  (/admin/fulfillment)
+  - Columns: Unassigned -> Pledged -> Purchased -> Received at church ->
+    Verified -> Delivered. Click a column heading to zoom into just that
+    column.
+  - Each card shows the child, the sponsor and their contact, an overdue
+    badge if they've stalled, and a "Mark [next stage]" button.
+  - From "Received at church" onward, a volunteer can attach a note -
+    e.g. "only 1 of 2 wish list items, missing shoes".
+  SAY: "This replaces the old spreadsheet's two checkboxes. Now staff
+  can see who hasn't BOUGHT yet, not just who hasn't been delivered to."
+
+SHOPPING LIST  (/admin/shopping-list)
+  - Every open note from the board, in one place, printable.
+  - Each row now shows the child's age, gender, and shirt/pant/shoe size
+    (just added) so the shopping team can buy clothes off it. The
+    sponsor's name was removed - not needed for shopping.
+  - "Mark verified" on a row means "we've checked this against the wish
+    list and topped it up" and drops it off the list.
+
+SIDE NOTE for you:
+  - The stage order is a helper, not a locked rule - staff can jump a
+    card forward or back. Fine for now; flag it if anyone treats
+    "Verified" as a hard guarantee.
+
+========================================================================
+PART 8  -  PRINT AND HAND OUT
+Window A (admin)  ->  /admin/print  and  /admin/distribution
+========================================================================
+
+PRINT CARDS  (/admin/print)
+  - One printable card per child: number, name, grade, sizes, wish list.
+  - "Mark printed" drops a card off the list once it's off the printer.
+  - "Print this page" uses a plain grid for now.
+  SIDE NOTE: the sticker/nametag-sheet layout is still to do - we need
+  to know which label product is being bought first.
+
+DISTRIBUTION  (/admin/distribution)
+  - One row per household. Set a method (school drop-off / church pickup
+    / inherit the drive default) and a pickup time per household, and
+    "Check in" each household as they actually come through.
+  - Progress column: "2 / 3 delivered".
+  SAY: "However this year runs - drop-offs at schools, one big pickup
+  day, or a mix - it's tracked per household here rather than assuming
+  one method for everyone."
+  SIDE NOTE: whether this screen gets used on a phone or a laptop at the
+  event is an open question - the layout depends on the answer.
+
+========================================================================
+PART 9  -  THE DASHBOARD
+Window A (admin)  ->  /admin
+========================================================================
+
+  - Top tiles: Children registered, High schoolers, Cards claimed
+    (X of Y, with how many still need a sponsor), Gifts delivered,
+    Sponsors overdue, and an "On hold" tile if anything is held.
+  - "Sponsors running late" - anyone who pledged or bought 10+ days ago
+    and hasn't moved since; flagged critical at 21 days. This is the
+    only place late sponsors surface - someone has to read it and pick
+    up the phone.
+  - "Cards to print" - children whose card hasn't been printed yet.
+
+SIDE NOTE for you: the 10-day / 21-day thresholds are guesses - do they
+fit this drive's calendar?
+
+========================================================================
+PART 10  -  THE SUPPORTING PAGES  (quick tour, 30 sec each)
+========================================================================
+
+SCHOOLS  (/admin/schools)
+  Partner schools in this drive, each with a one-letter card code, a
+  liaison contact, and a distribution method. Add-only for now (no edit
+  or remove in the app).
+
+DRIVES  (/admin/drives)   [admin only]
+  One drive per year. Exactly one can be "Open" at a time - that's the
+  one the whole app reads and writes. Draft -> Open -> Closed ->
+  Archived. Also sets the default hand-out method and the referral
+  window dates.
+
+STAFF & PERMISSIONS  (/admin/staff)   [admin only]
+  Everyone with a login, their role (admin or volunteer), and a
+  "confidential access" toggle for volunteers who need to see
+  confidential households without being full admins. New logins are
+  still created in the Supabase dashboard, not here. You can't change
+  your own role (so you can't lock yourself out).
+
+AUDIT LOG  (/admin/audit)   [admin only]
+  Every create / edit / delete across the system - who, when, and what
+  changed. No export button, on purpose, because it can contain
+  children's details.
+
+HIGH SCHOOLERS  (/admin/high-schoolers)
+  Grades 9-12 - the self-shopping bucket. A roster (filter by school,
+  copy to a spreadsheet) and a board that walks each teen through
+  not-contacted -> invited -> confirmed -> attended for the shopping day.
+
+ON HOLD  (/admin/on-hold)   [admin releases; volunteers just see it]
+  A child parked for duplicate review. While on hold, their card is out
+  of the sponsor pool, the print run, and every count - nothing is
+  deleted. An admin releases the hold once it's sorted.
+
+========================================================================
+PART 11  -  THE PRIVACY MODEL  (weave this through, or do it here)
+========================================================================
+
+Four kinds of people, only one of them logs in:
+
+  STAFF / ADMIN     - full access, including confidential households.
+  VOLUNTEER         - full access EXCEPT confidential households, unless
+                      individually granted.
+  SPONSOR           - public, no login. First name + grade + sizes +
+                      wish list + specific needs, for unclaimed,
+                      non-confidential kids only. Never a last name,
+                      school, or address.
+  COUNSELOR         - a link, no login. First name + age + grade for
+                      their school's registrations. Nothing else.
+
+CONFIDENTIAL HOUSEHOLDS:
+  - Invisible to volunteers who haven't been cleared - not greyed out,
+    genuinely not returned to them.
+  - For cleared non-admins, the child's first name shows as an initial
+    only ("C.").
+  - Never appear on the public sponsor page under any circumstance.
+
+DO - show it live:
+  In Window B, sign in as the VOLUNTEER account and open Households.
+  The confidential household ("Household Z1", child "Chloe" in the seed)
+  is NOT in the list. Back in Window A, go to Staff & permissions, tick
+  "confidential access" for that volunteer. Reload Window B - now the
+  household appears, but the name shows as "C.".
+
+SAY: "All of this is enforced in the database itself, not just hidden in
+      the screen. A bug in the page can't leak a child's details,
+      because the database never hands them over in the first place."
+
+========================================================================
+WORDING-REVIEW CHECKLIST  (capture answers against these)
+========================================================================
+
+FAMILY FORM
+  [ ] Intro paragraph - right tone? too long / too short?
+  [ ] The "what sponsors see" privacy line - accurate and reassuring?
+  [ ] Email field help text - clear for a family with no email?
+  [ ] "$50 per child" in the wish list help - what's the real number?
+  [ ] Sizes required, or optional? (currently required)
+  [ ] Consent checkbox wording - who signs this off?
+  [ ] "Can you get to the church?" question - keep it?
+  [ ] "Everyone I've listed lives in my home" - clear enough?
+  [ ] Confirmation screen - does it tell them enough about what's next?
+  [ ] "OneLife Church" vs "Reach Church" - pick one, everywhere.
+
+COUNSELOR PAGE
+  [ ] "Confirm your households" - does that read right to a counselor?
+  [ ] Is first name + age + grade enough to recognise a family?
+  [ ] "This isn't right" as the reject button - too blunt? too soft?
+  [ ] The "don't forward this link" line - strong enough?
+
+STAFF / IMPORT
+  [ ] "Registrations" as the page name - clear?
+  [ ] The corrections panel - is the before/after obvious?
+  [ ] "Household" everywhere instead of "family" - landing well?
+
+========================================================================
+PARKING LOT  -  known rough edges, so nobody rat-holes on them
+========================================================================
+
+  - NOTHING is on the production site yet. This is all the dev site.
+    The prod sync is a deliberate separate step.
+  - Spanish version of the form: designed, not built. Next phase.
+  - Automated emails (to counselors, to sponsors): not built. Next phase.
+    Sending links is manual for now.
+  - "OneLife Church" / "Reach Church" wording is inconsistent - known.
+  - High-schooler shop day store + date are placeholders.
+  - $50 gift budget is a placeholder.
+  - Printable cards are a plain grid, not sticker sheets yet.
+  - Distribution-day screen layout is on hold pending "phone or laptop?"
+  - No "which families HAVEN'T registered yet" view for counselors -
+    that's a deliberate design choice (they know their own list).
+  - Sponsor claim occasionally hiccups on the code-entry step on dev -
+    if it does, just retry or switch to describing it.
+
+========================================================================
+END
+========================================================================

@@ -53,7 +53,6 @@ async function familyFormFlow(page, { formToken, toggleTo, prefix, heading, labe
   await page.getByLabel(labels.guardianName).fill("Sample Parent");
   await page.getByLabel(labels.phone).fill("555-010-0100");
   await page.getByLabel(labels.email).fill("sample.parent@example.com");
-  await page.getByLabel(labels.preferredLanguage).selectOption({ label: options.language });
 
   await page.getByLabel(labels.childFirstName).fill("Sample Child");
   await page.getByRole("spinbutton", { name: labels.age }).fill("8");
@@ -89,7 +88,6 @@ async function main() {
       guardianName: "Parent or guardian name",
       phone: "Phone number",
       email: "Email address",
-      preferredLanguage: "What language should we use to contact you?",
       childFirstName: "Child's first name",
       age: "Age",
       grade: "Grade",
@@ -127,7 +125,6 @@ async function main() {
       guardianName: "Nombre del padre, madre o tutor",
       phone: "Número de teléfono",
       email: "Correo electrónico",
-      preferredLanguage: "¿En qué idioma preferiría que nos comuniquemos con usted?",
       childFirstName: "Nombre del niño o niña",
       age: "Edad",
       grade: "Grado escolar",

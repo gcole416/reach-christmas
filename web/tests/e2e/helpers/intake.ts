@@ -596,7 +596,6 @@ export async function fillAndSubmitFamilyForm(
   await sel("family.guardian_name").fill(input.guardianName);
   await sel("family.guardian_phone").fill(input.guardianPhone ?? "555-0100");
   await sel("family.guardian_email").fill(input.guardianEmail ?? "family@demo.example.com");
-  await sel("family.preferred_language").selectOption(input.preferredLanguage ?? "en");
 
   for (let i = 0; i < input.children.length; i += 1) {
     if (i > 0) await page.getByRole("button", { name: /add another child/i }).click();

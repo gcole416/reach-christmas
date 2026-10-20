@@ -683,6 +683,37 @@ alongside the existing confidential check in both `claim_card_with_code` and
 - Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql), [supabase/migrations/20260909120000_child_on_hold.sql](../supabase/migrations/20260909120000_child_on_hold.sql)
 - Raised by: reach-reviewer, during the US-43 gate, 2026-09-30
 
+### DB-30 — Is EXECUTE on `net.http_post`/`net.http_get` ever actually revoked from `anon`/`authenticated`?
+
+Found by reach-reviewer, 2026-10-15, reviewing the new
+`assign_card_to_sponsor_family` migration (feature/staff-assigned-sponsors).
+Not introduced by that work — a pre-existing gap across the whole project,
+same class of issue as **DB-2** and **DB-27**.
+
+`20260818160000_email_verified_claims.sql` already documents that Supabase's
+pg_net extension grants broad default privileges on the `net` schema to
+`anon`/`authenticated`, and revokes `net`'s **tables** for exactly that
+reason. Nowhere in the repo is EXECUTE on `net.http_post`/`net.http_get`
+*itself* ever revoked from those roles — meaning `authenticated` (maybe
+`anon`) most likely still holds it, un-revoked, the same style of standing
+default grant DB-2 found on base tables and DB-27 found on a function.
+
+**Not currently reachable** — `supabase/config.toml`'s `api.schemas` only
+exposes `public`/`graphql_public` to PostgREST, so nothing outside a
+Postgres session (SQL editor, a function body) can call `net.http_post`
+directly today. But this project's own stated lesson from DB-2/DB-27 is to
+never rely on a Supabase default staying the way it looks today — worth
+closing proactively rather than leaving a standing grant that only safety is
+"nothing currently exposes a way to reach it."
+
+Fix, when picked up: `revoke execute on all functions in schema net from anon, authenticated, public;`
+(mirroring the `net` **table** revoke's own reasoning), then verify with
+`select has_function_privilege('authenticated', 'net.http_post(text, jsonb, jsonb, jsonb, integer)'::regprocedure, 'execute');`
+on dev before and after.
+
+- Code: [supabase/migrations/20260818160000_email_verified_claims.sql](../supabase/migrations/20260818160000_email_verified_claims.sql) (the `net` table revoke, same reasoning this would extend), [supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql](../supabase/migrations/20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql) (DB-27, the matching function-grant lesson), [supabase/config.toml](../supabase/config.toml) (`api.schemas`, why this is inert today)
+- Raised by: reach-reviewer, reviewing feature/staff-assigned-sponsors, 2026-10-15
+
 ---
 
 ## Admin / staff UI
@@ -1301,6 +1332,68 @@ Both are on the Phase 2 list. SPN-6 and ADM-11 are the concrete places where
 their absence shows up this season.
 
 - Code: [DESIGN.md:96-98](../DESIGN.md#L96)
+
+### ~~ADM-24 — Should sponsors be admin-assigned (congregation, then school, then M/F) instead of self-selecting?~~ · Decided, scoped into US-55–US-59
+
+**Decided (Grant, 2026-10-15): Path A, and simpler than Path A as originally
+sketched below.** No sponsor ever fills out a form or provides their own
+email — there's no "register your interest" step either. Staff already has
+(or will compile) a list of every sponsor household doing shopping this
+year, outside this app, and the only new capability needed is: get that list
+into the app, then let staff assign specific children to specific entries on
+it themselves. See US-55–US-59 in [backlog.md](backlog.md) for the scoped
+plan. The rest of this entry is kept as the reasoning trail.
+
+**What's being asked for:** instead of a sponsor browsing `/sponsor` and
+picking a specific child themselves (today's entire model — see US-8/US-9 and
+AGENTS.md's role table), staff assign specific children to specific sponsors
+directly. Sign-ups happen in Church Center (Planning Center's people/event
+tool), entirely outside this app; this app never collects a sponsor's email
+or runs a signup form of its own.
+
+**Why this isn't a small tweak.** `public_available_cards` and the claim
+flow are, per AGENTS.md, "the entire security boundary for the anon/sponsor-
+facing pages" — self-service claiming is the thing the current privacy model
+is built around, not a detail on top of it. Replacing it changes who decides
+a match (staff, not the sponsor), and on this feature's branch the public
+page itself goes away (see below).
+
+**"Congregation," settled (Grant, 2026-10-15):** it isn't a campus/small-
+group category needing its own lookup table — it's simply the roster itself.
+"The congregation" **is** the list of names/emails/phone numbers for the
+volunteer sponsors who sign up in Church Center. One list, no sub-grouping.
+That resolves this entry's original open question and simplifies US-55 (no
+`congregations` table after all — see that story's updated acceptance
+criteria) and makes the original "congregation, then school, then M/F"
+priority collapse mostly to "keep a household's kids with the same sponsor
+where it makes sense," which the roster's per-entry capacity already
+supports without any new grouping concept.
+
+**Church Center's role is entirely upstream of this app.** Sponsors sign up
+in Church Center; staff get that list out of Church Center (however Church
+Center lets them — export, copy, whatever Katie's side of this looks like)
+and import it here (US-56). This app never talks to Church Center's API and
+never needs to — DOC-11's "admin access to Church Center" dependency does
+**not** block this work. DOC-11 itself stays parked/unresolved; this entry
+no longer depends on it.
+
+**Decided (Grant, 2026-10-15): this entire epic lives on its own branch,
+`feature/staff-assigned-sponsors`, off `dev`.** `dev` keeps today's
+self-serve `/sponsor` page and claim flow untouched until/unless this branch
+merges. On the branch itself: the public page goes away — replaced with a
+simple notice linking out to the Church Center sign-up page (US-59, no
+longer just a recommended default; this is the decision). The underlying
+self-serve RPCs (`request_claim_code`, `claim_card_with_code`,
+`public_available_cards`) are left in the schema rather than dropped — no
+UI calls them on this branch, but deleting database functions is a more
+invasive, harder-to-reverse step than retiring a page, and nothing about
+this ask requires it. Revisit if Grant wants them actually removed.
+
+Scoped into backlog.md US-55–US-59, 2026-10-15; revised the same day once
+the congregation question and the `/sponsor` page's fate were both settled.
+
+- Code: [web/app/sponsor/page.tsx](../web/app/sponsor/page.tsx) (today's self-serve flow — unchanged on `dev`, replaced on this feature branch), [AGENTS.md](../AGENTS.md) (the role table / privacy boundary this changes)
+- Raised by: Claude, scoping a 2026-10 meeting cleanup list at Grant's request, 2026-10-15; narrowed by Grant the same day
 
 ---
 

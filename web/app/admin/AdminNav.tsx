@@ -41,6 +41,8 @@ const NAV: NavItem[] = [
       { href: "/admin/fulfillment", label: "Fulfillment" },
       { href: "/admin/shopping-list", label: "Shopping list" },
       { href: "/admin/print", label: "Print cards" },
+      { href: "/admin/sponsors", label: "Sponsor roster" },
+      { href: "/admin/assign", label: "Assign sponsors" },
     ],
   },
   { href: "/admin/distribution", label: "Distribution" },

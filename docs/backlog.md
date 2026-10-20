@@ -2100,6 +2100,241 @@ Owner: Claude (checklist + ledger), Grant (applying it, backups).
 
 ---
 
+## US-53: Counselor button to mark a gift has left the school
+
+As a school counselor, I want a simple way to tell the team a family's gift
+has left my building, so staff know distribution is actually done without
+having to ask around or go on a phone update.
+
+From the same 2026-10 meeting. **This reverses a decision Grant already
+made on 2026-09-29** (OPEN_QUESTIONS ADM-7, backlog US-46): that distribution
+tracking stays entirely staff-side — "Delivered" on the Fulfillment board,
+"Check in" on the Distribution page meaning "handed to the counselor" — with
+counselors getting no write access to any status at all. Today a counselor's
+only touchpoint with this app is `/review/[token]` (confirming/rejecting
+intake submissions); there's no token-scoped page or permission for anything
+distribution-related. Confirm this reversal is intended before scoping
+further — if so, this needs its own token type (mirroring `review_tokens`'
+shape: hashed, scoped to one school, time-limited) and a new RLS-gated,
+narrow write path (something like "mark household N's gift(s) left the
+building" → sets a timestamp staff can already see on the Distribution page),
+not a login.
+
+Acceptance criteria:
+- [ ] Decision confirmed with Grant: counselors get a new, narrow write
+  capability (not just read), scoped to their own school only.
+- [ ] A new token type (or a reuse of `review_tokens` with a new scope) and
+  a `/distribution/[token]`-style page, unauthenticated like `/review`.
+- [ ] One action: mark a household's gift(s) as left the building, writing
+  to whatever field the Distribution page's "Check in" already reads (not a
+  second, competing timestamp).
+- [ ] RLS/function-level check that the token can only affect its own
+  school's households.
+- [ ] reach-reviewer gate (new unauthenticated write path touching
+  distribution state).
+
+Status: **Parked (maybe)** — Grant 2026-10-19: still a maybe, hold on to it.
+Reverses a 2026-09-29 decision; needs explicit sign-off before starting.
+Owner: database-engineer (token + RLS), frontend-designer (the page).
+
+---
+
+## US-54: Shopping list — mobile layout polish
+
+As someone shopping at a store with the list open on my phone, I want the
+page to be easy to use one-handed in the aisle, so I'm not fighting the
+layout while holding a cart.
+
+From the same 2026-10 meeting. `/admin/shopping-list` (`web/app/admin/
+shopping-list/page.tsx`) is already a single-column card list rather than a
+wide table, so it's not starting from zero — but nobody has actually opened
+it on a phone and used it hands-on to confirm tap targets, text size, and
+spacing hold up. (Note: a school filter is being added to this same page
+separately, in parallel with this cleanup pass — see `getShoppingList` in
+`web/lib/queries.ts` — so don't duplicate that part here.)
+
+Acceptance criteria:
+- [ ] Open `/admin/shopping-list` on an actual phone-width viewport and note
+  concretely what's wrong today (small tap targets? cramped spacing? the
+  "Mark verified" button too close to other text?) before changing anything.
+- [ ] Fix whatever that review finds — likely larger touch targets and
+  tighter vertical rhythm, not a structural rewrite.
+- [ ] Re-test on the same viewport after the fix.
+
+Status: **Deferred** — Grant 2026-10-19: wanted, but can wait. Needs an actual
+hands-on-a-phone pass to know what specifically to fix.
+Owner: frontend-designer.
+
+---
+
+## Epic: Staff-assigned sponsors (US-55–US-59)
+
+Decided by Grant, 2026-10-15 (OPEN_QUESTIONS ADM-24, revised same day).
+Lives on its own branch, **`feature/staff-assigned-sponsors`**, off `dev` —
+`dev` keeps today's self-serve `/sponsor` page and claim flow exactly as-is
+until/unless this branch merges. On this branch: no sponsor fills out a form
+or provides their own email. Sign-ups happen in Church Center, entirely
+outside this app; staff get that list out of Church Center and import it
+here once. "The congregation" is simply that list — names, emails, phone
+numbers for the volunteer sponsors who signed up — not a separate
+campus/group category, so there's no `congregations` table in this version
+(an earlier draft of this epic had one; dropped per Grant, 2026-10-15). The
+existing self-serve RPCs (`request_claim_code`, `claim_card_with_code`,
+`public_available_cards`) stay in the schema, just unused on this branch —
+see US-59. These five stories are the scoped plan; none are started.
+
+## US-55: Sponsor roster data model — `sponsor_families`
+
+As staff, I want the app to hold our own list of sponsor sign-ups (name,
+email, phone), so children can be assigned against a real roster instead of
+sponsors signing anything up themselves.
+
+Acceptance criteria:
+- [ ] New `sponsor_families` table, scoped per drive like `families`/
+  `children`: id, drive_id, display_name, contact_email (nullable),
+  contact_phone (nullable), capacity (nullable int — how many cards this
+  entry expects to take), notes (staff-only free text), created_at,
+  is_test_data. No congregation field or lookup table — the whole table
+  *is* "the congregation" (one list, no sub-grouping).
+- [ ] `sponsors` gains a nullable `sponsor_family_id` FK, set only when an
+  assignment came from the roster (US-58) — today's self-serve claims leave
+  it null. A roster entry's "assigned so far" is just a count of non-
+  cancelled assignments through this link — no new counter column to keep
+  in sync.
+- [ ] RLS: staff/volunteer read-write, same shape as `schools`/
+  `drive_schools` — this is sponsor contact info, not a child's, so no
+  confidentiality gate applies. Audit trigger, same as every other table in
+  this schema.
+
+Status: **Backlog** — ready to start, nothing outstanding.
+Owner: database-engineer.
+
+---
+
+## US-56: Admin sponsor roster page — import and manage
+
+As staff, I want to bring our sponsor list into the app once, and keep
+adding to it as more Church Center sign-ups come in, so the assignment
+screen (US-57) has real entries to assign against.
+
+Acceptance criteria:
+- [ ] New admin page (e.g. `/admin/sponsors`) listing every `sponsor_families`
+  row for the current drive: name, contact info, capacity, assigned-so-far
+  vs. capacity.
+- [ ] CSV import — columns: name, email, phone, capacity. Whatever export
+  Church Center produces for staff gets reshaped to this by hand or by
+  Katie's side of the process before upload; this story doesn't integrate
+  with Church Center directly. Unlike `bulk-create-volunteers.mjs`, this is
+  a plain in-app feature, not a terminal script — it never touches Supabase
+  Auth or the service_role key, just an ordinary insert through RLS, so
+  there's no reason to keep it out of the app the way account creation is.
+- [ ] "Add one" form for stragglers who sign up after the bulk import, same
+  pattern as "Add a household" on the family side.
+- [ ] Edit an entry (fix a typo'd email, bump capacity) and mark one
+  inactive without deleting it (keeps assignment history intact).
+
+Status: **Backlog** — depends on US-55.
+Owner: frontend-designer (page), database-engineer (import validation).
+
+---
+
+## US-57: Admin assignment screen
+
+As staff, I want to pick a child and a sponsor-roster entry and assign them
+to each other directly, so I control every match instead of a sponsor
+picking themselves.
+
+Acceptance criteria:
+- [ ] New admin screen showing unassigned cards (the same pool as the
+  Fulfillment board's "Unassigned" column) alongside the sponsor roster.
+  Each card shows its household's school, grade, sex, and whether any
+  siblings from the same household are already assigned and to whom — so
+  staff can choose to keep a household with the same sponsor themselves,
+  without the app forcing a matching algorithm on them in this first
+  version.
+- [ ] Pick a card, pick a roster entry, confirm — calls US-58.
+- [ ] A roster entry at or over its stated capacity is visibly flagged, not
+  hard-blocked — staff can still choose to go over on purpose.
+- [ ] Confidential cards are excluded from this screen's query entirely
+  (not just hidden in the UI), same guarantee `claim_card_with_code` already
+  gives the public claim path.
+
+Status: **Backlog** — depends on US-55/56/58.
+Owner: frontend-designer.
+
+---
+
+## US-58: `assign_card_to_sponsor_family` — the staff-assignment write path
+
+As the system, I need a staff-only way to create an assignment from a
+roster entry instead of a sponsor's own claim code, so the existing
+fulfillment board, shopping list, and thank-you email keep working
+unchanged for a staff-assigned card.
+
+Acceptance criteria:
+- [ ] New `security definer` function, callable by staff/volunteers (same
+  role check as other staff writes), taking a card id and a
+  `sponsor_families` id. Refuses an already-claimed card and a confidential
+  card, same checks `claim_card_with_code` already makes.
+- [ ] Creates a `sponsors` row from the roster entry's info (tagged
+  `sponsor_family_id`), then an `assignments` row exactly like today's claim
+  path (`status = 'pledged'`, `claimed_at = now()`) — the fulfillment board,
+  shopping list, and dashboard need zero changes; to them this is just
+  another assignment.
+- [ ] Fires the same best-effort thank-you + card-PDF email already built
+  (`supabase/functions/send-sponsor-card-email`, wired in
+  `20261015130000_sponsor_card_pdf_email.sql`) — reused as-is, not
+  duplicated. Skipped silently if the roster entry has no email on file,
+  same "degrade, don't fail" shape every email step here already follows.
+- [ ] Audit-logged the same way `create_family` is.
+- [ ] reach-reviewer gate (new write path onto `assignments`/`sponsors`;
+  reuses the existing email step against a new data source).
+
+Status: **Backlog** — depends on US-55.
+Owner: database-engineer.
+
+---
+
+## US-59: Replace `/sponsor` with a link to the Church Center sign-up page
+
+As a visitor who'd have landed on the old sponsor-browsing page, I want to
+be sent to where sign-ups actually happen now, so I'm not looking at a
+browse grid that no longer reflects how sponsoring works this season.
+
+**Decided (Grant, 2026-10-15):** on this branch, `/sponsor` stops being the
+self-serve browse/claim grid and becomes a simple page with a short
+explanation and a link out to the Church Center sign-up page. `dev` is
+unaffected — this only happens on `feature/staff-assigned-sponsors`, and
+only takes effect app-wide if/when this branch merges.
+
+Acceptance criteria:
+- [ ] `/sponsor` (`web/app/sponsor/page.tsx`) replaced with a short static
+  page: brief explanation that sponsoring is handled through Church Center
+  this year, and a link/button out to the sign-up page.
+- [ ] The Church Center URL is operator-set config, not hard-coded — a new
+  `app_settings.church_center_signup_url` column (nullable, same "ordinary
+  per-environment config" pattern as `site_url`/`dropoff_location`), with an
+  honest "link not set yet" fallback shown instead of a dead/placeholder
+  link if it's empty. Grant sets the real URL once with a plain `update`,
+  no migration needed after the column exists.
+- [ ] The old browse grid, its data-fetching (`SponsorBrowser.tsx` and
+  friends), `public_available_cards`, `request_claim_code`, and
+  `claim_card_with_code` are **not deleted** — just no longer linked to from
+  anywhere. Confirmed nothing else in the app still links to the old
+  claim flow from this new page.
+- [ ] Confirm a card assigned via US-58 is excluded from
+  `public_available_cards` the same way any claimed card already is (should
+  be automatic — that view already excludes any card with an active
+  assignment regardless of how it was created — but worth one explicit
+  check, since this is the first time an assignment is ever created by a
+  path other than `claim_card_with_code`).
+
+Status: **Backlog** — depends on nothing else in this epic; can be built
+any time, including before US-55–58 land.
+Owner: frontend-designer (page), database-engineer (`app_settings` column).
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

@@ -6,6 +6,7 @@ import {
   displayFirstName,
   FULFILLMENT_COLUMNS,
   getFulfillmentBoard,
+  getSchoolsForDrive,
   NEXT_STATUS,
   type FulfillmentColumn,
 } from "@/lib/queries";
@@ -40,6 +41,7 @@ export default function FulfillmentPage() {
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [search, setSearch] = useState("");
   const [overdueOnly, setOverdueOnly] = useState(false);
+  const [schoolFilter, setSchoolFilter] = useState("all");
   const [focusedColumn, setFocusedColumn] = useState<FulfillmentColumn | null>(null);
   const [openNotesId, setOpenNotesId] = useState<string | null>(null);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
@@ -47,6 +49,7 @@ export default function FulfillmentPage() {
   if (!data) return null;
 
   const isAdmin = viewerRole === "admin";
+  const schools = getSchoolsForDrive(data);
   const allCards = getFulfillmentBoard(data).map((card) => ({
     ...card,
     displayName: displayFirstName(card.childFirstName, card.isConfidential, isAdmin),
@@ -55,13 +58,14 @@ export default function FulfillmentPage() {
   const q = search.trim().toLowerCase();
   const visibleCards = allCards.filter((card) => {
     const overdueMatches = !overdueOnly || card.overdueSeverity !== null;
+    const schoolMatches = schoolFilter === "all" || card.driveSchoolId === schoolFilter;
     const searchMatches =
       !q ||
       [card.displayName, card.cardNumber, card.sponsorName ?? "", card.sponsorEmail ?? "", card.sponsorPhone ?? ""]
         .join(" ")
         .toLowerCase()
         .includes(q);
-    return overdueMatches && searchMatches;
+    return overdueMatches && schoolMatches && searchMatches;
   });
 
   const columns = focusedColumn ? FULFILLMENT_COLUMNS.filter((c) => c.value === focusedColumn) : FULFILLMENT_COLUMNS;
@@ -126,6 +130,18 @@ export default function FulfillmentPage() {
           />
           Overdue only
         </label>
+        <select
+          value={schoolFilter}
+          onChange={(e) => setSchoolFilter(e.target.value)}
+          className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
+        >
+          <option value="all">All schools</option>
+          {schools.map((s) => (
+            <option key={s.driveSchoolId} value={s.driveSchoolId}>
+              {s.name}
+            </option>
+          ))}
+        </select>
         {focusedColumn ? (
           <button
             onClick={() => setFocusedColumn(null)}

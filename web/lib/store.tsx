@@ -13,6 +13,7 @@ import {
   mapProfile,
   mapSchool,
   mapSponsor,
+  mapSponsorFamily,
   mapWishlistItem,
 } from "./supabase/mappers";
 import type {
@@ -112,6 +113,48 @@ export interface UpdateFamilyDetailsInput {
   internalNotes: string;
 }
 
+// US-55/56/57/58 (feature/staff-assigned-sponsors) ---------------------------
+
+export interface CreateSponsorFamilyInput {
+  displayName: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  capacity?: number;
+  notes?: string;
+}
+
+/**
+ * `created` is how many rows were in the import payload after dropping blank
+ * display names — this is a SINGLE insert statement (not a per-row loop), so
+ * it is all-or-nothing: either every valid row lands and `created` is their
+ * count, or the whole batch fails together as `{ ok: false, error }` (e.g. a
+ * malformed row) and nothing is written. There is no partial-success count to
+ * report for this RPC-free path.
+ */
+export type BulkImportSponsorFamiliesResult = { ok: true; created: number } | { ok: false; error: string };
+
+export interface UpdateSponsorFamilyPatch {
+  displayName?: string;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  capacity?: number | null;
+  notes?: string | null;
+  isActive?: boolean;
+}
+
+// Raw shape of assign_card_to_sponsor_family's jsonb return — see
+// supabase/migrations/20261015150000_assign_card_to_sponsor_family.sql.
+interface AssignCardToSponsorFamilyResponse {
+  ok: boolean;
+  sponsor_id?: string;
+  assignment_id?: string;
+  error?: string;
+}
+
+export type AssignCardToSponsorFamilyResult =
+  | { ok: true; sponsorId: string; assignmentId: string }
+  | { ok: false; error: string };
+
 export interface FamilyDistributionInput {
   scheduledPickupAt: string | null;
   distributionMethodOverride: DistributionMethod | "inherit";
@@ -163,6 +206,15 @@ interface DataContextValue {
   updateFamilyDistribution: (familyId: string, input: FamilyDistributionInput) => Promise<Result>;
   checkInFamily: (familyId: string) => Promise<Result>;
   undoCheckInFamily: (familyId: string) => Promise<Result>;
+  // US-55/56/57/58: the sponsor roster (sponsor_families) and the staff
+  // assignment write path (assign_card_to_sponsor_family). See
+  // lib/queries.ts's getSponsorFamilies/getAssignableCards for the read side.
+  createSponsorFamily: (input: CreateSponsorFamilyInput) => Promise<Result>;
+  bulkImportSponsorFamilies: (
+    rows: { displayName: string; contactEmail?: string; contactPhone?: string; capacity?: number }[]
+  ) => Promise<BulkImportSponsorFamiliesResult>;
+  updateSponsorFamily: (id: string, patch: UpdateSponsorFamilyPatch) => Promise<Result>;
+  assignCardToSponsorFamily: (cardId: string, sponsorFamilyId: string) => Promise<AssignCardToSponsorFamilyResult>;
   savedViews: SavedView[];
   addSavedView: (view: Omit<SavedView, "id">) => void;
   deleteSavedView: (id: string) => void;
@@ -173,25 +225,52 @@ const DataContext = createContext<DataContextValue | null>(null);
 async function fetchDataBundle(): Promise<DataBundle> {
   const supabase = createClient();
 
-  const [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments, profiles] =
-    await Promise.all([
-      supabase.from("drives").select("*").eq("status", "open").order("year", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("schools").select("*"),
-      supabase.from("drive_schools").select("*"),
-      supabase.from("families").select("*"),
-      supabase.from("children").select("*"),
-      supabase.from("wishlist_items").select("*"),
-      supabase.from("sponsors").select("*"),
-      supabase.from("cards").select("*"),
-      supabase.from("assignments").select("*"),
-      // RLS ("read own or admin profile", 20260708120000_init.sql) means a
-      // non-admin gets back only their own row here, not the full roster —
-      // that's expected, not a bug. The admin volunteer-management page is
-      // the only consumer that needs every row, and it only renders for admins.
-      supabase.from("profiles").select("*"),
-    ]);
+  const [
+    drive,
+    schools,
+    driveSchools,
+    families,
+    children,
+    wishlistItems,
+    sponsors,
+    cards,
+    assignments,
+    profiles,
+    sponsorFamilies,
+  ] = await Promise.all([
+    supabase.from("drives").select("*").eq("status", "open").order("year", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("schools").select("*"),
+    supabase.from("drive_schools").select("*"),
+    supabase.from("families").select("*"),
+    supabase.from("children").select("*"),
+    supabase.from("wishlist_items").select("*"),
+    supabase.from("sponsors").select("*"),
+    supabase.from("cards").select("*"),
+    supabase.from("assignments").select("*"),
+    // RLS ("read own or admin profile", 20260708120000_init.sql) means a
+    // non-admin gets back only their own row here, not the full roster —
+    // that's expected, not a bug. The admin volunteer-management page is
+    // the only consumer that needs every row, and it only renders for admins.
+    supabase.from("profiles").select("*"),
+    // US-55 — fetched unfiltered, same as families/children/etc. above;
+    // lib/queries.ts's getSponsorFamilies is what scopes this to the current
+    // drive (same pattern getSchoolsForDrive already uses for driveSchools).
+    supabase.from("sponsor_families").select("*"),
+  ]);
 
-  for (const res of [drive, schools, driveSchools, families, children, wishlistItems, sponsors, cards, assignments, profiles]) {
+  for (const res of [
+    drive,
+    schools,
+    driveSchools,
+    families,
+    children,
+    wishlistItems,
+    sponsors,
+    cards,
+    assignments,
+    profiles,
+    sponsorFamilies,
+  ]) {
     if (res.error) throw new Error(res.error.message);
   }
 
@@ -212,6 +291,7 @@ async function fetchDataBundle(): Promise<DataBundle> {
     cards: (cards.data ?? []).map(mapCard),
     assignments: (assignments.data ?? []).map(mapAssignment),
     profiles: (profiles.data ?? []).map(mapProfile),
+    sponsorFamilies: (sponsorFamilies.data ?? []).map(mapSponsorFamily),
   };
 }
 
@@ -369,6 +449,31 @@ export async function claimCardWithCode(
     };
   }
   return { ok: true, sponsorId: result.sponsor_id };
+}
+
+// ---------------------------------------------------------------------------
+// Church Center sign-up link (US-59,
+// supabase/migrations/20261015160000_church_center_signup_link.sql)
+//
+// Deliberately standalone, same reasoning as requestClaimCode/claimCardWithCode
+// above: the anonymous /sponsor page has no DataProvider wrapping it and no
+// DataBundle to act on. `get_church_center_signup_url()` is a narrow
+// security-definer function granted to anon specifically so this one value
+// off `app_settings` (an otherwise admin-only table) is reachable without
+// widening that table's RLS — see the migration and AGENTS.md.
+// ---------------------------------------------------------------------------
+
+/**
+ * The Church Center URL /sponsor sends visitors to, or null when Grant hasn't
+ * set one yet (the page should show an honest "not set up yet" message, not
+ * a dead link) — `church_center_signup_url` is null until then, and the RPC
+ * returns that null straight through rather than erroring.
+ */
+export async function getChurchCenterSignupUrl(): Promise<string | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("get_church_center_signup_url");
+  if (error) throw new Error(error.message);
+  return (data as string | null) ?? null;
 }
 
 // Sane plain-language defaults. The edit page owns the final wording of the
@@ -1048,6 +1153,119 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
+  // US-55/56: plain insert, same authority level as entering a family by
+  // hand — RLS on sponsor_families ("staff insert sponsor_families",
+  // supabase/migrations/20261015140000_sponsor_families.sql) permits any
+  // authenticated user, so no RPC is needed here.
+  async function createSponsorFamily(input: CreateSponsorFamilyInput): Promise<Result> {
+    if (!data) return { ok: false, error: "Data hasn't finished loading yet." };
+
+    const trimmedName = input.displayName.trim();
+    if (!trimmedName) return { ok: false, error: "A display name is required." };
+
+    const supabase = createClient();
+    const { error } = await supabase.from("sponsor_families").insert({
+      drive_id: data.drive.id,
+      display_name: trimmedName,
+      contact_email: input.contactEmail?.trim() || null,
+      contact_phone: input.contactPhone?.trim() || null,
+      capacity: input.capacity ?? null,
+      notes: input.notes?.trim() || null,
+    });
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  // US-56: the Church Center roster CSV import. One insert statement for the
+  // whole batch — see BulkImportSponsorFamiliesResult's doc comment for why
+  // `created` has no partial-success story to tell.
+  async function bulkImportSponsorFamilies(
+    rows: { displayName: string; contactEmail?: string; contactPhone?: string; capacity?: number }[]
+  ): Promise<BulkImportSponsorFamiliesResult> {
+    if (!data) return { ok: false, error: "Data hasn't finished loading yet." };
+
+    const validRows = rows
+      .map((r) => ({ ...r, displayName: r.displayName.trim() }))
+      .filter((r) => r.displayName.length > 0);
+    if (validRows.length === 0) {
+      return { ok: false, error: "No rows with a display name to import." };
+    }
+
+    const supabase = createClient();
+    const { data: inserted, error } = await supabase
+      .from("sponsor_families")
+      .insert(
+        validRows.map((r) => ({
+          drive_id: data.drive.id,
+          display_name: r.displayName,
+          contact_email: r.contactEmail?.trim() || null,
+          contact_phone: r.contactPhone?.trim() || null,
+          capacity: r.capacity ?? null,
+        }))
+      )
+      .select("id");
+    if (error) return { ok: false, error: error.message };
+
+    await refresh();
+    return { ok: true, created: (inserted ?? []).length };
+  }
+
+  // US-57: edit a roster entry in place (contact info, capacity, notes) or
+  // retire it (isActive: false) without losing the assignment history
+  // through it.
+  async function updateSponsorFamily(id: string, patch: UpdateSponsorFamilyPatch): Promise<Result> {
+    const supabase = createClient();
+    const dbPatch: Record<string, unknown> = {};
+    if (patch.displayName !== undefined) {
+      // Same non-blank guard createSponsorFamily applies on insert — without
+      // it, editing a name down to whitespace passes both the DB's `not
+      // null` constraint and the form's HTML5 `required` (which doesn't
+      // block whitespace-only input), leaving a roster entry with an empty
+      // display name.
+      const trimmedName = patch.displayName.trim();
+      if (!trimmedName) return { ok: false, error: "A display name is required." };
+      dbPatch.display_name = trimmedName;
+    }
+    if (patch.contactEmail !== undefined) dbPatch.contact_email = patch.contactEmail?.trim() || null;
+    if (patch.contactPhone !== undefined) dbPatch.contact_phone = patch.contactPhone?.trim() || null;
+    if (patch.capacity !== undefined) dbPatch.capacity = patch.capacity;
+    if (patch.notes !== undefined) dbPatch.notes = patch.notes?.trim() || null;
+    if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
+
+    const { error } = await supabase.from("sponsor_families").update(dbPatch).eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    await refresh();
+    return { ok: true };
+  }
+
+  // US-58: the staff-assignment write path. Calls
+  // assign_card_to_sponsor_family (security definer — see the migration for
+  // why), which refuses an already-claimed, confidential, or cross-drive
+  // card/roster-entry pairing and returns `{ ok: false, error }` for every one
+  // of those rather than raising, same shape as claimCardWithCode above.
+  async function assignCardToSponsorFamily(
+    cardId: string,
+    sponsorFamilyId: string
+  ): Promise<AssignCardToSponsorFamilyResult> {
+    const supabase = createClient();
+    const { data: rpcData, error } = await supabase.rpc("assign_card_to_sponsor_family", {
+      p_card_id: cardId,
+      p_sponsor_family_id: sponsorFamilyId,
+    });
+    if (error) return { ok: false, error: error.message };
+
+    const result = rpcData as AssignCardToSponsorFamilyResponse | null;
+    if (!result?.ok || !result.sponsor_id || !result.assignment_id) {
+      return {
+        ok: false,
+        error: result?.error ?? "Something went wrong assigning this card. Please try again.",
+      };
+    }
+    await refresh();
+    return { ok: true, sponsorId: result.sponsor_id, assignmentId: result.assignment_id };
+  }
+
   function addSavedView(view: Omit<SavedView, "id">) {
     setSavedViews((prev) => [...prev, { ...view, id: crypto.randomUUID() }]);
   }
@@ -1078,6 +1296,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updateFamilyDistribution,
         checkInFamily,
         undoCheckInFamily,
+        createSponsorFamily,
+        bulkImportSponsorFamilies,
+        updateSponsorFamily,
+        assignCardToSponsorFamily,
         savedViews,
         addSavedView,
         deleteSavedView,

@@ -16,3 +16,13 @@ supabase/.branches/
 # Real family/sponsor PII from the 2021 spreadsheet — must never enter git
 # history, even in a private repo (history is hard to truly scrub later).
 /Source Information/
+
+# web/scripts/bulk-create-volunteers.mjs input/output — real volunteer names,
+# emails, and plaintext generated passwords. Never commit these; only
+# volunteers.example.csv (template, fake data) is tracked.
+web/scripts/volunteers.csv
+web/scripts/volunteers-credentials-*.csv
+
+# generate-form-pdfs.mjs output — rendered review/translation PDFs, generated
+# on demand, not project source.
+web/scripts/form-review-pdfs/

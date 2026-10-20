@@ -65,16 +65,6 @@ export const PHASE_1_FORM_DEFINITION = {
           required: true,
           max_length: 200,
         },
-        {
-          id: "preferred_language",
-          label: "What language should we use to contact you?",
-          type: "select",
-          required: true,
-          options: [
-            { value: "en", label: "English" },
-            { value: "es", label: "Español" },
-          ],
-        },
       ],
     },
     {
@@ -259,6 +249,7 @@ export const PHASE_1_FORM_DEFINITION = {
         {
           id: "other_notes",
           label: "Anything else we should know?",
+          help: "Favorite hobbies, colors, games, or anything that helps a sponsor pick a good gift.",
           type: "textarea",
           required: false,
           self_shopper_hidden: true,
@@ -349,16 +340,6 @@ export const PHASE_1_FORM_DEFINITION_ES = {
           type: "email",
           required: true,
           max_length: 200,
-        },
-        {
-          id: "preferred_language",
-          label: "¿En qué idioma preferiría que nos comuniquemos con usted?",
-          type: "select",
-          required: true,
-          options: [
-            { value: "en", label: "Inglés" },
-            { value: "es", label: "Español" },
-          ],
         },
       ],
     },
@@ -544,6 +525,7 @@ export const PHASE_1_FORM_DEFINITION_ES = {
         {
           id: "other_notes",
           label: "¿Algo más que debamos saber?",
+          help: "Pasatiempos favoritos, colores, juegos, o cualquier cosa que ayude a un patrocinador a elegir un buen regalo.",
           type: "textarea",
           required: false,
           self_shopper_hidden: true,

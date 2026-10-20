@@ -187,6 +187,42 @@ export interface Sponsor {
   name: string;
   phone: string | null;
   email: string | null;
+  // US-55/58 (supabase/migrations/20261015140000_sponsor_families.sql): set
+  // only when this sponsor record was created by
+  // assign_card_to_sponsor_family() from a `sponsor_families` roster entry.
+  // Null for every self-serve claim (claim_card_with_code never sets it) —
+  // that nullness is exactly what distinguishes a staff-assigned pledge from
+  // a sponsor's own self-serve claim everywhere else in this app.
+  sponsorFamilyId: string | null;
+}
+
+// US-55 (supabase/migrations/20261015140000_sponsor_families.sql) — the
+// sponsor sign-up roster for staff-assigned sponsoring. One row per sponsor
+// sign-up staff imported from Church Center or added by hand; "the
+// congregation" in the product ask IS this table, there's no separate
+// grouping table.
+export interface SponsorFamily {
+  id: string;
+  driveId: string;
+  displayName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  // Advisory only — assign_card_to_sponsor_family() does not enforce it; the
+  // assignment UI just flags an entry that's at or over it.
+  capacity: number | null;
+  notes: string | null;
+  // Staff can retire a roster entry (fully booked, no longer available)
+  // without deleting it and losing the assignment history through it.
+  isActive: boolean;
+  createdAt: string;
+  // Computed: the count of non-cancelled assignments reached through
+  // `sponsors.sponsorFamilyId` pointing at this roster entry — i.e. how many
+  // cards this entry has actually taken so far, not a counter column kept in
+  // sync. NOT meaningful on `DataBundle.sponsorFamilies` directly (mapped
+  // from a single raw row, with no visibility into assignments) — it is
+  // always 0 there. Read it from `getSponsorFamilies(data)` in queries.ts,
+  // which is what actually computes it.
+  assignedCount: number;
 }
 
 // One card per child, always (ADM-2 answer, 2026-08-18: "there is no longer
@@ -259,6 +295,11 @@ export interface DataBundle {
   // Own row only for a non-admin, every profile for an admin — see the
   // `Profile` doc comment above. Powers the admin volunteer-management page.
   profiles: Profile[];
+  // US-55: fetched UNFILTERED by drive, same as families/children/etc. above
+  // — filter to the current drive at the query layer, not here. See
+  // getSponsorFamilies in queries.ts, which is also where `assignedCount`
+  // actually gets computed; treat the rows here as raw plumbing.
+  sponsorFamilies: SponsorFamily[];
 }
 
 // =============================================================================
