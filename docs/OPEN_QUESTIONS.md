@@ -685,6 +685,18 @@ alongside the existing confidential check in both `claim_card_with_code` and
 
 ### DB-30 — Is EXECUTE on `net.http_post`/`net.http_get` ever actually revoked from `anon`/`authenticated`?
 
+**Update (2026-10-19, checked on dev): confirmed, and not fixable from the SQL
+Editor.** `has_function_privilege` returned true for both `anon` and
+`authenticated`. `pg_proc.proacl` for `net.http_get/post/delete` is
+`{=X/supabase_admin,supabase_admin=X/supabase_admin}`: owned by
+`supabase_admin`, EXECUTE granted to PUBLIC. A revoke run as `postgres` is a
+silent no-op (tried in 20261015170000, since removed from it). It also must
+not be "fixed" with a PUBLIC revoke even if it were possible: `postgres` has
+EXECUTE only via PUBLIC, so that would silently break every security definer
+email function. Still not reachable (`net` isn't in `api.schemas`). Status:
+accepted platform limitation unless Supabase support offers a way; do not
+retry the revoke.
+
 Found by reach-reviewer, 2026-10-15, reviewing the new
 `assign_card_to_sponsor_family` migration (feature/staff-assigned-sponsors).
 Not introduced by that work — a pre-existing gap across the whole project,

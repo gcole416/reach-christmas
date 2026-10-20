@@ -1,15 +1,15 @@
 -- Follow-up to the 2026-10-19 reach-reviewer pass on the staff-assigned-
 -- sponsors epic (20261015120000-160000).
 --
--- 1. DB-30 (docs/OPEN_QUESTIONS.md): revoke EXECUTE on every function in the
---    `net` schema (pg_net: net.http_post / net.http_get) from anon,
---    authenticated and public. 20260818160000 already revoked the `net`
---    TABLES for the same reason (Supabase's default privileges there are
---    broad); nothing ever revoked the functions themselves. Not reachable
---    today (`net` isn't in PostgREST's exposed schemas), but this project's
---    DB-2/DB-27 lesson is not to rely on a default staying that way.
---    The security definer functions that call net.http_post (owned by
---    postgres) are unaffected: they run as their owner, not as the caller.
+-- 1. DB-30 (docs/OPEN_QUESTIONS.md): NOT FIXED BY THIS FILE. The original
+--    plan was `revoke execute on all functions in schema net ...`. On dev
+--    (2026-10-19) the net.http_* functions turned out to be owned by
+--    supabase_admin with EXECUTE granted to PUBLIC by supabase_admin
+--    (proacl {=X/supabase_admin,...}). The SQL Editor runs as postgres, which
+--    can't revoke another role's grant, so that statement was a silent no-op
+--    and has been removed. It also would have been harmful if it HAD worked:
+--    postgres (which runs our security definer email functions) only holds
+--    EXECUTE via PUBLIC, so revoking it would have silently broken them.
 --
 -- 2. assign_card_to_sponsor_family: fix an orphan `sponsors` row when two
 --    staff assign the same card at once (the loser's sponsors insert was
@@ -24,8 +24,6 @@
 --   PROD: NOT APPLIED. Waits for a Software Acceptance Review.
 
 begin;
-
-revoke execute on all functions in schema net from anon, authenticated, public;
 
 create or replace function public.assign_card_to_sponsor_family(
   p_card_id uuid,
@@ -201,15 +199,6 @@ commit;
 
 -- VERIFY (dev, after applying):
 --
--- 1. Expect false for both roles (run BEFORE as well; expect true there if
---    the grant was standing):
---    select has_function_privilege('authenticated', 'net.http_post(text, jsonb, jsonb, jsonb, integer)'::regprocedure, 'execute'),
---           has_function_privilege('anon',          'net.http_post(text, jsonb, jsonb, jsonb, integer)'::regprocedure, 'execute');
---
--- 2. THEN confirm email still works, since the definer functions call
---    net.http_post: assign a test card to a sponsor_families row that has an
+-- 1. Confirm email still works: assign a test card to a sponsor_families row that has an
 --    email, and confirm a new sponsor_emails row (and the email, if the Edge
---    Function is set up). If the email step stops working, the revoke hit
---    the definer owner role too -- run:
---    grant execute on all functions in schema net to postgres;
---    and tell Claude.
+--    Function is set up).
