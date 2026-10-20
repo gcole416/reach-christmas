@@ -61,10 +61,18 @@ skip ahead; ask Claude to look at the error first.
 ## 2. Build the database (you paste; Claude can watch the results)
 
 - [ ] **2.1** SQL Editor of the **new** project. Confirm the project name.
-- [ ] **2.2 SQL** Apply all 34 migrations from `supabase/migrations/`, **one
-  file per run, in the order listed in
-  [MIGRATION_LEDGER.md](MIGRATION_LEDGER.md)**. After each: no error, then
-  the next. A failure means stop.
+- [ ] **2.2 SQL** Paste and run
+  [`supabase/prod_bootstrap.sql`](../supabase/prod_bootstrap.sql): all 34
+  migrations combined into **one transaction**, so it either builds the whole
+  database or changes nothing. Expect "Success" after a few seconds.
+  - If it errors: nothing was applied. Send Claude the error; don't edit the
+    file by hand.
+  - If the SQL Editor won't take a file that size (about 470 KB): fall back
+    to running the 34 files in `supabase/migrations/` one per run, in
+    [MIGRATION_LEDGER.md](MIGRATION_LEDGER.md) order.
+  - Before pasting, Claude runs `node scripts/build-prod-bootstrap.mjs
+    --check` (from `web/`) to confirm the combined file matches the
+    migrations.
 - [ ] **2.3** Tell Claude when done so the ledger's prod column gets filled in.
 - [ ] **2.4 SQL** Edit the two values at the top of
   [`supabase/prod_setup.sql`](../supabase/prod_setup.sql) (the prod website
