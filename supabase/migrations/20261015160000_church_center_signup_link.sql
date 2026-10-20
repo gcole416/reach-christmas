@@ -13,7 +13,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED.
+--   DEV:  APPLIED 2026-10-19.
 --   PROD: NOT APPLIED.
 --
 -- reach-reviewer gate: low-risk (one text column, one function returning

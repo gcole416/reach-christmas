@@ -26,7 +26,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED.
+--   DEV:  APPLIED 2026-10-19.
 --   PROD: NOT APPLIED, and must not be until a Software Acceptance Review,
 --         same as every other intake/claim migration.
 --

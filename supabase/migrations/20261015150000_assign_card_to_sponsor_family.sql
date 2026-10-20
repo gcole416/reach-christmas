@@ -22,7 +22,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED. Depends on 20261015140000 (sponsor_families).
+--   DEV:  APPLIED 2026-10-19. Depends on 20261015140000 (sponsor_families).
 --   PROD: NOT APPLIED. Waits for a Software Acceptance Review, same as every
 --         other claim-path change.
 --

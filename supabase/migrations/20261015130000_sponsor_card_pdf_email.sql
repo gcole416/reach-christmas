@@ -41,7 +41,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED. Also requires manual setup beyond this file --
+--   DEV:  APPLIED 2026-10-19. Also requires manual setup beyond this file --
 --         see send-sponsor-card-email's header and the VERIFY section below.
 --   PROD: NOT APPLIED, and must not be until a Software Acceptance Review,
 --         same as every other intake/claim migration.

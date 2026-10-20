@@ -12,7 +12,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED.
+--   DEV:  APPLIED 2026-10-19.
 --   PROD: NOT APPLIED. This whole epic ships on `dev` only if/when
 --         feature/staff-assigned-sponsors merges, and even then waits for a
 --         Software Acceptance Review like every other claim-path change.
