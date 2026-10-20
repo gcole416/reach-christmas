@@ -69,7 +69,7 @@ export default function AdminPage() {
       <section className="mt-12">
         <h2 className="text-xl font-semibold text-ink-primary">Sponsors running late</h2>
         <p className="mt-1 text-sm text-ink-secondary">
-          Pledged or purchased {OVERDUE_WARNING_DAYS}+ days ago with no further progress since.
+          Assigned {OVERDUE_WARNING_DAYS}+ days ago and not yet received at church.
         </p>
         <div className="mt-4 overflow-x-auto rounded-xl border border-border">
           {overdue.length === 0 ? (

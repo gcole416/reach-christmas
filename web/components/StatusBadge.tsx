@@ -4,8 +4,9 @@ export type Status = AssignmentStatus | "unclaimed";
 
 const STATUS_CONFIG: Record<Status, { label: string; dot: string; bg: string }> = {
   unclaimed: { label: "Needs a sponsor", dot: "bg-ink-muted", bg: "bg-ink-muted/10" },
-  pledged: { label: "Pledged", dot: "bg-cat-blue", bg: "bg-cat-blue/10" },
-  purchased: { label: "Purchased", dot: "bg-cat-violet", bg: "bg-cat-violet/10" },
+  pledged: { label: "Assigned", dot: "bg-cat-blue", bg: "bg-cat-blue/10" },
+  // No longer a step (2026-10-20); a legacy purchased row reads as Assigned.
+  purchased: { label: "Assigned", dot: "bg-cat-blue", bg: "bg-cat-blue/10" },
   received_at_church: { label: "Received at church", dot: "bg-cat-aqua", bg: "bg-cat-aqua/10" },
   verified: { label: "Verified", dot: "bg-cat-yellow", bg: "bg-cat-yellow/10" },
   delivered: { label: "Delivered", dot: "bg-status-good", bg: "bg-status-good/10" },
@@ -14,7 +15,9 @@ const STATUS_CONFIG: Record<Status, { label: string; dot: string; bg: string }> 
 
 export const STATUS_OPTIONS: { value: Status; label: string }[] = (
   Object.keys(STATUS_CONFIG) as Status[]
-).map((value) => ({ value, label: STATUS_CONFIG[value].label }));
+)
+  .filter((value) => value !== "purchased")
+  .map((value) => ({ value, label: STATUS_CONFIG[value].label }));
 
 export function StatusBadge({ status }: { status: Status }) {
   const config = STATUS_CONFIG[status];

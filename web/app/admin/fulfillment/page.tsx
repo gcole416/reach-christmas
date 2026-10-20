@@ -17,7 +17,6 @@ import { AdminPageHeader } from "../AdminPageHeader";
 const COLUMN_DOT: Record<FulfillmentColumn, string> = {
   unassigned: "bg-ink-muted",
   pledged: "bg-cat-blue",
-  purchased: "bg-cat-violet",
   received_at_church: "bg-cat-aqua",
   verified: "bg-cat-yellow",
   delivered: "bg-status-good",
@@ -81,7 +80,7 @@ export default function FulfillmentPage() {
   }
 
   async function handleCancel(assignmentId: string, childName: string) {
-    if (!window.confirm(`Cancel this pledge for ${childName}? Their card goes back on the public sponsor page.`)) {
+    if (!window.confirm(`Cancel this assignment for ${childName}? They go back to needing a sponsor.`)) {
       return;
     }
     setBusyId(assignmentId);
@@ -160,7 +159,7 @@ export default function FulfillmentPage() {
           const cardsInColumn = visibleCards.filter((c) => c.column === col.value);
           const isFocused = focusedColumn === col.value;
           return (
-            <div key={col.value} className={focusedColumn ? "w-full max-w-2xl shrink-0" : "w-72 shrink-0"}>
+            <div key={col.value} className={focusedColumn ? "w-full max-w-2xl shrink-0" : "min-w-[14rem] flex-1"}>
               <button
                 onClick={() => setFocusedColumn(isFocused ? null : col.value)}
                 className={`flex w-full items-center justify-between rounded-t-lg border border-b-0 px-3 py-2 text-left ${
@@ -185,7 +184,7 @@ export default function FulfillmentPage() {
                     const assignmentId = card.assignmentId;
                     return (
                       <div key={card.cardId} className="rounded-lg border border-border bg-surface p-3 text-sm">
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                           <span className="font-medium text-ink-primary">
                             {card.displayName}{" "}
                             <span className="font-normal text-ink-muted">({card.cardNumber})</span>

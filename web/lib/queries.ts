@@ -288,7 +288,9 @@ export function getAdminFamilies(data: DataBundle): AdminFamilyRow[] {
             return {
               cardId: card.id,
               cardNumber: getChildCardNumber(data, child),
-              status: active?.status ?? "unclaimed",
+              // A legacy "purchased" row files under Assigned, so the
+              // Assigned filter finds it (no purchased step since 2026-10-20).
+              status: active ? (active.status === "purchased" ? "pledged" : active.status) : "unclaimed",
               sponsorName: sponsor?.name ?? null,
               daysSinceClaimed: active ? daysSince(active.claimedAt) : null,
               printedAt: card.printedAt,
@@ -532,9 +534,12 @@ export function getSchoolsForDrive(data: DataBundle): SchoolRow[] {
     });
 }
 
-/** Which status an assignment moves to next when staff click "advance" (fulfillment page). */
+/** Which status an assignment moves to next when staff click "advance" (fulfillment page).
+ *  No "purchased" step (Grant, 2026-10-20): a gift goes straight from assigned
+ *  (`pledged`) to received at church. A legacy `purchased` row still advances
+ *  to received at church. The enum value stays in the schema, unused. */
 export const NEXT_STATUS: Partial<Record<AssignmentStatus, AssignmentStatus>> = {
-  pledged: "purchased",
+  pledged: "received_at_church",
   purchased: "received_at_church",
   received_at_church: "verified",
   verified: "delivered",
@@ -542,19 +547,19 @@ export const NEXT_STATUS: Partial<Record<AssignmentStatus, AssignmentStatus>> = 
 
 // The fulfillment board's columns, left to right. "unassigned" isn't a real
 // assignment_status — it's a card with no active (non-cancelled) assignment
-// at all, whether never claimed or claimed-then-cancelled.
+// at all, whether never claimed or claimed-then-cancelled. `pledged` is shown
+// as "Assigned"; there's no "purchased" column (a legacy purchased row is
+// grouped under Assigned, see getFulfillmentBoard).
 export type FulfillmentColumn =
   | "unassigned"
   | "pledged"
-  | "purchased"
   | "received_at_church"
   | "verified"
   | "delivered";
 
 export const FULFILLMENT_COLUMNS: { value: FulfillmentColumn; label: string }[] = [
   { value: "unassigned", label: "Unassigned" },
-  { value: "pledged", label: "Pledged" },
-  { value: "purchased", label: "Purchased" },
+  { value: "pledged", label: "Assigned" },
   { value: "received_at_church", label: "Received at church" },
   { value: "verified", label: "Verified" },
   { value: "delivered", label: "Delivered" },
@@ -649,8 +654,11 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
 
     const sponsor = data.sponsors.find((s) => s.id === active.sponsorId)!;
     const days = daysSince(active.claimedAt);
-    const column = active.status as FulfillmentColumn;
-    const isDelivered = active.status === "delivered";
+    const column = (active.status === "purchased" ? "pledged" : active.status) as FulfillmentColumn;
+    // Overdue means the sponsor hasn't brought the gift in yet, so only an
+    // assigned card can be overdue; once it's received at church the sponsor
+    // is done. Same rule as the dashboard's "Sponsors running late".
+    const awaitingSponsor = column === "pledged";
     board.push({
       cardId: card.id,
       cardNumber,
@@ -664,7 +672,7 @@ export function getFulfillmentBoard(data: DataBundle): FulfillmentCard[] {
       sponsorPhone: sponsor.phone,
       sponsorEmail: sponsor.email,
       daysSinceClaimed: days,
-      overdueSeverity: isDelivered
+      overdueSeverity: !awaitingSponsor
         ? null
         : days >= OVERDUE_WARNING_DAYS
           ? days >= OVERDUE_CRITICAL_DAYS
