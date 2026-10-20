@@ -52,6 +52,7 @@
 // the human sentence. Prefer branching on `reason`.
 
 import { createClient } from "./supabase/client";
+import { describeDbError } from "./permissions";
 import {
   INTAKE_FORM_DESCRIPTION,
   INTAKE_FORM_NAME,
@@ -487,7 +488,7 @@ export async function importSubmission(
     // channel" value, and sending it keeps one argument list for every call.
     p_is_confidential: opts?.isConfidential ?? null,
   });
-  if (error) return { ok: false, error: error.message, reason: "unknown" };
+  if (error) return { ok: false, error: describeDbError(error), reason: "unknown" };
 
   const res = data as any;
   if (!res?.ok) {
@@ -534,7 +535,7 @@ export async function listSubmissions(driveId: string): Promise<ListResult<Submi
     .neq("status", "draft")
     .order("submitted_at", { ascending: false });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true, items: (data ?? []).map(mapSubmissionRecord) };
 }
 
@@ -553,7 +554,7 @@ export async function getSubmission(
     .eq("id", submissionId)
     .maybeSingle();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   if (!data) {
     // Same message for "deleted" and "RLS hid it from you" — answering
     // differently would confirm a confidential submission exists. Same
@@ -593,7 +594,7 @@ export async function listFormLinks(driveId: string): Promise<ListResult<FormLin
     .eq("drive_id", driveId)
     .order("created_at", { ascending: true });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true, items: (data ?? []).map(mapFormLinkRow) };
 }
 
@@ -647,7 +648,7 @@ export async function listDriveFormVersions(
     .from("forms")
     .select("id, name")
     .eq("drive_id", driveId);
-  if (formsError) return { ok: false, error: formsError.message };
+  if (formsError) return { ok: false, error: describeDbError(formsError) };
 
   const formNames = new Map<string, string>(
     (forms ?? []).map((f: any) => [f.id as string, (f.name as string) ?? "Registration form"])
@@ -660,7 +661,7 @@ export async function listDriveFormVersions(
     .in("form_id", Array.from(formNames.keys()))
     .not("published_at", "is", null)
     .order("version", { ascending: false });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
 
   return {
     ok: true,
@@ -716,7 +717,10 @@ export async function ensureDriveFormVersion(
     )
     .select("id")
     .single();
-  if (formError || !formRow) return { ok: false, error: formError?.message ?? GENERIC_ERROR };
+  if (formError || !formRow) return { ok: false, error: describeDbError(formError, {
+      adminAction: "create the first registration link for a drive",
+      fallback: GENERIC_ERROR,
+    }) };
   const formId = formRow.id as string;
 
   const readLatestPublished = () =>
@@ -730,7 +734,7 @@ export async function ensureDriveFormVersion(
       .maybeSingle();
 
   const existing = await readLatestPublished();
-  if (existing.error) return { ok: false, error: existing.error.message };
+  if (existing.error) return { ok: false, error: describeDbError(existing.error) };
   if (existing.data) {
     return {
       ok: true,
@@ -782,7 +786,10 @@ export async function ensureDriveFormVersion(
       }
       continue;
     }
-    return { ok: false, error: insertError?.message ?? GENERIC_ERROR };
+    return { ok: false, error: describeDbError(insertError, {
+      adminAction: "create the first registration link for a drive",
+      fallback: GENERIC_ERROR,
+    }) };
   }
   return { ok: false, error: GENERIC_ERROR };
 }
@@ -871,7 +878,7 @@ export async function createFormLink(input: CreateFormLinkInput): Promise<Create
 
     if (!error && data) return { ok: true, link: mapFormLinkRow(data) };
     if (error?.code === "23505" && attempt < 2) continue;
-    return { ok: false, error: error?.message ?? GENERIC_ERROR };
+    return { ok: false, error: describeDbError(error, { adminAction: "create a registration link", fallback: GENERIC_ERROR }) };
   }
   return { ok: false, error: GENERIC_ERROR };
 }
@@ -881,19 +888,30 @@ export async function createFormLink(input: CreateFormLinkInput): Promise<Create
  * counselor for a current link" page a nonexistent token gets (get_form and
  * submit_form both answer `not_found` for a revoked link, by design).
  *
- * Idempotent: the `is("revoked_at", null)` guard means re-revoking is a no-op
- * rather than moving the timestamp.
+ * The `is("revoked_at", null)` guard means re-revoking never moves the
+ * timestamp. It comes back as zero rows, the same as a refused volunteer
+ * revoke, so both get the "wasn't revoked" message below.
  */
 export async function revokeFormLink(
   linkId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("form_links")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", linkId)
-    .is("revoked_at", null);
-  if (error) return { ok: false, error: error.message };
+    .is("revoked_at", null)
+    .select("id");
+  if (error) return { ok: false, error: describeDbError(error, { adminAction: "revoke a registration link" }) };
+  // RLS hides a row a volunteer can't update, so a refused revoke is zero
+  // rows, not an error. See lib/permissions.ts.
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      error:
+        "The link wasn't revoked. It may already be revoked (refresh to check), or your account isn't an admin. Only an admin can revoke registration links.",
+    };
+  }
   return { ok: true };
 }
 
@@ -952,7 +970,7 @@ export async function listReviewLinks(driveId: string): Promise<ListResult<Revie
     .select("id, drive_school_id, token, issued_to_email, expires_at, revoked_at, last_used_at")
     .eq("drive_id", driveId)
     .order("created_at", { ascending: true });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true, items: (data ?? []).map(mapReviewLinkRow) };
 }
 
@@ -985,7 +1003,7 @@ export async function issueReviewLink(
     p_issued_to_email: input.issuedToEmail,
     p_expires_at: input.expiresAt ?? null,
   });
-  if (error) return { ok: false, error: error.message, reason: "unknown" };
+  if (error) return { ok: false, error: describeDbError(error), reason: "unknown" };
 
   const res = data as any;
   if (!res?.ok) {
@@ -1027,7 +1045,7 @@ export async function replaceReviewLink(input: {
     p_review_token_id: input.reviewLinkId,
     p_issued_to_email: input.issuedToEmail ?? null,
   });
-  if (error) return { ok: false, error: error.message, reason: "unknown" };
+  if (error) return { ok: false, error: describeDbError(error), reason: "unknown" };
 
   const res = data as any;
   if (!res?.ok) {
@@ -1102,7 +1120,7 @@ export async function listCounselorEmails(driveId: string): Promise<ListResult<C
     .select("id, drive_school_id, kind, locale, sent_to, sent_by, created_at")
     .eq("drive_id", driveId)
     .order("created_at", { ascending: false });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true, items: (data ?? []).map(mapCounselorEmailRow) };
 }
 
@@ -1122,7 +1140,7 @@ export async function sendCounselorRegistrationLink(
     p_drive_school_id: driveSchoolId,
     p_locale: locale,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true };
 }
 
@@ -1132,7 +1150,7 @@ export async function sendCounselorReviewLink(driveSchoolId: string): Promise<Se
   const { error } = await supabase.rpc("send_counselor_review_link", {
     p_drive_school_id: driveSchoolId,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true };
 }
 
@@ -1148,7 +1166,7 @@ export async function sendCounselorReviewLink(driveSchoolId: string): Promise<Se
 export async function sendCounselorDigestsNow(): Promise<SendResult> {
   const supabase = createClient();
   const { error } = await supabase.rpc("send_counselor_digests_now");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true };
 }
 

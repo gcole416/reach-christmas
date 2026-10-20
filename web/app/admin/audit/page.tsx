@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchAuditLog, useData } from "@/lib/store";
 import type { AuditAction, AuditLogEntry } from "@/lib/types";
 import { AdminPageHeader } from "../AdminPageHeader";
+import { VolunteerNotice } from "@/components/VolunteerNotice";
 
 // Matches the tables covered by the audit_log triggers (see SCHEMA.md §11).
 const AUDITED_TABLES: { value: string; label: string }[] = [
@@ -118,6 +119,11 @@ export default function AuditLogPage() {
         title="Audit log"
         description="Every insert, update, and delete across the drive's data, most recent first. Entries for households and children can include real PII, so this page is admin-only and nothing here should be exported or copied elsewhere."
       />
+
+      <VolunteerNotice>
+        You&apos;re signed in as a volunteer, so this log will look empty. Only an admin can see the
+        audit log.
+      </VolunteerNotice>
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="text-sm">

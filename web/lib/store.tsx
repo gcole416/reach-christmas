@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { createClient } from "./supabase/client";
+import { adminOnlyMessage, describeDbError } from "./permissions";
 import {
   mapAssignment,
   mapAuditLogEntry,
@@ -413,7 +414,7 @@ export async function requestClaimCode(input: RequestClaimCodeInput): Promise<Re
     p_sponsor_email: input.sponsorEmail,
     p_sponsor_phone: input.sponsorPhone?.trim() || null,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
   return { ok: true, sessionToken: data as string };
 }
 
@@ -459,7 +460,7 @@ export async function claimCardWithCode(
     p_code: code,
     p_session_token: sessionToken,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: describeDbError(error) };
 
   const result = data as ClaimCardWithCodeResponse | null;
   if (!result?.ok || !result.sponsor_id) {
@@ -614,7 +615,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .select()
       .single();
     if (schoolError || !schoolRow) {
-      return { ok: false, error: schoolError?.message ?? "Could not create the school." };
+      return { ok: false, error: describeDbError(schoolError, { adminAction: "add a school", fallback: "Could not create the school." }) };
     }
 
     const { error: driveSchoolError } = await supabase.from("drive_schools").insert({
@@ -641,7 +642,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           error: `Code "${trimmedCode}" was just taken by another school this drive.`,
         };
       }
-      return { ok: false, error: driveSchoolError.message };
+      return { ok: false, error: describeDbError(driveSchoolError, { adminAction: "add a school" }) };
     }
 
     await refresh();
@@ -675,7 +676,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       p_internal_notes: input.internalNotes.trim() || null,
     });
     if (familyError || !familyRow) {
-      return { ok: false, error: familyError?.message ?? "Could not create the household." };
+      return { ok: false, error: describeDbError(familyError, { fallback: "Could not create the household." }) };
     }
 
     for (let i = 0; i < validChildren.length; i++) {
@@ -707,7 +708,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return {
           ok: false,
           error: `Household saved, but couldn't add ${child.firstName || "a child"}: ${
-            childError?.message ?? "unknown error"
+            describeDbError(childError, { fallback: "unknown error" })
           }. What was saved so far is already in the household list, so check there before retrying.`,
         };
       }
@@ -721,7 +722,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return {
             ok: false,
-            error: `${child.firstName}'s wishlist items failed to save: ${wishlistError.message}. Everything else was saved.`,
+            error: `${child.firstName}'s wishlist items failed to save: ${describeDbError(wishlistError)}. Everything else was saved.`,
           };
         }
       }
@@ -734,7 +735,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         await refresh();
         return {
           ok: false,
-          error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Everything else was saved, so use "Cards to print" to retry.`,
+          error: `Couldn't generate a claimable card for ${child.firstName}: ${describeDbError(cardError)}. Everything else was saved, so use "Cards to print" to retry.`,
         };
       }
     }
@@ -797,7 +798,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .eq("id", familyId)
       .maybeSingle();
     if (familyCheckError) {
-      return { ok: false, error: familyCheckError.message, partialSave: false };
+      return { ok: false, error: describeDbError(familyCheckError), partialSave: false };
     }
     if (!familyRowData) {
       // Missing row and RLS-hidden row are the same observation here — see
@@ -814,7 +815,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .select("id, child_index, updated_at")
       .eq("family_id", familyId);
     if (childCheckError) {
-      return { ok: false, error: childCheckError.message, partialSave: false };
+      return { ok: false, error: describeDbError(childCheckError), partialSave: false };
     }
     const currentChildren = (childRowData ?? []) as ChildVersionRow[];
     const currentChildById = new Map(currentChildren.map((row) => [row.id, row]));
@@ -888,7 +889,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
     const { data: familyUpdated, error: familyError } = await familyUpdate.select("id");
     if (familyError) {
-      return { ok: false, error: familyError.message, partialSave: false };
+      return { ok: false, error: describeDbError(familyError), partialSave: false };
     }
     if ((familyUpdated ?? []).length === 0) {
       // Zero rows affected, no error: either the guard blocked it, or the row
@@ -950,7 +951,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return {
             ok: false,
-            error: `Couldn't update ${child.firstName}: ${updateError.message}. Other changes on this page may already be saved.`,
+            error: `Couldn't update ${child.firstName}: ${describeDbError(updateError)}. Other changes on this page may already be saved.`,
             partialSave: wroteSomething,
           };
         }
@@ -976,7 +977,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: `Couldn't add ${child.firstName}: ${
-              insertError?.message ?? "unknown error"
+              describeDbError(insertError, { fallback: "unknown error" })
             }. Other changes on this page may already be saved.`,
             partialSave: wroteSomething,
           };
@@ -996,7 +997,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return {
             ok: false,
-            error: `Couldn't generate a claimable card for ${child.firstName}: ${cardError.message}. Other changes on this page may already be saved.`,
+            error: `Couldn't generate a claimable card for ${child.firstName}: ${describeDbError(cardError)}. Other changes on this page may already be saved.`,
             partialSave: wroteSomething,
           };
         }
@@ -1011,27 +1012,73 @@ export function DataProvider({ children }: { children: ReactNode }) {
         };
       }
 
+      const wishlistRows = child.wishlistItems
+        .map((description, idx) => ({ child_id: childId, position: idx + 1, description: description.trim() }))
+        .filter((row) => row.description);
+
+      // Skip the rewrite when the wishlist didn't change. Every edit of an
+      // existing child comes through here, and deleting wishlist_items is
+      // admin-only in RLS, so rewriting an unchanged list would block a
+      // volunteer from saving any edit (a shoe size, say) to a child who
+      // already has a wishlist. Compared against the database, not the
+      // loaded bundle, which may be stale.
+      const { data: savedWishlist, error: savedWishlistError } = await supabase
+        .from("wishlist_items")
+        .select("position, description")
+        .eq("child_id", childId)
+        .order("position");
+      if (savedWishlistError) {
+        await refresh();
+        return {
+          ok: false,
+          error: `Couldn't update ${child.firstName}'s wishlist: ${describeDbError(savedWishlistError)}.`,
+          partialSave: wroteSomething,
+        };
+      }
+      // Text and order only. Positions can have gaps (a blank middle item is
+      // dropped after numbering), and a gap alone isn't a change worth a
+      // rewrite.
+      const unchanged =
+        savedWishlist.length === wishlistRows.length &&
+        savedWishlist.every((row, i) => row.description === wishlistRows[i].description);
+      if (unchanged) continue;
+
       // Wishlist rows have no other references pointing at them, so a
       // wholesale replace is simpler and just as safe as diffing.
-      const { error: deleteError } = await supabase.from("wishlist_items").delete().eq("child_id", childId);
+      const { data: deletedRows, error: deleteError } = await supabase
+        .from("wishlist_items")
+        .delete()
+        .eq("child_id", childId)
+        .select("id");
       if (deleteError) {
         await refresh();
         return {
           ok: false,
-          error: `Couldn't update ${child.firstName}'s wishlist: ${deleteError.message}.`,
+          error: `Couldn't update ${child.firstName}'s wishlist: ${describeDbError(deleteError)}.`,
           partialSave: wroteSomething,
         };
       }
-      const wishlistRows = child.wishlistItems
-        .map((description, idx) => ({ child_id: childId, position: idx + 1, description: description.trim() }))
-        .filter((row) => row.description);
+      // A refused RLS delete is zero rows, not an error (lib/permissions.ts).
+      // Without this check a volunteer's re-insert below hits the unique
+      // (child_id, position) constraint and they see a raw "duplicate key"
+      // message instead of the real reason.
+      if ((deletedRows?.length ?? 0) < savedWishlist.length) {
+        await refresh();
+        return {
+          ok: false,
+          error: `Couldn't update ${child.firstName}'s wishlist. ${adminOnlyMessage(
+            "change or remove wishlist items that are already saved"
+          )} Other changes on this page may already be saved.`,
+          partialSave: wroteSomething,
+        };
+      }
       if (wishlistRows.length > 0) {
         const { error: wishlistError } = await supabase.from("wishlist_items").insert(wishlistRows);
         if (wishlistError) {
           await refresh();
           return {
             ok: false,
-            error: `Couldn't save ${child.firstName}'s wishlist: ${wishlistError.message}.`,
+            error: `Couldn't save ${child.firstName}'s wishlist: ${describeDbError(wishlistError)}.`,
             partialSave: wroteSomething,
           };
         }
@@ -1052,7 +1099,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (status === "delivered") patch.delivered_at = now;
 
     const { error } = await supabase.from("assignments").update(patch).eq("id", assignmentId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1060,7 +1107,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   async function cancelAssignment(assignmentId: string, opts?: { refresh?: boolean }): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase.from("assignments").update({ status: "cancelled" }).eq("id", assignmentId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     if (opts?.refresh !== false) await refresh();
     return { ok: true };
   }
@@ -1071,7 +1118,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .from("assignments")
       .update({ volunteer_notes: notes.trim() || null })
       .eq("id", assignmentId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1082,7 +1129,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .from("cards")
       .update({ printed_at: printed ? new Date().toISOString() : null })
       .eq("id", cardId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1096,7 +1143,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .from("children")
       .update({ shop_day_status: input.status, shop_day_notes: input.notes.trim() || null })
       .eq("id", childId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1107,7 +1154,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       p_child_id: childId,
       p_reason: reason.trim() || null,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1115,7 +1162,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   async function releaseChildHold(childId: string): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase.rpc("release_child_hold", { p_child_id: childId });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1126,11 +1173,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // security boundary, just a preference send_counselor_digests() reads.
   async function setSchoolDigestPaused(driveSchoolId: string, paused: boolean): Promise<Result> {
     const supabase = createClient();
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("drive_schools")
       .update({ digest_paused: paused })
-      .eq("id", driveSchoolId);
-    if (error) return { ok: false, error: error.message };
+      .eq("id", driveSchoolId)
+      .select("id");
+    const pauseAction = "pause or resume a school's daily digest";
+    if (error) return { ok: false, error: describeDbError(error, { adminAction: pauseAction }) };
+    // A refused RLS update is zero rows, not an error (lib/permissions.ts).
+    if (!updated || updated.length === 0) return { ok: false, error: adminOnlyMessage(pauseAction) };
     await refresh();
     return { ok: true };
   }
@@ -1145,7 +1196,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           input.distributionMethodOverride === "inherit" ? null : input.distributionMethodOverride,
       })
       .eq("id", familyId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1157,7 +1208,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .from("families")
       .update({ checked_in_at: new Date().toISOString(), checked_in_by: userData.user?.id ?? null })
       .eq("id", familyId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1168,7 +1219,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .from("families")
       .update({ checked_in_at: null, checked_in_by: null })
       .eq("id", familyId);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1192,7 +1243,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       capacity: input.capacity ?? null,
       notes: input.notes?.trim() || null,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1225,7 +1276,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }))
       )
       .select("id");
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
 
     await refresh();
     return { ok: true, created: (inserted ?? []).length };
@@ -1254,7 +1305,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
 
     const { error } = await supabase.from("sponsor_families").update(dbPatch).eq("id", id);
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
     await refresh();
     return { ok: true };
   }
@@ -1274,7 +1325,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       p_card_id: cardId,
       p_sponsor_family_id: sponsorFamilyId,
     });
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeDbError(error) };
 
     const result = rpcData as AssignCardToSponsorFamilyResponse | null;
     if (!result?.ok || !result.sponsor_id || !result.assignment_id) {

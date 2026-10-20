@@ -5,6 +5,7 @@ import { useData } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
 import { FormField } from "@/components/FormField";
 import { SearchInput } from "@/components/SearchInput";
+import { VolunteerNotice } from "@/components/VolunteerNotice";
 import type { DistributionMethod } from "@/lib/types";
 import { AdminPageHeader } from "../AdminPageHeader";
 
@@ -14,7 +15,8 @@ const DISTRIBUTION_LABELS: Record<DistributionMethod, string> = {
 };
 
 export default function SchoolsAdminPage() {
-  const { data } = useData();
+  const { data, viewerRole } = useData();
+  const isAdmin = viewerRole === "admin";
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -38,18 +40,24 @@ export default function SchoolsAdminPage() {
         }
       />
 
+      <VolunteerNotice>
+        You&apos;re signed in as a volunteer, so only an admin can add a school.
+      </VolunteerNotice>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name, code, or liaison…" />
         <div className="flex items-center gap-3">
           <p className="text-sm text-ink-muted">
             {schools.length} of {allSchools.length}
           </p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-          >
-            Add school
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={() => setShowForm(true)}
+              className="rounded-lg bg-cat-blue px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              Add school
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -82,7 +90,11 @@ export default function SchoolsAdminPage() {
             {schools.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
-                  {allSchools.length === 0 ? "No schools yet. Add the first one." : "No schools match this search."}
+                  {allSchools.length === 0
+                    ? isAdmin
+                      ? "No schools yet. Add the first one."
+                      : "No schools yet. An admin adds them."
+                    : "No schools match this search."}
                 </td>
               </tr>
             ) : null}
@@ -90,7 +102,7 @@ export default function SchoolsAdminPage() {
         </table>
       </div>
 
-      {showForm ? (
+      {showForm && isAdmin ? (
         <AddSchoolForm onClose={() => setShowForm(false)} />
       ) : null}
     </div>

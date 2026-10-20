@@ -19,6 +19,7 @@ import { useData } from "@/lib/store";
 import { getSchoolsForDrive } from "@/lib/queries";
 import type { DataBundle } from "@/lib/types";
 import { formatDate } from "@/components/intake/format";
+import { VolunteerNotice } from "@/components/VolunteerNotice";
 import { channelLabel } from "./shared";
 import { CopyLinkButton } from "./CopyLinkButton";
 
@@ -112,10 +113,13 @@ function LinkItem({
   link,
   onRevoke,
   busy,
+  canManage,
 }: {
   link: FormLinkRecord;
   onRevoke: (link: FormLinkRecord) => void;
   busy: boolean;
+  /** Admin only. A volunteer can still copy the link. */
+  canManage: boolean;
 }) {
   const state = linkState(link);
   const path = formPath(link.token);
@@ -160,7 +164,7 @@ function LinkItem({
           className={readonlyInputClass}
         />
         <CopyLinkButton path={path} />
-        {!link.revokedAt ? (
+        {!link.revokedAt && canManage ? (
           <button
             type="button"
             onClick={() => onRevoke(link)}
@@ -667,7 +671,12 @@ export function FormLinkPanel({
   pendingBySchool: Map<string, PendingReviewCounts>;
   onChanged: () => void | Promise<void>;
 }) {
-  const { setSchoolDigestPaused } = useData();
+  const { setSchoolDigestPaused, viewerRole } = useData();
+  // Every write on this panel is admin-only (RLS on form_links/review_tokens/
+  // drive_schools, is_admin() in the send functions). Volunteers get the
+  // read-only view plus a VolunteerNotice, not buttons that fail or, for an
+  // RLS-refused update, silently do nothing.
+  const canManage = viewerRole === "admin";
   const [creatingFor, setCreatingFor] = useState<string | null | undefined>(undefined);
   const [busyLinkId, setBusyLinkId] = useState<string | null>(null);
   // Keyed "<driveSchoolId>:<kind>:<locale>" (locale omitted for review sends).
@@ -892,15 +901,17 @@ export function FormLinkPanel({
         </summary>
 
         <div className="space-y-3 border-t border-gridline p-4">
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => setCreatingFor(driveSchoolId)}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
-            >
-              New link
-            </button>
-          </div>
+          {canManage ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCreatingFor(driveSchoolId)}
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue"
+              >
+                New link
+              </button>
+            </div>
+          ) : null}
 
           {schoolLinks.length === 0 ? (
             <p className="text-sm text-ink-muted">No household registration link yet.</p>
@@ -912,57 +923,71 @@ export function FormLinkPanel({
                   link={link}
                   onRevoke={handleRevoke}
                   busy={busyLinkId === link.id}
+                  canManage={canManage}
                 />
               ))}
             </ul>
           )}
 
-          <ReviewLinkRow
-            driveSchoolId={driveSchoolId}
-            reviewLink={review}
-            liaisonEmail={liaisonEmail}
-            onIssue={handleIssueReview}
-            onReplace={handleReplaceReview}
-          />
+          {canManage ? (
+            <ReviewLinkRow
+              driveSchoolId={driveSchoolId}
+              reviewLink={review}
+              liaisonEmail={liaisonEmail}
+              onIssue={handleIssueReview}
+              onReplace={handleReplaceReview}
+            />
+          ) : (
+            <div className="rounded-lg border border-gridline bg-background p-4">
+              <p className="text-sm font-medium text-ink-primary">Counselor review link</p>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                Only an admin can view, create, or replace the counselor review link.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2 rounded-lg border border-gridline bg-background p-3">
             <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
               Counselor email
             </p>
-            <div className="space-y-2">
-              <CounselorSendRow
-                label="Email English registration link"
-                hasLiveTarget={hasLiveEnglish}
-                noTargetReason="No live English registration link for this school yet."
-                liaisonEmail={liaisonEmail}
-                lastSend={lastEnglishSend}
-                openedHint={null}
-                busy={busySendKey === `${driveSchoolId}:registration_link:en`}
-                onSend={() => handleSendRegistration(driveSchoolId, "en")}
-              />
-              {SPANISH_LINK_CREATION_ENABLED ? (
+            {canManage ? (
+              <div className="space-y-2">
                 <CounselorSendRow
-                  label="Email Spanish registration link"
-                  hasLiveTarget={hasLiveSpanish}
-                  noTargetReason="No live Spanish registration link for this school yet."
+                  label="Email English registration link"
+                  hasLiveTarget={hasLiveEnglish}
+                  noTargetReason="No live English registration link for this school yet."
                   liaisonEmail={liaisonEmail}
-                  lastSend={lastSpanishSend}
+                  lastSend={lastEnglishSend}
                   openedHint={null}
-                  busy={busySendKey === `${driveSchoolId}:registration_link:es`}
-                  onSend={() => handleSendRegistration(driveSchoolId, "es")}
+                  busy={busySendKey === `${driveSchoolId}:registration_link:en`}
+                  onSend={() => handleSendRegistration(driveSchoolId, "en")}
                 />
-              ) : null}
-              <CounselorSendRow
-                label="Email review link"
-                hasLiveTarget={hasLiveReview}
-                noTargetReason="Create a counselor review link above first."
-                liaisonEmail={liaisonEmail}
-                lastSend={lastReviewSend}
-                openedHint={reviewOpenedHint}
-                busy={busySendKey === `${driveSchoolId}:review_link`}
-                onSend={() => handleSendReview(driveSchoolId)}
-              />
-            </div>
+                {SPANISH_LINK_CREATION_ENABLED ? (
+                  <CounselorSendRow
+                    label="Email Spanish registration link"
+                    hasLiveTarget={hasLiveSpanish}
+                    noTargetReason="No live Spanish registration link for this school yet."
+                    liaisonEmail={liaisonEmail}
+                    lastSend={lastSpanishSend}
+                    openedHint={null}
+                    busy={busySendKey === `${driveSchoolId}:registration_link:es`}
+                    onSend={() => handleSendRegistration(driveSchoolId, "es")}
+                  />
+                ) : null}
+                <CounselorSendRow
+                  label="Email review link"
+                  hasLiveTarget={hasLiveReview}
+                  noTargetReason="Create a counselor review link above first."
+                  liaisonEmail={liaisonEmail}
+                  lastSend={lastReviewSend}
+                  openedHint={reviewOpenedHint}
+                  busy={busySendKey === `${driveSchoolId}:review_link`}
+                  onSend={() => handleSendReview(driveSchoolId)}
+                />
+              </div>
+            ) : (
+              <p className="text-xs text-ink-muted">Only an admin can email the counselor.</p>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gridline pt-2">
               {pending && pending.count > 0 ? (
@@ -973,19 +998,23 @@ export function FormLinkPanel({
               ) : (
                 <p className="text-xs text-ink-muted">Nothing waiting on this counselor right now.</p>
               )}
-              <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-secondary">
-                <input
-                  type="checkbox"
-                  checked={digestPaused}
-                  onChange={(e) => handleToggleDigest(driveSchoolId, e.target.checked)}
-                  className="size-3.5 rounded border-border"
-                />
-                Pause daily digest for this school
-              </label>
+              {canManage ? (
+                <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-secondary">
+                  <input
+                    type="checkbox"
+                    checked={digestPaused}
+                    onChange={(e) => handleToggleDigest(driveSchoolId, e.target.checked)}
+                    className="size-3.5 rounded border-border"
+                  />
+                  Pause daily digest for this school
+                </label>
+              ) : digestPaused ? (
+                <p className="shrink-0 text-xs text-ink-muted">Daily digest paused</p>
+              ) : null}
             </div>
           </div>
 
-          {creatingFor === driveSchoolId ? (
+          {creatingFor === driveSchoolId && canManage ? (
             <CreateLinkForm
               data={data}
               formVersions={creatableFormVersions}
@@ -1008,13 +1037,15 @@ export function FormLinkPanel({
         <h2 id="form-links-heading" className="text-lg font-semibold text-ink-primary">
           Registration links
         </h2>
-        <button
-          type="button"
-          onClick={() => setCreatingFor(null)}
-          className="rounded-lg bg-cat-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-        >
-          New registration link
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => setCreatingFor(null)}
+            className="rounded-lg bg-cat-blue px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          >
+            New registration link
+          </button>
+        ) : null}
       </div>
       <p className="mt-1 text-sm text-ink-secondary">
         Each school gets a <strong className="font-medium text-ink-primary">household link</strong>{" "}
@@ -1022,6 +1053,12 @@ export function FormLinkPanel({
         <strong className="font-medium text-ink-primary">counselor review link</strong> (the
         counselor opens it to confirm those households). Re-send either as often as you need.
       </p>
+
+      <VolunteerNotice className="mt-3">
+        You&apos;re signed in as a volunteer, so you can copy household links but only an admin can
+        create or revoke links, set up counselor review links, email counselors, or pause the daily
+        digest.
+      </VolunteerNotice>
 
       {notice ? (
         <p className="mt-3 rounded-lg bg-status-good/10 px-3 py-2 text-sm text-ink-primary">
@@ -1034,7 +1071,7 @@ export function FormLinkPanel({
         </p>
       ) : null}
 
-      {creatingFor === null ? (
+      {creatingFor === null && canManage ? (
         <CreateLinkForm
           data={data}
           formVersions={creatableFormVersions}
@@ -1072,6 +1109,7 @@ export function FormLinkPanel({
                     link={link}
                     onRevoke={handleRevoke}
                     busy={busyLinkId === link.id}
+                    canManage={canManage}
                   />
                 ))}
               </ul>

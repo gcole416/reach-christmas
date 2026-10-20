@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { mapDrive } from "@/lib/supabase/mappers";
+import { describeDbError } from "@/lib/permissions";
 import type { Drive, DriveStatus, DistributionMethod } from "@/lib/types";
 import { FormField } from "@/components/FormField";
 import { AdminPageHeader } from "../AdminPageHeader";
@@ -71,7 +72,7 @@ export default function DrivesPage() {
     const { error } = await supabase.from("drives").update({ status }).eq("id", drive.id);
     setBusyId(null);
     if (error) {
-      setRowError({ id: drive.id, message: error.message });
+      setRowError({ id: drive.id, message: describeDbError(error, { adminAction: "change a drive's status" }) });
       return;
     }
     await load();
@@ -218,7 +219,7 @@ function CreateDriveForm({ onClose, onCreated }: { onClose: () => void; onCreate
     });
     setSubmitting(false);
     if (insertError) {
-      setError(insertError.message);
+      setError(describeDbError(insertError, { adminAction: "create a drive" }));
       return;
     }
     onCreated();
@@ -317,7 +318,7 @@ function EditDriveForm({
       .eq("id", drive.id);
     setSubmitting(false);
     if (updateError) {
-      setError(updateError.message);
+      setError(describeDbError(updateError, { adminAction: "edit a drive" }));
       return;
     }
     onSaved();
