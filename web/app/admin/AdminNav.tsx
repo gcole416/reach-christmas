@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useData } from "@/lib/store";
 
 type MenuEntry =
-  | { href: string; label: string; adminOnly?: boolean }
+  | { href: string; label: string; adminOnly?: boolean; newTab?: boolean }
   | { action: () => void; label: string };
 type NavItem =
   | { href: string; label: string }
@@ -92,17 +92,22 @@ function Chevron() {
 
 function NavMenu({
   label,
+  ariaLabel,
   items,
   align = "left",
   active,
   flat = false,
+  chevron = true,
 }: {
-  label: string;
+  label: ReactNode;
+  /** Required when `label` isn't text (e.g. an icon). */
+  ariaLabel?: string;
   items: MenuEntry[];
   align?: "left" | "right";
   active: boolean;
   /** Header style: no tab underline. */
   flat?: boolean;
+  chevron?: boolean;
 }) {
   const pathname = usePathname();
   // Store the route the menu was opened on rather than a bare boolean: when the
@@ -145,6 +150,7 @@ function NavMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        aria-label={ariaLabel}
         onClick={() => setOpen(!open)}
         className={
           flat
@@ -159,7 +165,7 @@ function NavMenu({
         }
       >
         {label}
-        <Chevron />
+        {chevron ? <Chevron /> : null}
       </button>
       {open ? (
         <div
@@ -170,7 +176,20 @@ function NavMenu({
           }`}
         >
           {items.map((item) =>
-            "href" in item ? (
+            "href" in item && item.newTab ? (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className={itemClass(false)}
+              >
+                {item.label}
+                <span className="sr-only"> (opens in a new tab)</span>
+              </a>
+            ) : "href" in item ? (
               <Link
                 key={item.href}
                 href={item.href}
@@ -272,6 +291,49 @@ export function AdminAccountMenu() {
         { href: "/admin/account", label: "Change password" },
         { action: handleSignOut, label: "Sign out" },
       ]}
+    />
+  );
+}
+
+// Helper documents for staff, each opening in a new tab. They're staff-only:
+// the files live in web/help-docs/ (not public/) and are served by
+// app/admin/help/[doc]/route.ts behind the login. To add one, drop the file in
+// web/help-docs/, register it in that route's DOCS map, and list it here. The
+// counselor PDFs are rendered from docs/handouts/ (see the comment at the top
+// of each .html source); copy the PDF over after re-rendering.
+const HELP_DOCS: MenuEntry[] = [
+  { href: "/admin/help/counselor-steps", label: "Counselor steps", newTab: true },
+  { href: "/admin/help/counselor-big-picture", label: "Counselor big picture", newTab: true },
+];
+
+function InfoIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <circle cx="10" cy="10" r="8" />
+      <path d="M10 9v5" strokeLinecap="round" />
+      <circle cx="10" cy="6.25" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Help-documents menu ("i" icon) for the site header, beside Account. */
+export function AdminHelpMenu() {
+  return (
+    <NavMenu
+      label={<InfoIcon />}
+      ariaLabel="Help documents"
+      align="right"
+      flat
+      chevron={false}
+      active={false}
+      items={HELP_DOCS}
     />
   );
 }

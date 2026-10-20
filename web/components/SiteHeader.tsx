@@ -2,15 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AdminAccountMenu } from "@/app/admin/AdminNav";
+import { AdminAccountMenu, AdminHelpMenu } from "@/app/admin/AdminNav";
 
 export function SiteHeader() {
   const pathname = usePathname();
   const inAdmin = pathname.startsWith("/admin");
   const signedInAdmin = inAdmin && pathname !== "/admin/login";
 
-  // Staff pages: the header is just the name and the Account menu, at the
-  // admin shell's width so it lines up with the nav below it. The public
+  // Staff pages: the header is just the name, the help-documents ("i") menu
+  // and the Account menu, at the admin shell's width so it lines up with the
+  // nav below it. The public
   // "Sponsor a child" link is for sponsors, not staff, so it's left off here.
   return (
     <header className="border-b border-border bg-surface">
@@ -23,7 +24,10 @@ export function SiteHeader() {
           Reach Christmas
         </Link>
         {signedInAdmin ? (
-          <AdminAccountMenu />
+          <div className="flex items-center gap-4">
+            <AdminHelpMenu />
+            <AdminAccountMenu />
+          </div>
         ) : inAdmin ? null : (
           <nav className="flex items-center gap-6 text-sm font-medium text-ink-secondary">
             <Link href="/sponsor" className="hover:text-ink-primary">
