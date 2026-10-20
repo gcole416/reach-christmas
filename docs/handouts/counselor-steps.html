@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reach Christmas: Counselor Steps</title>
+<!-- One-page counselor handout. Rendered to counselor-steps.pdf (US Letter).
+     Copy rules: "household(s)" in person-facing text, no em-dashes. Button
+     labels quoted here must match web/app/review/[token]/RosterCard.tsx. -->
+<style>
+  @page { size: Letter; margin: 0; }
+  :root {
+    --ink: #0b0b0b; --ink2: #52514e; --muted: #898781; --line: rgba(11,11,11,.12);
+    --bg: #ffffff; --soft: #f6f6f3;
+    --good: #0b7f3a; --good-bg: #ecf7ef;
+    --crit: #b42318; --crit-bg: #fdeeec;
+    --blue: #2a78d6;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; }
+  .page { width: 8.5in; height: 11in; padding: .5in .55in .45in; display: flex; flex-direction: column; }
+  .kicker { font-size: 8.5pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 21pt; margin: 2px 0 4px; letter-spacing: -.01em; }
+  .lede { color: var(--ink2); margin: 0 0 12px; max-width: 6.6in; }
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .link { border-radius: 10px; padding: 12px 14px; border: 1.5px solid; }
+  .link.share { background: var(--good-bg); border-color: #9fd3b0; }
+  .link.secret { background: var(--crit-bg); border-color: var(--crit); }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 99px; color: #fff; margin-bottom: 6px; }
+  .share .tag { background: var(--good); }
+  .secret .tag { background: var(--crit); }
+  .link h2 { font-size: 12.5pt; margin: 0 0 2px; }
+  .rule { font-weight: 700; margin: 0 0 6px; }
+  .share .rule { color: var(--good); }
+  .secret .rule { color: var(--crit); }
+  .link p { margin: 0 0 5px; }
+  .link ul { margin: 4px 0 0; padding-left: 16px; }
+  .link li { margin-bottom: 2px; }
+  h3 { font-size: 12pt; margin: 4px 0 8px; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 9px 38px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--blue); color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 11pt; }
+  ol.steps strong.t { display: block; font-size: 11pt; }
+  ol.steps p { margin: 1px 0 0; color: var(--ink2); }
+  .btn { display: inline-block; border: 1px solid var(--line); background: var(--soft); border-radius: 5px;
+    padding: 0 5px; font-weight: 600; color: var(--ink); white-space: nowrap; font-size: 9.5pt; }
+  .see { background: var(--soft); border-radius: 8px; padding: 8px 12px; margin: 2px 0 10px; color: var(--ink2); font-size: 9.5pt; }
+  .footer { margin-top: auto; border-top: 1px solid var(--line); padding-top: 10px; display: grid;
+    grid-template-columns: 1.4fr 1fr; gap: 18px; font-size: 9.5pt; }
+  .fill { border-bottom: 1px solid var(--ink2); height: 18px; margin-top: 4px; }
+  .fill-label { color: var(--muted); font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">Reach Christmas 2026 · OneLife Church</div>
+  <h1>Your steps as a school counselor</h1>
+  <p class="lede">You'll get <strong>two links</strong> from OneLife Church. They look alike, but they follow
+    opposite rules. Please read this box before you send anything.</p>
+
+  <div class="links">
+    <div class="link share">
+      <span class="tag">Share with households</span>
+      <h2>Household registration link</h2>
+      <p class="rule">Send it only to households you're referring.</p>
+      <p>Every registration made through it is tagged to <em>your</em> school and comes to you to confirm.</p>
+      <ul>
+        <li>Email or text it directly to each household you're referring.</li>
+        <li>Don't post it on social media, a school website, or a public flyer. Anyone holding it can register under your school.</li>
+        <li>It stops working when registration closes.</li>
+      </ul>
+    </div>
+    <div class="link secret">
+      <span class="tag">Private: never share</span>
+      <h2>Your counselor review link</h2>
+      <p class="rule">For you only. Not families, not coworkers, not anyone.</p>
+      <p>It opens the list of every child registered at your school. Treat it like a password.</p>
+      <ul>
+        <li>Never forward the email it came in, or paste it into a group chat or shared document.</li>
+        <li>Never send it to a family by mistake in place of the registration link.</li>
+        <li>Bookmark it for yourself. Shared by accident, or changing roles? <strong>Contact us right away.</strong></li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Step by step</h3>
+  <ol class="steps">
+    <li><strong class="t">Send the registration link to the households you're referring.</strong>
+      <p>One form per household, even if the children go to different schools. It takes about five minutes,
+        with an English / Español button at the top. We only ask for children's first names, and never an address.</p></li>
+    <li><strong class="t">Households fill it out.</strong>
+      <p>When they submit, they're told their registration is with you now and that you'll confirm it with us.</p></li>
+    <li><strong class="t">Open your review link.</strong>
+      <p>New registrations show up under <strong>Waiting on you</strong>. Please check it a couple of times a week while registration is open.</p></li>
+    <li><strong class="t">Confirm or flag each household.</strong>
+      <p>You're confirming that it's a real household you referred and that the children listed look right. Nothing more.
+        Fix a typo in a child's first name, age, or grade if you need to, then click
+        <span class="btn">Confirm this household</span>, type your name, and click <span class="btn">Confirm</span>.
+        Something off? Click <span class="btn">This isn't right</span> and add a short reason. If they registered twice,
+        tick the duplicate box.</p></li>
+    <li><strong class="t">Closer to Christmas: gifts come to you.</strong>
+      <p>OneLife Church delivers each household's gifts to you at the school, and you arrange with each family how they
+        receive them. High schoolers (grades 9 to 12) shop for themselves on a shop day; you'll pass those details on.
+        For a household without email, we'll send updates through you.</p></li>
+  </ol>
+
+  <div class="see"><strong>What your review page shows:</strong> each child's first name, age, and grade. Wish lists, sizes,
+    and household contact details are left off on purpose. Sponsors never see a last name, address, school, or contact information.</div>
+
+  <div class="footer">
+    <div><div class="fill-label">Your Reach Christmas contact</div><div class="fill"></div></div>
+    <div><div class="fill-label">Registration closes</div><div class="fill"></div></div>
+  </div>
+</div>
+</body>
+</html>

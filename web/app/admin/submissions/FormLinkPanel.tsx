@@ -5,6 +5,7 @@ import {
   createFormLink,
   formPath,
   issueReviewLink,
+  replaceReviewLink,
   reviewLinkIsLive,
   revokeFormLink,
   sendCounselorRegistrationLink,
@@ -177,22 +178,64 @@ function LinkItem({
 // The counselor review link for one school. Unlike the family link, there is
 // only ever one live one per school (issue_review_token is idempotent), so this
 // is a single row, not a list — either "here it is, copy it" or "set one up".
+//
+// "Replace this link…" kills the live link and issues a new one in one database
+// call (replace_review_token). Deliberately three clicks: open the confirm box,
+// tick the acknowledgement, then the red button, which stays disabled until the
+// box is ticked. A leaked review link exposes the school's roster, so this has
+// to be quick, but it also cuts the counselor off until they get the new link.
 function ReviewLinkRow({
   driveSchoolId,
   reviewLink,
   liaisonEmail,
   onIssue,
+  onReplace,
 }: {
   driveSchoolId: string;
   reviewLink: ReviewLinkRecord | undefined;
   liaisonEmail: string | null;
   onIssue: (driveSchoolId: string, email: string) => Promise<string | null>;
+  onReplace: (reviewLinkId: string) => Promise<string | null>;
 }) {
   const [email, setEmail] = useState(liaisonEmail ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [understood, setUnderstood] = useState(false);
+  // The confirm box belongs to one specific link. If the row now shows a
+  // different link (another admin replaced it and we refreshed), close it, so
+  // a second click can never kill the link someone else just issued.
+  const [replacingId, setReplacingId] = useState<string | null>(null);
+  if (replacing && reviewLink && replacingId !== reviewLink.id) {
+    setReplacing(false);
+    setUnderstood(false);
+    setReplacingId(null);
+  }
 
   const live = reviewLink && reviewLinkIsLive(reviewLink);
+  const hasLiaison = Boolean(liaisonEmail && liaisonEmail.trim());
+
+  function openReplace() {
+    setError(null);
+    setUnderstood(false);
+    setReplacingId(reviewLink?.id ?? null);
+    setReplacing(true);
+  }
+
+  async function replace(e: FormEvent) {
+    e.preventDefault();
+    if (!reviewLink || !understood) return;
+    setError(null);
+    setBusy(true);
+    const message = await onReplace(reviewLink.id);
+    setBusy(false);
+    // Success or failure, the box closes and the acknowledgement resets: any
+    // further replace starts over from "Replace this link…".
+    setReplacing(false);
+    setUnderstood(false);
+    setReplacingId(null);
+    if (message) setError(message);
+  }
 
   async function issue(e: FormEvent) {
     e.preventDefault();
@@ -234,6 +277,73 @@ function ReviewLinkRow({
         <p className="mt-2 text-xs text-ink-muted">
           Re-send this same link to the counselor any time. It stays valid until it expires.
         </p>
+
+        {replacing ? (
+          <form
+            onSubmit={replace}
+            aria-label="Replace counselor review link"
+            className="mt-3 rounded-lg border border-status-critical/40 bg-status-critical/5 p-3"
+          >
+            <p className="text-sm font-semibold text-ink-primary">Replace this counselor review link?</p>
+            <p className="mt-1 text-sm text-ink-secondary">
+              Use this if the link was shared with someone it shouldn&apos;t have been, or the
+              counselor changed. The current link stops working right away for everyone who has it,
+              including the counselor, until they get the new one. Households they already
+              confirmed stay confirmed.
+            </p>
+            <p className="mt-2 text-sm text-ink-secondary">
+              {hasLiaison ? (
+                <>
+                  &ldquo;Email review link&rdquo; and the daily digest send the new link to this
+                  school&apos;s liaison email, <strong className="text-ink-primary">{liaisonEmail}</strong>.
+                </>
+              ) : (
+                <>This school has no liaison email on file, so copy the new link and send it yourself.</>
+              )}{" "}
+              If the counselor changed or that address is the one that leaked, correct the
+              school&apos;s liaison email before you email the new link.
+            </p>
+            <label className="mt-3 flex items-start gap-2 text-sm text-ink-primary">
+              <input
+                type="checkbox"
+                checked={understood}
+                onChange={(e) => setUnderstood(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>I understand the current link will stop working right away.</span>
+            </label>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={!understood || busy}
+                className="rounded-lg bg-status-critical px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy ? "Replacing…" : "Kill old link and create new one"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setReplacing(false)}
+                disabled={busy}
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-secondary hover:text-ink-primary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={openReplace}
+            className="mt-2 text-xs font-medium text-status-critical underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-status-critical"
+          >
+            Replace this link…
+          </button>
+        )}
+        {error ? (
+          <p className="mt-2 rounded-lg bg-status-critical/10 px-3 py-2 text-sm text-ink-primary" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -692,6 +802,27 @@ export function FormLinkPanel({
     return null;
   }
 
+  async function handleReplaceReview(reviewLinkId: string): Promise<string | null> {
+    setError(null);
+    setNotice(null);
+    // No new address here on purpose: every send goes to the school's
+    // liaison_email, not review_tokens.issued_to_email, so the new link keeps
+    // the old row's email and the dialog points staff at the liaison email.
+    const result = await replaceReviewLink({ reviewLinkId });
+    if (!result.ok) {
+      // Someone else already replaced it: refresh so the current link shows.
+      if (result.reason === "already_replaced") await onChanged();
+      return result.error;
+    }
+    // Refresh first, so the notice never appears while the row still shows
+    // the old, now-dead link.
+    await onChanged();
+    setNotice(
+      `Old review link killed. Send the counselor the new link: copy it below or use "Email review link".`
+    );
+    return null;
+  }
+
   async function handleRevoke(link: FormLinkRecord) {
     const name = link.label ?? "this link";
     if (
@@ -791,6 +922,7 @@ export function FormLinkPanel({
             reviewLink={review}
             liaisonEmail={liaisonEmail}
             onIssue={handleIssueReview}
+            onReplace={handleReplaceReview}
           />
 
           <div className="space-y-2 rounded-lg border border-gridline bg-background p-3">

@@ -2352,6 +2352,45 @@ Owner: frontend-designer (page), database-engineer (`app_settings` column).
 
 ---
 
+## US-60: Kill and replace a counselor review link
+
+As staff, I want to shut off a counselor review link that was shared by mistake
+and issue a new one, without raw SQL, so a leaked link stops exposing the
+school's roster right away.
+
+Decided by Grant, 2026-10-19: one action that kills the old link and replaces it,
+a couple of deliberate clicks, hard to do by accident. Prompted by the counselor
+handout (docs/handouts/), which tells counselors to contact us if a review link
+gets out; before this, nothing in the app could act on that.
+
+Acceptance criteria:
+- [x] `replace_review_token(review_token_id)`: admin-only, security definer;
+  locks the row, refuses an already-revoked link (`already_replaced`, so a double
+  click can't kill twice), revokes every live link for the school, and mints the
+  new one in the same transaction.
+- [x] "Replace this link…" on the live review-link row opens a red confirm box;
+  "Kill old link and create new one" stays disabled until "I understand the
+  current link will stop working right away" is ticked. Closes and resets on any
+  failure, and if the row's link changes underneath it.
+- [x] The box says where the new link is emailed (the school's liaison email,
+  which is what "Email review link" and the digest use), not a typed address.
+- [x] reach-reviewer gate: migration safe for dev; its High (email field
+  misleading) and Medium (box re-armed after `already_replaced`) findings fixed
+  and re-checked.
+- [x] `20261019130000_replace_review_token.sql` applied to dev by Grant, 2026-10-20.
+- [x] e2e green (`intake-link-management.spec.ts`, runs only on the test-owned
+  "AutoTest CounselorEmail ReviewFixture" school, never a real one).
+
+Known gap: when the counselor changes, the school's liaison email must be
+corrected before emailing the new link, and the app can't edit a school yet
+(US-49).
+
+Status: **In review** — built on `dev` 2026-10-19. Prod untouched until a
+Software Acceptance Review.
+Owner: built in a Claude session.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

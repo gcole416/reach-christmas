@@ -1004,6 +1004,48 @@ export async function issueReviewLink(
   };
 }
 
+export type ReplaceReviewLinkResult =
+  | { ok: true; token: string; reviewPath: string; expiresAt: string | null; issuedToEmail: string }
+  | {
+      ok: false;
+      error: string;
+      reason?: "forbidden" | "not_found" | "confidential" | "already_replaced" | "unknown";
+    };
+
+/**
+ * Kills a school's counselor review link and issues a new one, atomically
+ * (replace_review_token, 20261019130000). The old link stops working on the
+ * counselor's next request. Blank `issuedToEmail` keeps the old email.
+ * Admin-only (checked in the database).
+ */
+export async function replaceReviewLink(input: {
+  reviewLinkId: string;
+  issuedToEmail?: string | null;
+}): Promise<ReplaceReviewLinkResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("replace_review_token", {
+    p_review_token_id: input.reviewLinkId,
+    p_issued_to_email: input.issuedToEmail ?? null,
+  });
+  if (error) return { ok: false, error: error.message, reason: "unknown" };
+
+  const res = data as any;
+  if (!res?.ok) {
+    return {
+      ok: false,
+      error: res?.error ?? GENERIC_ERROR,
+      reason: res?.reason ?? "unknown",
+    };
+  }
+  return {
+    ok: true,
+    token: res.token,
+    reviewPath: res.review_path ?? reviewPath(res.token),
+    expiresAt: res.expires_at ?? null,
+    issuedToEmail: res.issued_to_email ?? "",
+  };
+}
+
 // =============================================================================
 // Counselor email (US-41 / US-42)
 // =============================================================================

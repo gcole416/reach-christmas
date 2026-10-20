@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reach Christmas: How It Works</title>
+<!-- One-page counselor handout: what the app does on OneLife Church's side.
+     Rendered to how-it-works.pdf (US Letter). Copy rules: "household(s)" in
+     person-facing text, no em-dashes. Privacy claims must match AGENTS.md's
+     role table and the sponsor card fields in send-sponsor-card-email. -->
+<style>
+  @page { size: Letter; margin: 0; }
+  :root {
+    --ink: #0b0b0b; --ink2: #52514e; --muted: #898781; --line: rgba(11,11,11,.12);
+    --bg: #ffffff; --soft: #f6f6f3;
+    --blue: #2a78d6; --aqua: #1baf7a; --violet: #4a3aa7; --yellow: #a1750d;
+    --good: #0b7f3a; --crit: #b42318;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; }
+  .page { width: 8.5in; height: 11in; padding: .5in .55in .45in; display: flex; flex-direction: column; }
+  .kicker { font-size: 8.5pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 21pt; margin: 2px 0 4px; letter-spacing: -.01em; }
+  .lede { color: var(--ink2); margin: 0 0 14px; max-width: 6.8in; }
+  .flow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-bottom: 16px; }
+  .flow div { position: relative; text-align: center; padding: 0 4px; }
+  .flow .dot { width: 30px; height: 30px; border-radius: 50%; margin: 0 auto 5px; display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 11pt; background: var(--blue); position: relative; z-index: 1; }
+  .flow .you .dot { background: var(--good); }
+  .flow div:not(:last-child)::after { content: ""; position: absolute; top: 15px; left: calc(50% + 15px); right: calc(-50% + 15px);
+    height: 2px; background: #c9d6e8; }
+  .flow b { display: block; font-size: 9.5pt; }
+  .flow span { display: block; font-size: 8.5pt; color: var(--ink2); line-height: 1.25; margin-top: 1px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; border-top: 4px solid var(--c, var(--blue)); }
+  .card h2 { font-size: 11.5pt; margin: 0 0 4px; }
+  .card p { margin: 0; color: var(--ink2); font-size: 9.8pt; }
+  .card p + p { margin-top: 4px; }
+  h3 { font-size: 12pt; margin: 16px 0 7px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.6pt; }
+  th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td:first-child { font-weight: 600; white-space: nowrap; width: 1%; }
+  .no { color: var(--crit); }
+  .ask { margin-top: 16px; border-radius: 10px; background: #fdeeec; border: 1.5px solid var(--crit); padding: 11px 14px; }
+  .ask h2 { font-size: 11.5pt; margin: 0 0 6px; color: var(--crit); }
+  .ask-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ask p { margin: 0; font-size: 9.8pt; color: var(--ink); }
+  .ok { color: var(--good); }
+  .footer { margin-top: auto; border-top: 1px solid var(--line); padding-top: 9px; font-size: 9.3pt; color: var(--ink2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="kicker">Reach Christmas 2026 · OneLife Church</div>
+  <h1>What happens after a household registers</h1>
+  <p class="lede">A quick tour of the Reach Christmas app from OneLife Church's side, so you know where each household
+    goes once you've confirmed it, and who sees what along the way.</p>
+
+  <div class="flow">
+    <div><div class="dot">1</div><b>Registers</b><span>Household uses your school's link</span></div>
+    <div class="you"><div class="dot">2</div><b>You confirm</b><span>On your private review page</span></div>
+    <div><div class="dot">3</div><b>We bring it in</b><span>Staff add it to this year's drive</span></div>
+    <div><div class="dot">4</div><b>Sponsor matched</b><span>Each child gets a sponsor</span></div>
+    <div><div class="dot">5</div><b>Gifts gathered</b><span>Tracked until every gift is in</span></div>
+    <div class="you"><div class="dot">6</div><b>Delivered to you</b><span>At your school, before Christmas</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="card" style="--c: var(--blue)">
+      <h2>Registration links, one per school</h2>
+      <p>We create your school's household registration link and your private review link. Each registration link has an
+        end date, we can see how many households have used it, and we can switch off a registration link the moment it's misused.</p>
+      <p>One link works in English and Spanish.</p>
+    </div>
+    <div class="card" style="--c: var(--aqua)">
+      <h2>Only confirmed households come in</h2>
+      <p>A registration reaches our team only after you confirm it. Staff then bring it into the drive with one click.</p>
+      <p>If the same household looks registered at two schools, the app flags it and we pause that child until it's sorted
+        out, so no child ends up with two sponsors or none.</p>
+    </div>
+    <div class="card" style="--c: var(--violet)">
+      <h2>Sponsors, matched by our staff</h2>
+      <p>Church members sign up to sponsor through OneLife's Church Center. Our staff assign each child to a sponsor, who
+        receives a gift card with the child's first name, grade, sizes, wish list, and any specific needs, aiming for
+        about $50 per child.</p>
+    </div>
+    <div class="card" style="--c: var(--yellow)">
+      <h2>Gifts tracked to your door</h2>
+      <p>We track every gift from the sponsor to our team, fill any gaps from a shopping list, and deliver each household's
+        gifts to you at the school. High schoolers (grades 9 to 12) aren't sponsored; they're on their own list for a
+        shop day.</p>
+    </div>
+  </div>
+
+  <h3>Who sees what</h3>
+  <table>
+    <tr><th>Who</th><th>Sees</th><th>Never sees</th></tr>
+    <tr><td>Sponsors</td><td>First name, grade, sizes, wish list, specific needs</td>
+      <td class="no">Last name, address, school, or any household contact information</td></tr>
+    <tr><td>You (counselor)</td><td>First name, age, and grade for your school's households</td>
+      <td class="no">Wish lists, sizes, or household contact details</td></tr>
+    <tr><td>OneLife staff &amp; volunteers</td><td>Full registrations, based on their role</td>
+      <td class="no">Households marked confidential, unless specifically approved</td></tr>
+  </table>
+
+  <div class="ask">
+    <h2>What keeps this safe depends on two links</h2>
+    <div class="ask-row">
+      <p><b class="ok">Household registration link:</b> send it only to the households you're referring. Every
+        registration through it lands on your school's list, so a link posted publicly lets strangers register under
+        your school.</p>
+      <p><b class="no">Your counselor review link:</b> never share it with anyone, including families and coworkers.
+        It opens your school's full list of registered children. If it's ever shared by mistake, tell us right away.</p>
+    </div>
+  </div>
+
+  <div class="footer">Access rules are enforced by the system itself, not just hidden on screen, and every change our team
+    makes is recorded in an audit log. Families never need to give an address, and children are listed by first name only.</div>
+</div>
+</body>
+</html>

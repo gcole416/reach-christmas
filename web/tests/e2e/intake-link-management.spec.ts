@@ -27,6 +27,8 @@ import {
 
 const LABEL_PREFIX = "AutoTest LinkMgmt";
 const REVIEW_EMAIL_PREFIX = "autotest-linkmgmt";
+/** counselor-email.spec's test-owned school; see the replace test below. */
+const REVIEW_FIXTURE_SCHOOL_NAME = "AutoTest CounselorEmail ReviewFixture";
 
 /** Each school's controls live inside a collapsed <details> dropdown (US-27
  *  tweak). Force it open before interacting with anything inside. */
@@ -240,5 +242,85 @@ test.describe("staff registration-link management (US-27)", () => {
     });
     expect((second.data as { reused: boolean }).reused).toBe(true);
     expect((second.data as { token: string }).token).toBe((first.data as { token: string }).token);
+  });
+
+  // Kill-and-replace (20261019130000). Runs ONLY against counselor-email.spec's
+  // test-owned fixture school, never a real one: replacing a school's link kills
+  // the link its counselor already has, and this suite runs against shared dev.
+  // That spec re-issues the fixture's link whenever it has no live one, so
+  // leaving it on the replacement here is harmless.
+  test("admin kills and replaces a counselor review link, with a confirm step", async ({ page }) => {
+    test.setTimeout(120_000);
+    const admin = await signInAs("admin");
+    const driveId = await getOpenDriveId(admin);
+    const { data: fixture } = await admin
+      .from("drive_schools")
+      .select("id, schools!inner(name)")
+      .eq("drive_id", driveId)
+      .eq("schools.name", REVIEW_FIXTURE_SCHOOL_NAME)
+      .maybeSingle();
+    test.skip(!fixture, `"${REVIEW_FIXTURE_SCHOOL_NAME}" isn't on the open drive yet; run counselor-email.spec once first.`);
+    const driveSchoolId = (fixture as { id: string }).id;
+
+    const issued = await admin.rpc("issue_review_token", {
+      p_drive_school_id: driveSchoolId,
+      p_issued_to_email: "autotest-counselor-review-fixture@autotest.example.com",
+    });
+    expect((issued.data as { ok: boolean }).ok, JSON.stringify(issued.data)).toBe(true);
+    const oldToken = (issued.data as { token: string }).token;
+    const { data: oldRow } = await admin.from("review_tokens").select("id").eq("token", oldToken).single();
+    const oldId = (oldRow as { id: string }).id;
+
+    await page.goto("/admin/login");
+    await page.getByLabel(/email/i).fill(process.env.TEST_ADMIN_EMAIL!);
+    await page.getByLabel(/password/i).fill(process.env.TEST_ADMIN_PASSWORD!);
+    await page.getByRole("button", { name: /sign in/i }).click();
+    await page.waitForURL("**/admin");
+    await page.goto("/admin/submissions");
+
+    const panel = page.getByRole("region", { name: /registration links/i });
+    const group = panel.locator("[data-school-group]").filter({ hasText: REVIEW_FIXTURE_SCHOOL_NAME });
+    await openSchoolGroup(group);
+    // By role: the open confirm form's aria-label also contains "counselor review link".
+    const reviewInput = group.getByRole("textbox", { name: "Counselor review link" });
+    await expect(reviewInput).toHaveValue(`/review/${oldToken}`);
+
+    // Cancel leaves the link alone.
+    await group.getByRole("button", { name: "Replace this link…" }).click();
+    await group.getByRole("button", { name: "Cancel" }).click();
+    await expect(reviewInput).toHaveValue(`/review/${oldToken}`);
+
+    // The kill button stays disabled until the acknowledgement is ticked.
+    await group.getByRole("button", { name: "Replace this link…" }).click();
+    const kill = group.getByRole("button", { name: "Kill old link and create new one" });
+    await expect(kill).toBeDisabled();
+    await group.getByLabel("I understand the current link will stop working right away.").check();
+    await expect(kill).toBeEnabled();
+    await kill.click();
+
+    await expect(panel.getByText(/Old review link killed/)).toBeVisible();
+    await expect(group.getByRole("form", { name: "Replace counselor review link" })).toHaveCount(0);
+    await expect(reviewInput).not.toHaveValue(`/review/${oldToken}`);
+    const newToken = (await reviewInput.inputValue()).replace("/review/", "");
+    expect(newToken.length).toBeGreaterThanOrEqual(40);
+
+    // The old token is dead to a counselor; the new one opens the roster.
+    const anon = anonClient();
+    const dead = await anon.rpc("get_review_roster", { p_review_token: oldToken });
+    expect((dead.data as { ok: boolean }).ok).toBe(false);
+    const live = await anon.rpc("get_review_roster", { p_review_token: newToken });
+    expect((live.data as { ok: boolean }).ok, JSON.stringify(live.data)).toBe(true);
+
+    // A second replace of the already-killed row is a no-op, not a second kill.
+    const again = await admin.rpc("replace_review_token", { p_review_token_id: oldId });
+    expect((again.data as { reason?: string }).reason).toBe("already_replaced");
+    const stillLive = await anon.rpc("get_review_roster", { p_review_token: newToken });
+    expect((stillLive.data as { ok: boolean }).ok).toBe(true);
+
+    // A volunteer can't replace anything.
+    const volunteer = await signInAs("volunteer");
+    const { data: newRow } = await admin.from("review_tokens").select("id").eq("token", newToken).single();
+    const vRes = await volunteer.rpc("replace_review_token", { p_review_token_id: (newRow as { id: string }).id });
+    expect((vRes.data as { reason?: string })?.reason).toBe("forbidden");
   });
 });
