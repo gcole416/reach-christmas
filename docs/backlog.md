@@ -1512,6 +1512,17 @@ time. US-41/US-42 can be built and tested on dev against the sandbox sender, but
 neither is *usable for real counselors* until this lands. The swap is one string
 in one migration.
 
+Update (2026-10-19): still no domain. The roster's "Email all assigned" /
+"Remind all assigned" (send-sponsor-emails Edge Function) read their sender
+from the function's `EMAIL_FROM` secret instead of a hard-coded string, so for
+those it's `supabase secrets set EMAIL_FROM="Reach Christmas <...@domain>"`,
+per project, with no migration. The older plpgsql senders (claim code,
+counselor emails) and send-sponsor-card-email still hard-code
+`onboarding@resend.dev` and need the one-string swap. Until the domain is
+verified, Resend's sandbox sender delivers only to the Resend account owner's
+own address, so sponsor emails can be tested on dev but won't reach real
+sponsors.
+
 Also on the onboarding list from §11: have counselors allowlist the sending
 address before the drive opens.
 
