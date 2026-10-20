@@ -20,7 +20,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED.
+--   DEV:  APPLIED 2026-10-19 (the net revoke in the first version was a no-op; the function fix is live).
 --   PROD: NOT APPLIED. Waits for a Software Acceptance Review.
 
 begin;
