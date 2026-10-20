@@ -1985,9 +1985,12 @@ Acceptance criteria:
 - [x] `supabase/set_distribution_school_dropoff.sql` sets the drive and every
   school to `school_dropoff`; run on dev by Grant 2026-09-29.
 - [x] Six e2e specs/helpers updated for the removed field.
-- [ ] Run the e2e suite (the edited specs haven't been run yet).
-- [ ] dev publish: re-run `intake_demo_seed.sql` so the demo link drops the
-  pickup question.
+- [x] Run the e2e suite: intake/counselor/security specs 56/56 green on dev, 2026-10-19.
+- [x] dev publish (2026-10-19): ran `publish_intake_form.sql` (EN v4) and
+  `publish_intake_form_es.sql` (ES v2), then the new
+  `supabase/repoint_form_links_to_latest.sql` to move all 5 live links off
+  the Sept 9 v3 (which still asked the church-pickup question). Links keep
+  their URLs. On prod, run the same three in that order.
 - [x] Recording deliveries, decided (Grant, 2026-09-29): existing screens, no code
   change. Mark each gift Delivered on the Fulfillment board, and use Check in on
   the Distribution page to mean "handed to the counselor".
@@ -2194,6 +2197,10 @@ existing self-serve RPCs (`request_claim_code`, `claim_card_with_code`,
 `public_available_cards`) stay in the schema, just unused on this branch —
 see US-59. These five stories are the scoped plan; none are started.
 
+**Update (2026-10-19):** all five were built and landed directly on `dev`
+(`d0ce0cb`), not on the feature branch, so `dev`'s `/sponsor` now shows the
+Church Center link rather than the self-serve claim page.
+
 ## US-55: Sponsor roster data model — `sponsor_families`
 
 As staff, I want the app to hold our own list of sponsor sign-ups (name,
@@ -2217,7 +2224,7 @@ Acceptance criteria:
   confidentiality gate applies. Audit trigger, same as every other table in
   this schema.
 
-Status: **Backlog** — ready to start, nothing outstanding.
+Status: **In review** — built and committed on `dev` in `d0ce0cb` (2026-10-19); its migration(s) applied to dev 2026-10-19. Prod untouched.
 Owner: database-engineer.
 
 ---
@@ -2244,7 +2251,7 @@ Acceptance criteria:
 - [ ] Edit an entry (fix a typo'd email, bump capacity) and mark one
   inactive without deleting it (keeps assignment history intact).
 
-Status: **Backlog** — depends on US-55.
+Status: **In review** — built and committed on `dev` in `d0ce0cb` (2026-10-19); its migration(s) applied to dev 2026-10-19. Prod untouched.
 Owner: frontend-designer (page), database-engineer (import validation).
 
 ---
@@ -2270,7 +2277,7 @@ Acceptance criteria:
   (not just hidden in the UI), same guarantee `claim_card_with_code` already
   gives the public claim path.
 
-Status: **Backlog** — depends on US-55/56/58.
+Status: **In review** — built and committed on `dev` in `d0ce0cb` (2026-10-19); its migration(s) applied to dev 2026-10-19. Prod untouched.
 Owner: frontend-designer.
 
 ---
@@ -2301,7 +2308,7 @@ Acceptance criteria:
 - [ ] reach-reviewer gate (new write path onto `assignments`/`sponsors`;
   reuses the existing email step against a new data source).
 
-Status: **Backlog** — depends on US-55.
+Status: **In review** — built and committed on `dev` in `d0ce0cb` (2026-10-19); its migration(s) applied to dev 2026-10-19. Prod untouched.
 Owner: database-engineer.
 
 ---
@@ -2340,8 +2347,7 @@ Acceptance criteria:
   check, since this is the first time an assignment is ever created by a
   path other than `claim_card_with_code`).
 
-Status: **Backlog** — depends on nothing else in this epic; can be built
-any time, including before US-55–58 land.
+Status: **In review** — built and committed on `dev` in `d0ce0cb` (2026-10-19); its migration applied to dev 2026-10-19. Prod untouched.
 Owner: frontend-designer (page), database-engineer (`app_settings` column).
 
 ---

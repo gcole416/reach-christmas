@@ -73,7 +73,10 @@ test.describe("staff registration-link management (US-27)", () => {
     // --- create ------------------------------------------------------------
     await panel.getByRole("button", { name: "New registration link" }).click();
 
-    const schoolSelect = panel.getByLabel("School");
+    // Scoped to the new-link form: panel-wide, "School" also substring-matches
+    // every per-link input whose label names its school.
+    const newLinkForm = panel.locator("form").filter({ hasText: "New registration link" });
+    const schoolSelect = newLinkForm.getByLabel("School");
     const schoolName = (await schoolSelect.locator("option").first().textContent())?.trim() ?? "";
     expect(schoolName, "the drive has no schools to link").not.toBe("");
     await schoolSelect.selectOption({ index: 0 });
