@@ -223,6 +223,11 @@ export interface SponsorFamily {
   // always 0 there. Read it from `getSponsorFamilies(data)` in queries.ts,
   // which is what actually computes it.
   assignedCount: number;
+  // Computed the same way: active assignments whose card hasn't been emailed
+  // yet, and emailed assignments whose gift isn't at church yet (pledged or
+  // purchased), i.e. who "Email all assigned" / "Remind all assigned" reach.
+  unemailedCount: number;
+  awaitingGiftCount: number;
 }
 
 // One card per child, always (ADM-2 answer, 2026-08-18: "there is no longer
@@ -254,6 +259,9 @@ export interface Assignment {
   // (see queries.ts's getShoppingList) until the assignment reaches
   // 'verified'.
   volunteerNotes: string | null;
+  // When this card was emailed to its staff-assigned sponsor from the
+  // roster's "Email all assigned" (20261019120000). Null = not emailed yet.
+  cardEmailedAt: string | null;
 }
 
 export type AuditAction = "insert" | "update" | "delete";

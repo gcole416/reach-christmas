@@ -875,12 +875,19 @@ export function getSponsorFamilies(data: DataBundle): SponsorFamily[] {
   return data.sponsorFamilies
     .filter((sf) => sf.driveId === data.drive.id)
     .map((sf) => {
-      const assignedCount = data.assignments.filter((a) => {
+      const active = data.assignments.filter((a) => {
         if (a.status === "cancelled") return false;
         const sponsor = data.sponsors.find((s) => s.id === a.sponsorId);
         return sponsor?.sponsorFamilyId === sf.id;
-      }).length;
-      return { ...sf, assignedCount };
+      });
+      return {
+        ...sf,
+        assignedCount: active.length,
+        unemailedCount: active.filter((a) => a.cardEmailedAt == null).length,
+        awaitingGiftCount: active.filter(
+          (a) => a.cardEmailedAt != null && (a.status === "pledged" || a.status === "purchased"),
+        ).length,
+      };
     });
 }
 

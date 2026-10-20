@@ -8,6 +8,8 @@ import { SearchInput } from "@/components/SearchInput";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { SponsorFamilyFormModal } from "./SponsorFamilyFormModal";
 import { ImportSponsorsModal } from "./ImportSponsorsModal";
+import { SendSponsorEmailsModal } from "./SendSponsorEmailsModal";
+import type { SponsorEmailKind } from "@/lib/store";
 
 // US-56: the sponsor sign-up roster staff import from Church Center (plus any
 // stragglers added by hand). This page only lists/edits `sponsor_families`
@@ -16,11 +18,14 @@ import { ImportSponsorsModal } from "./ImportSponsorsModal";
 // intake form.
 
 type StatusFilter = "active" | "inactive" | "all";
+type SortOrder = "name" | "unassigned_first" | "assigned_first";
 
 export default function SponsorsAdminPage() {
   const { data, updateSponsorFamily } = useData();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("name");
+  const [sendKind, setSendKind] = useState<SponsorEmailKind | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTarget, setEditTarget] = useState<SponsorFamily | null>(null);
@@ -31,13 +36,23 @@ export default function SponsorsAdminPage() {
 
   const allSponsorFamilies = getSponsorFamilies(data);
   const q = search.trim().toLowerCase();
-  const sponsorFamilies = allSponsorFamilies.filter((sf) => {
-    const statusMatches =
-      statusFilter === "all" ? true : statusFilter === "active" ? sf.isActive : !sf.isActive;
-    const searchMatches =
-      !q || [sf.displayName, sf.contactEmail ?? "", sf.contactPhone ?? ""].join(" ").toLowerCase().includes(q);
-    return statusMatches && searchMatches;
-  });
+  const sponsorFamilies = allSponsorFamilies
+    .filter((sf) => {
+      const statusMatches =
+        statusFilter === "all" ? true : statusFilter === "active" ? sf.isActive : !sf.isActive;
+      const searchMatches =
+        !q || [sf.displayName, sf.contactEmail ?? "", sf.contactPhone ?? ""].join(" ").toLowerCase().includes(q);
+      return statusMatches && searchMatches;
+    })
+    .sort((a, b) => {
+      // "Has a child" first or last, then by name within each group.
+      if (sortOrder !== "name") {
+        const aHas = a.assignedCount > 0 ? 1 : 0;
+        const bHas = b.assignedCount > 0 ? 1 : 0;
+        if (aHas !== bHas) return sortOrder === "assigned_first" ? bHas - aHas : aHas - bHas;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    });
 
   async function handleToggleActive(sf: SponsorFamily) {
     setBusyId(sf.id);
@@ -60,7 +75,19 @@ export default function SponsorsAdminPage() {
           </>
         }
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSendKind("card_assignment")}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary"
+            >
+              Email all assigned
+            </button>
+            <button
+              onClick={() => setSendKind("reminder")}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary"
+            >
+              Remind all assigned
+            </button>
             <button
               onClick={() => setShowImport(true)}
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary"
@@ -88,6 +115,16 @@ export default function SponsorsAdminPage() {
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
             <option value="all">All</option>
+          </select>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            aria-label="Sort sponsors"
+            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
+          >
+            <option value="name">Sort: name</option>
+            <option value="unassigned_first">Sort: no child yet first</option>
+            <option value="assigned_first">Sort: has a child first</option>
           </select>
           <p className="text-sm text-ink-muted">
             {sponsorFamilies.length} of {allSponsorFamilies.length}
@@ -131,6 +168,11 @@ export default function SponsorsAdminPage() {
                       {sf.capacity != null ? ` / ${sf.capacity}` : ""}
                     </span>
                     {atCapacity ? <div className="text-xs text-status-warning">At capacity</div> : null}
+                    {sf.unemailedCount > 0 ? (
+                      <div className="text-xs text-ink-muted">{sf.unemailedCount} not emailed yet</div>
+                    ) : sf.assignedCount > 0 ? (
+                      <div className="text-xs text-ink-muted">Emailed</div>
+                    ) : null}
                   </td>
                   <td className="max-w-xs px-4 py-3 text-ink-secondary">
                     {sf.notes ? <span className="line-clamp-2">{sf.notes}</span> : "—"}
@@ -178,6 +220,13 @@ export default function SponsorsAdminPage() {
         <SponsorFamilyFormModal sponsorFamily={editTarget} onClose={() => setEditTarget(null)} />
       ) : null}
       {showImport ? <ImportSponsorsModal onClose={() => setShowImport(false)} /> : null}
+      {sendKind ? (
+        <SendSponsorEmailsModal
+          kind={sendKind}
+          sponsorFamilies={allSponsorFamilies}
+          onClose={() => setSendKind(null)}
+        />
+      ) : null}
     </div>
   );
 }

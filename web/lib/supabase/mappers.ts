@@ -178,6 +178,8 @@ export function mapSponsorFamily(row: any): SponsorFamily {
     isActive: row.is_active,
     createdAt: row.created_at,
     assignedCount: 0,
+    unemailedCount: 0,
+    awaitingGiftCount: 0,
   };
 }
 
@@ -213,5 +215,6 @@ export function mapAssignment(row: any): Assignment {
     verifiedAt: row.verified_at,
     deliveredAt: row.delivered_at,
     volunteerNotes: row.volunteer_notes,
+    cardEmailedAt: row.card_emailed_at ?? null,
   };
 }

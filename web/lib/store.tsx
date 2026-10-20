@@ -155,6 +155,17 @@ export type AssignCardToSponsorFamilyResult =
   | { ok: true; sponsorId: string; assignmentId: string }
   | { ok: false; error: string };
 
+// The roster's "Email all assigned" / "Remind all assigned" — see
+// supabase/functions/send-sponsor-emails and 20261019120000.
+export type SponsorEmailKind = "card_assignment" | "reminder";
+
+export interface SendSponsorEmailsResult {
+  ok: boolean;
+  sent: number;
+  failed: { sponsorName: string; reason: string }[];
+  error?: string;
+}
+
 export interface FamilyDistributionInput {
   scheduledPickupAt: string | null;
   distributionMethodOverride: DistributionMethod | "inherit";
@@ -215,6 +226,7 @@ interface DataContextValue {
   ) => Promise<BulkImportSponsorFamiliesResult>;
   updateSponsorFamily: (id: string, patch: UpdateSponsorFamilyPatch) => Promise<Result>;
   assignCardToSponsorFamily: (cardId: string, sponsorFamilyId: string) => Promise<AssignCardToSponsorFamilyResult>;
+  sendSponsorEmails: (kind: SponsorEmailKind) => Promise<SendSponsorEmailsResult>;
   savedViews: SavedView[];
   addSavedView: (view: Omit<SavedView, "id">) => void;
   deleteSavedView: (id: string) => void;
@@ -1266,6 +1278,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true, sponsorId: result.sponsor_id, assignmentId: result.assignment_id };
   }
 
+  // Calls the send-sponsor-emails Edge Function with this staff member's own
+  // session. Each call sends one batch; keep calling until nothing is left,
+  // so one click works through the whole roster.
+  async function sendSponsorEmails(kind: SponsorEmailKind): Promise<SendSponsorEmailsResult> {
+    const supabase = createClient();
+    let sent = 0;
+    const failedByName = new Map<string, string>();
+    let error: string | undefined;
+
+    for (let round = 0; round < 50; round++) {
+      const { data: body, error: invokeError } = await supabase.functions.invoke("send-sponsor-emails", {
+        body: { kind },
+      });
+      if (invokeError || !body) {
+        // A non-2xx reply comes back as an error whose `context` is the raw
+        // Response; the function's own { error } message is in its body.
+        let detail: string | undefined;
+        try {
+          const ctx = (invokeError as { context?: Response } | null)?.context;
+          detail = ctx ? (await ctx.json())?.error : undefined;
+        } catch {
+          detail = undefined;
+        }
+        error = detail ?? invokeError?.message ?? "Couldn't reach the email service.";
+        break;
+      }
+      sent += body.sent ?? 0;
+      for (const f of body.failed ?? []) failedByName.set(f.sponsorName, f.reason);
+      if (!body.ok) {
+        error = body.error ?? "Sending stopped part-way. Check the list below, then try again.";
+        break;
+      }
+      // Failed sponsors stay leased for 10 minutes, so each round moves on to
+      // new households; an empty batch means there's nobody left to try.
+      if ((body.remaining ?? 0) === 0 || (body.batchSize ?? 0) === 0) break;
+    }
+
+    await refresh();
+    const failed = [...failedByName].map(([sponsorName, reason]) => ({ sponsorName, reason }));
+    return { ok: !error && failed.length === 0, sent, failed, error };
+  }
+
   function addSavedView(view: Omit<SavedView, "id">) {
     setSavedViews((prev) => [...prev, { ...view, id: crypto.randomUUID() }]);
   }
@@ -1300,6 +1354,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         bulkImportSponsorFamilies,
         updateSponsorFamily,
         assignCardToSponsorFamily,
+        sendSponsorEmails,
         savedViews,
         addSavedView,
         deleteSavedView,
