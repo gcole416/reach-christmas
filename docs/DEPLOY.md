@@ -1,5 +1,13 @@
 # Deploy to Vercel — runbook
 
+> **Updated 2026-10-20.** For the 2026 go-live, follow
+> [PROD_LAUNCH_CHECKLIST.md](PROD_LAUNCH_CHECKLIST.md) end to end: prod is a
+> **fresh Supabase project** built from all 34 migrations
+> ([MIGRATION_LEDGER.md](MIGRATION_LEDGER.md)), launched with email off. That
+> replaces Phase 0 and Phase 5 below. Phases 1 to 4 (the Vercel project, its
+> two environment variables, and the `main` = Production branch mapping) still
+> describe the hosting side accurately.
+
 Written 2026-08-19 for whoever (human or agent) actually executes this deploy —
 it assumes no prior context beyond this repo. If that's you: read the whole
 thing before running anything, especially **Phase 0**, which is the part most
@@ -40,94 +48,17 @@ checked, stop and resolve it first — don't work around it.
   [`web/.env.local.example`](../web/.env.local.example) and the "Never use the
   secret key" rule this project has enforced everywhere else.
 
-## Phase 0 — Confirm prod's database schema is actually current
+## Phase 0 — Prod's database (superseded 2026-10-20)
 
-**This is the part that actually matters. Do not rush it.**
-
-As of 2026-08-18, prod's exact migration state was unknown — Grant's own
-words, answering DB-1 in [`docs/OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md): *"I
-have no idea, I haven't done a good job keeping up with what is in prod. I
-assume everything has been on dev only."* There is no migration ledger (see
-DB-1/DB-25 in that same doc) — the only way to know what prod actually has is
-to check it directly, table by table, against what the code expects.
-
-**Do this like the dev migration session earlier today: one file at a time,
-verify the result, then move to the next. Never batch-paste the whole
-`supabase/migrations/` folder at once, and never do this without a human
-(Grant) present reviewing each result** — a `drop column`/`drop constraint`
-statement isn't safely re-runnable if something's already partially applied,
-and this is the database a real church drive may come to depend on.
-
-### Step 1: find out where prod actually stands
-
-Run this in the **prod** project's SQL Editor (read-only, safe):
-
-```sql
--- Does prod have today's three newest features? (fastest signal of how far behind it is)
-select
-  exists (select 1 from information_schema.columns where table_name = 'schools' and column_name = 'liaison_name') as has_adm3_school_liaison,
-  exists (select 1 from information_schema.columns where table_name = 'cards' and column_name = 'copy_number') as still_has_old_adm2_copy_number,
-  exists (select 1 from information_schema.tables where table_name = 'card_claim_verifications') as has_spn3_table,
-  exists (select 1 from information_schema.columns where table_name = 'families' and column_name = 'is_test_data') as has_is_test_data,
-  exists (select 1 from information_schema.columns where table_name = 'assignments' and column_name = 'verified_at') as has_verified_pipeline_stage,
-  exists (select 1 from information_schema.tables where table_name = 'profiles') as has_init_schema_at_all;
-```
-
-- If `has_init_schema_at_all` is `false`: prod has **no schema at all** — apply
-  every single file in [`supabase/migrations/`](../supabase/migrations/) in
-  filename order (they're timestamp-prefixed, so alphabetical = chronological),
-  starting from `20260708120000_init.sql`. This is the simplest case: nothing
-  to reconcile, just run them all in order.
-- If `has_init_schema_at_all` is `true` but the later flags are a mix of
-  `true`/`false`: prod has *some* history. List every file in
-  `supabase/migrations/` (`ls supabase/migrations/` or the equivalent), and
-  for each one — oldest first — check whether its effect is already present
-  (a quick read of the file tells you what to check for) before running it.
-  Skip ones already applied; run ones that aren't, in order, verifying after
-  each (same pattern as the dev walkthrough in this session's history — run
-  one, check for an error, sanity-query the result, then move to the next).
-- If every flag comes back `true`: prod is already current as of today's work.
-  Skip to Phase 1.
-
-### Step 2: apply what's missing
-
-For each migration file that Step 1 determined isn't applied yet, in
-chronological (filename) order:
-
-1. Open the file, copy its full contents.
-2. Paste into the **prod** SQL Editor, run it.
-3. Confirm no error. If there IS an error, **stop, do not proceed to the next
-   file**, and figure out why before continuing — the same way dev's ADM-2
-   migration was blocked by leftover duplicate-card data earlier today; prod
-   may have its own real-data equivalent of that problem, and real prod data
-   deserves more care than dev's disposable test data did.
-4. If a migration comment mentions a backfill or data-shape assumption (e.g.
-   `20260818150000_school_liaison_on_schools.sql`'s liaison backfill,
-   documented in `docs/OPEN_QUESTIONS.md`'s ADM-3 entry), run whatever
-   pre-check query that migration's comments or the linked OPEN_QUESTIONS.md
-   entry recommends, on **prod's real data**, before running it — a check
-   that was "fine on dev" isn't automatically fine on prod.
-
-### Step 3: confirm the Resend key is set for prod too
-
-`request_claim_code()` needs its own Vault secret per project — the one Grant
-stored in **dev**'s Vault does not carry over to prod. Once
-`20260818160000_email_verified_claims.sql` is applied to prod, run in the
-**prod** SQL Editor:
-
-```sql
-select vault.create_secret('re_xxxxxxxx', 'resend_api_key', 'Resend API key for claim verification emails');
-```
-
-(A second Resend API key, or the same one reused — either is fine; that's
-Grant's call, not a technical constraint.)
-
-### Step 4: re-run Step 1's query against prod
-
-All six flags should now read `true`/`true where expected` (note
-`still_has_old_adm2_copy_number` should be **`false`** — that one's inverted,
-it's checking for something that should be *gone*). If anything's still off,
-do not proceed to Phase 1.
+The audit-and-patch approach that used to live here assumed prod could be
+brought current in place. Read-only probing on 2026-10-20 showed the old prod
+project had only part of the July schema and no record of what was applied,
+so Grant decided to start prod as a **fresh project** instead. Follow
+[PROD_LAUNCH_CHECKLIST.md](PROD_LAUNCH_CHECKLIST.md) sections 1 to 3, using
+[MIGRATION_LEDGER.md](MIGRATION_LEDGER.md) for the migration order. The rule
+that mattered here still holds: one migration per run, check each result, and
+never deploy new code against a database that hasn't been brought up to date
+first.
 
 ## Phase 1 — Create the Vercel project
 
@@ -213,31 +144,13 @@ it's worth Grant explicitly confirming rather than assuming.
    go live on — no custom domain is required to start (see Phase 6 for that,
    optional).
 
-## Phase 5 — Post-deploy smoke test
+## Phase 5 — Post-deploy smoke test (superseded 2026-10-20)
 
-Don't consider this done until these pass **against the live deployed URL**,
-not just locally:
-
-- [ ] `/sponsor` loads and shows real (non-test) cards from **prod** — if it
-  shows dev's demo data (fake names like "Ella", schools like "Demo Elementary
-  North"), the env vars are pointed at the wrong project. Fix Phase 2, not the
-  code.
-- [ ] `/admin/login` loads and an actual staff account can sign in.
-- [ ] Open the deployed `/sponsor` page in a private/incognito window (no
-  staff session) and confirm: no confidential family ever appears, and the
-  card count matches what you'd expect for real open, unclaimed, non-test
-  cards — this is the live version of the anon-boundary check `AGENTS.md`
-  cares about most. If anything confidential-looking shows up, treat it as a
-  Sev1 and pull the deployment (Vercel → Deployments → ⋯ → "Instant Rollback"
-  to the previous one) before investigating further.
-- [ ] Try an actual sponsor claim end to end with a real email address you
-  control: request a code, confirm it arrives, enter it, confirm the claim
-  completes. This is the one thing dev testing couldn't fully prove either
-  (see SPN-3/SPN-4 in `docs/OPEN_QUESTIONS.md`) — prod is a good place to
-  finally close that loop, carefully, with a card you don't mind having
-  "claimed" as a test (clean it up afterward via the admin UI — cancel the
-  assignment — since prod has no `is_test_data` cleanup script the way dev
-  does).
+The old checks here tested the self-serve `/sponsor` claim page, which is now
+just a link to the Church Center sign-up (US-59). Use section 6 of
+[PROD_LAUNCH_CHECKLIST.md](PROD_LAUNCH_CHECKLIST.md) instead: signed-out
+redirects, a throwaway registration through a `SMOKE TEST` link that the
+counselor page rejects (so no household is ever created), and cleanup.
 
 ## Phase 6 — Custom domain (optional, not required to demo)
 

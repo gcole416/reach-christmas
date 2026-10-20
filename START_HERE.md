@@ -17,7 +17,8 @@ that's never optional. Everything else below is read on demand.
 | "Why does this feature work this way" / phasing | [DESIGN.md](DESIGN.md) | SCHEMA.md, unless the question is about table shape |
 | Blocked on a decision, or about to guess at one | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) — every open question in one place, by area; add to it rather than inventing an answer | DESIGN.md §8 / SCHEMA.md's open-questions section (both folded in there) |
 | Schema, RLS policies, DB functions, migrations | [SCHEMA.md](SCHEMA.md) | DESIGN.md §1-3 (background/workflow, not schema) |
-| Deploying to Vercel, or checking prod's DB is ready to | [docs/DEPLOY.md](docs/DEPLOY.md) — full runbook, written for an agent with no prior context | — |
+| Launching prod, or checking what's applied where | [docs/PROD_LAUNCH_CHECKLIST.md](docs/PROD_LAUNCH_CHECKLIST.md) (fresh-project go-live, email off) and [docs/MIGRATION_LEDGER.md](docs/MIGRATION_LEDGER.md) (which migrations are on dev/prod; wins over file headers) | — |
+| Vercel hosting setup | [docs/DEPLOY.md](docs/DEPLOY.md) — Phases 1-4 (project, env vars, branch mapping) | its Phase 0/5, superseded by the checklist |
 | Running a live-notes doc for a team meeting | [docs/templates/live-meeting-notes-template.html](docs/templates/live-meeting-notes-template.html) — copy, fill in the agenda, publish as an Artifact with the `artifact` capability so notes autosave and are shareable | — |
 | Resetting dev data, GitLab issue conventions | [memory.md](memory.md) | — |
 | Spawning or understanding a specialist agent | the matching file in [.claude/agents/](.claude/agents/) | the other five agents' files |

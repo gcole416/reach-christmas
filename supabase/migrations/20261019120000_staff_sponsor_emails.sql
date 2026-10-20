@@ -55,7 +55,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED.
+--   DEV:  APPLIED (verified 2026-10-20; docs/MIGRATION_LEDGER.md is the record).
 --   PROD: NOT APPLIED. Waits for a Software Acceptance Review.
 --
 -- reach-reviewer gate REQUIRED: new definer functions returning child card

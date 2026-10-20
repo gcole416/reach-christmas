@@ -3,8 +3,7 @@
 -- =============================================================================
 -- APPLY STATUS
 -- =============================================================================
---   DEV:  NOT YET APPLIED. Paste into the dev SQL editor (project
---         thvyntrxmahygesltgft — confirm the tab, .env.local points at prod).
+--   DEV:  APPLIED (verified 2026-10-20; docs/MIGRATION_LEDGER.md is the record).
 --   PROD: NOT APPLIED, and must not be until a Software Acceptance Review, same
 --         as 20260830120000_intake_forms.sql. Prod has no intake data at all.
 --

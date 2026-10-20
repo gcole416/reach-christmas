@@ -2098,18 +2098,25 @@ the 2026-09-30 review passes, Claude writes the checklist and ledger and Grant
 applies it.
 
 Acceptance criteria:
-- [ ] A ledger file listing every migration with its dev and prod apply dates,
+- [x] A ledger file listing every migration with its dev and prod apply dates,
   built from backlog records. The headers of `20260903120000`,
   `20260923120000` and `20260923130000` still say "DEV: NOT YET APPLIED" though
   the backlog records them applied, so the ledger becomes the source of truth.
-- [ ] `20260923140000_digest_cooldown.sql` applied to dev first.
-- [ ] An ordered prod checklist: DEPLOY.md's Phase 0 audit, every migration in
+- [x] `20260923140000_digest_cooldown.sql` applied to dev first.
+- [x] An ordered prod checklist: DEPLOY.md's Phase 0 audit, every migration in
   order (with ADM-3's backfill pre-check), the email key in Vault and `site_url`,
   publishing both form definitions, `set_distribution_school_dropoff.sql`, the
   digest paused, and the Vercel production branch and env vars.
 - [ ] Grant confirms prod backups in Supabase → Database → Backups (DOC-3).
 
-Status: **Backlog** — waits on the 2026-09-30 review.
+Status: **Docs done 2026-10-20; launch waits on the review.** Grant decided a
+**fresh prod project** (the old one held only part of the July schema, found by
+read-only probing) and an **email-off launch**. Written: docs/MIGRATION_LEDGER.md
+(all 34 verified applied on dev; five stale headers corrected),
+docs/PROD_LAUNCH_CHECKLIST.md, supabase/prod_setup.sql, DEPLOY.md Phase 0/5
+pointed at the checklist. Found while writing it: a fresh project allows public
+sign-ups and every new login is a volunteer, so the checklist turns sign-ups
+off before any data (step 1.3). Backups (DOC-3) are checklist step 1.4.
 Owner: Claude (checklist + ledger), Grant (applying it, backups).
 
 ---
