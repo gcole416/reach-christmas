@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { StatTile } from "@/components/StatTile";
+import { listSubmissions } from "@/lib/intake";
 import { OverdueBadge, StatusBadge } from "@/components/StatusBadge";
 import { useData } from "@/lib/store";
 import {
@@ -12,8 +14,31 @@ import {
 } from "@/lib/queries";
 import { AdminPageHeader } from "./AdminPageHeader";
 
+// Registrations waiting on staff or on a counselor. Same grouping as the
+// Registrations page (submissions/shared.ts): verified = ready to import;
+// submitted / under_review = waiting on the counselor.
+function useRegistrationCounts(driveId: string | undefined) {
+  const [counts, setCounts] = useState<{ ready: number; waiting: number } | null>(null);
+  useEffect(() => {
+    if (!driveId) return;
+    let cancelled = false;
+    listSubmissions(driveId).then((res) => {
+      if (cancelled || !res.ok) return;
+      setCounts({
+        ready: res.items.filter((s) => s.status === "verified").length,
+        waiting: res.items.filter((s) => s.status === "submitted" || s.status === "under_review").length,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [driveId]);
+  return counts;
+}
+
 export default function AdminPage() {
   const { data, viewerRole } = useData();
+  const registrations = useRegistrationCounts(data?.drive.id);
   if (!data) return null;
 
   const isAdmin = viewerRole === "admin";
@@ -22,7 +47,7 @@ export default function AdminPage() {
   const needsPrint = getCardsNeedingPrint(data);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Staff dashboard"
         description={
@@ -38,33 +63,45 @@ export default function AdminPage() {
         }
       />
 
-      <div
-        className={`grid grid-cols-2 gap-4 sm:grid-cols-3 ${
-          stats.onHoldCount > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"
-        }`}
-      >
-        <StatTile label="Children registered" value={stats.totalChildren} />
-        <StatTile
-          label="High schoolers"
-          value={stats.totalHighSchoolers}
-          hint="Shop day, not sponsored"
-        />
-        <StatTile
-          label="Cards claimed"
-          value={`${stats.cardsClaimed} / ${stats.totalCards}`}
-          hint={`${stats.cardsAvailable} still need a sponsor`}
-        />
-        <StatTile label="Gifts delivered" value={stats.cardsDelivered} />
-        <StatTile label="Sponsors overdue" value={stats.overdueCount} />
-        {stats.onHoldCount > 0 ? (
+      <section>
+        <h2 className="text-sm font-semibold text-ink-secondary">Needs your attention</h2>
+        <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatTile
-            label="On hold"
-            value={stats.onHoldCount}
-            hint="Duplicate review"
-            href="/admin/on-hold"
+            label="Ready to import"
+            value={registrations ? registrations.ready : "…"}
+            hint="Confirmed by the counselor"
+            href="/admin/submissions"
           />
-        ) : null}
-      </div>
+          <StatTile
+            label="Waiting on counselor"
+            value={registrations ? registrations.waiting : "…"}
+            hint="Registered, not yet confirmed"
+            href="/admin/submissions"
+          />
+          <StatTile label="On hold" value={stats.onHoldCount} hint="Duplicate review" href="/admin/on-hold" />
+          <StatTile
+            label="Need a sponsor"
+            value={stats.cardsAvailable}
+            hint="Ready to assign"
+            href="/admin/assign"
+          />
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-ink-secondary">This season so far</h2>
+        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <StatTile label="Children registered" value={stats.totalChildren} />
+          <StatTile
+            label="High schoolers"
+            value={stats.totalHighSchoolers}
+            hint="Shop day, not sponsored"
+          />
+          <StatTile label="Sponsors assigned" value={`${stats.cardsClaimed} / ${stats.totalCards}`} />
+          <StatTile label="Gifts delivered" value={stats.cardsDelivered} />
+          <StatTile label="Sponsors overdue" value={stats.overdueCount} />
+        </div>
+      </section>
 
       <section className="mt-12">
         <h2 className="text-xl font-semibold text-ink-primary">Sponsors running late</h2>

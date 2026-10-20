@@ -2391,6 +2391,46 @@ Owner: built in a Claude session.
 
 ---
 
+## US-61: Staff UI usability pass (fulfillment steps, nav, dashboard, distribution)
+
+Requested by Grant, 2026-10-20, after a screenshot review of all 16 admin pages
+at laptop and phone width.
+
+Acceptance criteria:
+- [x] Fulfillment: no "Purchased" step; Assigned goes straight to Received at
+  church. "Pledged" reads "Assigned" everywhere. UI-only: the enum keeps both
+  values, and a legacy purchased row shows, filters and advances as Assigned.
+  Overdue badges only on Assigned cards; five columns fit a laptop screen.
+- [x] Nav ordered by how the season runs, with a new Sponsors menu: Intake
+  (Registrations, On hold, Households, High schoolers, Add a household),
+  Sponsors (Sponsor roster, Assign sponsors, Print cards), Gifts (Fulfillment,
+  Shopping list, Distribution), Setup (Drives, Schools, Staff & permissions,
+  Audit log). Print cards stays (Grant, 2026-10-20).
+- [x] Nav renders once in the admin shell, directly under the site header, so
+  it's in the same place on every page; every admin page shares one width.
+  Account moved to the site header; the public "Sponsor a child" link is gone
+  from staff pages. Phone: nav fits one line ("Home" at phone width).
+- [x] Dashboard: "Needs your attention" row (Ready to import, Waiting on
+  counselor, On hold, Need a sponsor, each a link); "Cards claimed" is now
+  "Sponsors assigned".
+- [x] Distribution: copy matches school drop-off; "Mark handed to counselor" /
+  "Handed to counselor" for drop-off households, "Check in" kept for church
+  pickup; pickup time only where it applies.
+- [x] Copy: "Households" title, "Over capacity" on the roster, no em-dash on
+  Assign, Add a household no longer mentions the retired sponsor page.
+- [x] Stale tests: the self-serve /sponsor UI tests removed (RPCs still covered
+  in security.spec.ts); the M3(b) review_tokens check updated for US-28's
+  admin SELECT (volunteer still reads nothing, nobody can delete).
+
+Open (needs Grant): households with no school are numbered in two sequences
+(confidential, direct referral) that share the "Z" prefix, so dev has two
+different households both tagged Z1 and two cards both numbered Z1.1. Needs a
+distinct prefix or one shared sequence before cards are printed.
+
+Status: **In review** — built on `dev` 2026-10-20. No migration, no RLS change.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

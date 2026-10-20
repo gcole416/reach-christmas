@@ -6,9 +6,9 @@ import { FamiliesExplorer } from "./FamiliesExplorer";
 
 export default function FamilyAdminPage() {
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
-        title="Household admin"
+        title="Households"
         description="Every referral, one row per card. Confidential households are flagged, and their children only show a first initial to non-admin staff."
         action={
           <Link

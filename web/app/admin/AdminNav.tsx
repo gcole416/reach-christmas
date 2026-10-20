@@ -13,11 +13,17 @@ type NavItem =
   | { href: string; label: string }
   | { label: string; items: MenuEntry[] };
 
-// The admin nav, grouped by phase of the drive so it fits on one line without a
-// horizontal scrollbar. Every destination that used to be a flat tab still
-// exists and still points at the same route - the group menus are the only
-// change. "Add a household" is surfaced here too; it also has its own button on
-// the Households page.
+// The admin nav, grouped by phase of the drive and ordered the way the season
+// runs, left to right and top to bottom within each menu (Grant, 2026-10-20):
+// households come in (Intake), get sponsors (Sponsors), gifts come back and go
+// out (Gifts). To-do queues sit next to each other (Registrations, On hold);
+// "Add a household" is an action, so it's last. Drives leads Setup because
+// everything else hangs off the drive.
+//
+// It renders once, in the admin shell (AdminGate) directly under the site
+// header, so it sits in the same place on every page. Account lives in the
+// site header (AdminAccountMenu), which keeps this row to five items and on
+// one line at phone width.
 //
 // `adminOnly` entries drop out of the menu for volunteers. Those pages already
 // enforce admin-only writes at the database layer (and Staff degrades to
@@ -29,10 +35,18 @@ const NAV: NavItem[] = [
     label: "Intake",
     items: [
       { href: "/admin/submissions", label: "Registrations" },
+      { href: "/admin/on-hold", label: "On hold" },
       { href: "/admin/families", label: "Households" },
       { href: "/admin/high-schoolers", label: "High schoolers" },
       { href: "/admin/intake", label: "Add a household" },
-      { href: "/admin/on-hold", label: "On hold" },
+    ],
+  },
+  {
+    label: "Sponsors",
+    items: [
+      { href: "/admin/sponsors", label: "Sponsor roster" },
+      { href: "/admin/assign", label: "Assign sponsors" },
+      { href: "/admin/print", label: "Print cards" },
     ],
   },
   {
@@ -40,17 +54,14 @@ const NAV: NavItem[] = [
     items: [
       { href: "/admin/fulfillment", label: "Fulfillment" },
       { href: "/admin/shopping-list", label: "Shopping list" },
-      { href: "/admin/print", label: "Print cards" },
-      { href: "/admin/sponsors", label: "Sponsor roster" },
-      { href: "/admin/assign", label: "Assign sponsors" },
+      { href: "/admin/distribution", label: "Distribution" },
     ],
   },
-  { href: "/admin/distribution", label: "Distribution" },
   {
     label: "Setup",
     items: [
-      { href: "/admin/schools", label: "Schools" },
       { href: "/admin/drives", label: "Drives", adminOnly: true },
+      { href: "/admin/schools", label: "Schools" },
       { href: "/admin/staff", label: "Staff & permissions", adminOnly: true },
       { href: "/admin/audit", label: "Audit log", adminOnly: true },
     ],
@@ -62,7 +73,7 @@ function isActive(pathname: string, href: string) {
 }
 
 const LINK_BASE =
-  "-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue";
+  "-mb-px shrink-0 border-b-2 px-1.5 py-2 text-sm font-medium sm:px-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue";
 
 function Chevron() {
   return (
@@ -84,11 +95,14 @@ function NavMenu({
   items,
   align = "left",
   active,
+  flat = false,
 }: {
   label: string;
   items: MenuEntry[];
   align?: "left" | "right";
   active: boolean;
+  /** Header style: no tab underline. */
+  flat?: boolean;
 }) {
   const pathname = usePathname();
   // Store the route the menu was opened on rather than a bare boolean: when the
@@ -132,11 +146,17 @@ function NavMenu({
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
-        className={`${LINK_BASE} inline-flex items-center gap-1 ${
-          active || open
-            ? "border-cat-blue text-ink-primary"
-            : "border-transparent text-ink-secondary hover:text-ink-primary"
-        }`}
+        className={
+          flat
+            ? `inline-flex items-center gap-1 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-cat-blue ${
+                active || open ? "text-ink-primary" : "text-ink-secondary hover:text-ink-primary"
+              }`
+            : `${LINK_BASE} inline-flex items-center gap-1 ${
+                active || open
+                  ? "border-cat-blue text-ink-primary"
+                  : "border-transparent text-ink-secondary hover:text-ink-primary"
+              }`
+        }
       >
         {label}
         <Chevron />
@@ -182,20 +202,12 @@ function NavMenu({
 
 export function AdminNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const { viewerRole } = useData();
   const isAdmin = viewerRole === "admin";
 
-  async function handleSignOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/admin/login");
-    router.refresh();
-  }
-
   return (
-    <div className="mt-6 mb-8 flex flex-wrap items-stretch gap-y-1 border-b border-border">
-      <div className="flex min-w-0 flex-1 flex-wrap items-stretch gap-1">
+    <div className="flex flex-wrap items-stretch border-b border-border">
+      <div className="flex min-w-0 flex-1 flex-wrap items-stretch sm:gap-1">
         {NAV.map((item) => {
           if ("href" in item) {
             const active = isActive(pathname, item.href);
@@ -209,7 +221,15 @@ export function AdminNav() {
                     : "border-transparent text-ink-secondary hover:text-ink-primary"
                 }`}
               >
-                {item.label}
+                {item.href === "/admin" ? (
+                  // "Home" at phone width keeps all five items on one line.
+                  <>
+                    <span className="sm:hidden">Home</span>
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </>
+                ) : (
+                  item.label
+                )}
               </Link>
             );
           }
@@ -225,15 +245,33 @@ export function AdminNav() {
           );
         })}
       </div>
-      <NavMenu
-        label="Account"
-        align="right"
-        active={isActive(pathname, "/admin/account")}
-        items={[
-          { href: "/admin/account", label: "Change password" },
-          { action: handleSignOut, label: "Sign out" },
-        ]}
-      />
     </div>
+  );
+}
+
+/** Account menu for the site header on /admin pages (see SiteHeader). Needs no
+ *  admin data, so it works outside the DataProvider. */
+export function AdminAccountMenu() {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/admin/login");
+    router.refresh();
+  }
+
+  return (
+    <NavMenu
+      label="Account"
+      align="right"
+      flat
+      active={isActive(pathname, "/admin/account")}
+      items={[
+        { href: "/admin/account", label: "Change password" },
+        { action: handleSignOut, label: "Sign out" },
+      ]}
+    />
   );
 }

@@ -63,7 +63,7 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Your account"
         description="Change the password for the account you're signed in as. This doesn't affect anyone else's login."

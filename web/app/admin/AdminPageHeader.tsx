@@ -1,16 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AdminNav } from "./AdminNav";
 
 // The standard header band for every /admin page: an optional back link, the
-// title, one block of description text, and an optional action on the right,
-// then the nav.
-//
-// The point of routing every page through one component is that the nav ends
-// up in the same vertical position on every page: the description is capped at
-// one measure (max-w-2xl) so it wraps predictably, and the spacing between
-// title, description, and nav is fixed here rather than re-typed (and drifting)
-// on each page.
+// title, one block of description text, and an optional action on the right.
+// The nav is NOT here: it renders once in the admin shell (AdminGate), above
+// every page, so it never moves with the length of a page's description.
 export function AdminPageHeader({
   title,
   description,
@@ -23,7 +17,7 @@ export function AdminPageHeader({
   backLink?: { href: string; label: string };
 }) {
   return (
-    <div>
+    <div className="mb-8">
       {backLink ? (
         <Link
           href={backLink.href}
@@ -43,9 +37,8 @@ export function AdminPageHeader({
             <p className="mt-2 max-w-2xl text-ink-secondary">{description}</p>
           ) : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
+        {action ? <div className="max-w-full">{action}</div> : null}
       </div>
-      <AdminNav />
     </div>
   );
 }

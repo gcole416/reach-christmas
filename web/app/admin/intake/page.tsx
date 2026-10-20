@@ -105,13 +105,13 @@ export default function IntakePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10 *:max-w-4xl">
       <AdminPageHeader
         title="Add a household"
         description={
           <>
-            Enter a referral into {data.drive.name}. This replaces a row (or several) in the old
-            spreadsheet, and each child gets a claimable card on the sponsor page as soon as you save.
+            Enter a referral into {data.drive.name} by hand, for a household that didn&apos;t use a
+            registration link. Each child gets a card, ready to assign a sponsor, as soon as you save.
           </>
         }
       />

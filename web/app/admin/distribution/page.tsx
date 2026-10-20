@@ -88,10 +88,10 @@ export default function DistributionPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Distribution"
-        description="One row per household. Set a distribution method or pickup time, and check a household in as they actually come through. However this year's drive ends up running (school drop-off, a single pickup event, or a mix), it's tracked here per household rather than assumed drive-wide."
+        description="One row per household. OneLife Church delivers each household's gifts to its school counselor; mark the household handed off once its gifts are with the counselor. A household switched to church pickup gets a pickup time and a check-in instead."
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -116,8 +116,8 @@ export default function DistributionPage() {
           className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
         >
           <option value="all">All households</option>
-          <option value="checked_in">Checked in</option>
-          <option value="not_checked_in">Not checked in</option>
+          <option value="not_checked_in">Not handed off yet</option>
+          <option value="checked_in">Handed off</option>
         </select>
         <p className="ml-auto text-sm text-ink-muted">
           {rows.length} of {allRows.length}
@@ -130,15 +130,20 @@ export default function DistributionPage() {
             <tr>
               <th className="px-4 py-3 font-medium">Household</th>
               <th className="px-4 py-3 font-medium">Method</th>
-              <th className="px-4 py-3 font-medium">Scheduled pickup</th>
+              <th className="px-4 py-3 font-medium">Pickup time</th>
               <th className="px-4 py-3 font-medium">Progress</th>
-              <th className="px-4 py-3 font-medium">Checked in</th>
+              <th className="px-4 py-3 font-medium">Handed off</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((row) => {
               const busy = busyId === row.familyId;
               const isCheckedIn = !!row.checkedInAt;
+              // checked_in_at means "handed to the counselor" for a school
+              // drop-off household (US-46) and a real check-in for pickup.
+              const isPickup = row.distributionMethod === "church_pickup";
+              const idleLabel = isPickup ? "Check in" : "Mark handed to counselor";
+              const doneLabel = isPickup ? "Picked up ✓" : "Handed to counselor ✓";
               return (
                 <tr key={row.familyId}>
                   <td className="px-4 py-3 text-ink-primary">
@@ -167,15 +172,19 @@ export default function DistributionPage() {
                     </select>
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="datetime-local"
-                      value={toDatetimeLocalValue(row.scheduledPickupAt)}
-                      disabled={busy}
-                      onChange={(e) =>
-                        handleScheduleChange(row.familyId, e.target.value, row.distributionMethodOverride)
-                      }
-                      className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-ink-primary disabled:opacity-60"
-                    />
+                    {!isPickup && !row.scheduledPickupAt ? (
+                      <span className="text-xs text-ink-muted">Not needed</span>
+                    ) : (
+                      <input
+                        type="datetime-local"
+                        value={toDatetimeLocalValue(row.scheduledPickupAt)}
+                        disabled={busy}
+                        onChange={(e) =>
+                          handleScheduleChange(row.familyId, e.target.value, row.distributionMethodOverride)
+                        }
+                        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-sm text-ink-primary disabled:opacity-60"
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3 text-ink-secondary">
                     {row.deliveredCards} / {row.totalCards} delivered
@@ -190,7 +199,7 @@ export default function DistributionPage() {
                           : "bg-cat-blue text-white hover:opacity-90"
                       }`}
                     >
-                      {busy ? "Saving…" : isCheckedIn ? `Checked in ✓` : "Check in"}
+                      {busy ? "Saving…" : isCheckedIn ? doneLabel : idleLabel}
                     </button>
                     {rowError?.id === row.familyId ? (
                       <p className="mt-1 text-xs text-status-critical">{rowError.message}</p>

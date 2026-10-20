@@ -57,7 +57,7 @@ export default function OnHoldPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="On hold"
         description="Children paused for duplicate review. While a child is on hold their card is out of the sponsor pool, the print run, and every count. Nothing is deleted. Release the hold once you have sorted out whether it is a duplicate."

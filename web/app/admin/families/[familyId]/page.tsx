@@ -8,7 +8,6 @@ import { ChildFormFields, emptyChild, type ChildFormState } from "@/components/C
 import { getHouseholdTag } from "@/lib/queries";
 import { ChildHoldControl } from "./ChildHoldControl";
 import type { DataBundle } from "@/lib/types";
-import { AdminNav } from "../../AdminNav";
 import { AdminPageHeader } from "../../AdminPageHeader";
 
 // The exact sentence the data layer already appends to the errors it raises
@@ -138,8 +137,7 @@ function FamilyEditForm({
 
   if (!family) {
     return (
-      <div className="mx-auto max-w-4xl px-6 py-10">
-        <AdminNav />
+      <div className="mx-auto max-w-7xl px-6 py-10 *:max-w-4xl">
         <p className="text-ink-secondary">
           Household not found. Either it doesn&apos;t exist, or it&apos;s confidential and you
           don&apos;t have clearance to view it.
@@ -259,7 +257,7 @@ function FamilyEditForm({
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10 *:max-w-4xl">
       <AdminPageHeader
         title={
           <>

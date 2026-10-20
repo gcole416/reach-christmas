@@ -113,7 +113,7 @@ export default function AuditLogPage() {
   const profiles = data?.profiles ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Audit log"
         description="Every insert, update, and delete across the drive's data, most recent first. Entries for households and children can include real PII, so this page is admin-only and nothing here should be exported or copied elsewhere."

@@ -12,7 +12,7 @@ export default function SubmissionDetailPage({
   const { submissionId } = use(params);
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Registration"
         backLink={{ href: "/admin/submissions", label: "All registrations" }}

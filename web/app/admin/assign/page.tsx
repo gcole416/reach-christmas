@@ -36,10 +36,10 @@ export default function AssignSponsorsPage() {
     : allCards;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10 *:max-w-5xl">
       <AdminPageHeader
         title="Assign sponsors"
-        description="Cards with no sponsor yet. Pick one, then choose who from the roster is taking it. Siblings already assigned are flagged below so you can keep a household with the same sponsor on purpose — nothing here does that matching for you."
+        description="Cards with no sponsor yet. Pick one, then choose who from the roster is taking it. Siblings already assigned are flagged below so you can keep a household with the same sponsor on purpose. Nothing here does that matching for you."
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">

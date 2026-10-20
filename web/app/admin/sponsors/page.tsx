@@ -63,7 +63,7 @@ export default function SponsorsAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Sponsor roster"
         description={
@@ -167,7 +167,11 @@ export default function SponsorsAdminPage() {
                       {sf.assignedCount}
                       {sf.capacity != null ? ` / ${sf.capacity}` : ""}
                     </span>
-                    {atCapacity ? <div className="text-xs text-status-warning">At capacity</div> : null}
+                    {atCapacity ? (
+                      <div className="text-xs text-status-warning">
+                        {sf.capacity != null && sf.assignedCount > sf.capacity ? "Over capacity" : "At capacity"}
+                      </div>
+                    ) : null}
                     {sf.unemailedCount > 0 ? (
                       <div className="text-xs text-ink-muted">{sf.unemailedCount} not emailed yet</div>
                     ) : sf.assignedCount > 0 ? (

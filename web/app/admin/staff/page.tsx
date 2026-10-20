@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { mapProfile } from "@/lib/supabase/mappers";
 import type { AppRole, Profile } from "@/lib/types";
 import { SearchInput } from "@/components/SearchInput";
-import { AdminNav } from "../AdminNav";
 import { AdminPageHeader } from "../AdminPageHeader";
 
 const ROLE_LABELS: Record<AppRole, string> = {
@@ -75,8 +74,7 @@ export default function StaffPage() {
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <AdminNav />
+      <div className="mx-auto max-w-7xl px-6 py-10">
         <div className="rounded-lg bg-status-critical/10 px-4 py-3 text-sm text-ink-primary">
           Couldn&apos;t load staff accounts: {loadError}
         </div>
@@ -86,8 +84,7 @@ export default function StaffPage() {
 
   if (!profiles) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <AdminNav />
+      <div className="mx-auto max-w-7xl px-6 py-10">
         <p className="text-ink-secondary">Loading…</p>
       </div>
     );
@@ -102,7 +99,7 @@ export default function StaffPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Staff & permissions"
         description="Who can access this app, and what they can see. Accounts themselves are still created in the Supabase dashboard (Authentication → Add user). This page only manages role and confidential access for accounts that already exist."

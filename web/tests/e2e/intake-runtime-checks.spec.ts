@@ -15,6 +15,7 @@ import {
   rpcVerifySubmission,
   runTag,
   sharedAdmin,
+  sharedVolunteer,
   assertIntakeReady,
 } from "./helpers/intake";
 
@@ -263,24 +264,29 @@ test.describe("intake runtime-only checks", () => {
     }
   });
 
-  // The §9 property that makes M3(b) owner-only, asserted rather than assumed —
-  // and VERIFY check 4's review_tokens row, from a real session instead of
-  // information_schema.
-  test("M3(b) precondition: review_tokens is write-only for authenticated — no SELECT, no DELETE", async () => {
+  // The §9 property behind M3(b), asserted rather than assumed. Updated
+  // 2026-10-20: US-28 (20260903120000) deliberately gave ADMINS a SELECT policy
+  // so staff can re-copy a counselor's review link, so "no SELECT for anyone"
+  // stopped being the rule on 2026-09-03. What still must hold: a volunteer
+  // reads nothing, and nobody can DELETE.
+  test("M3(b) precondition: review_tokens is admin-read-only for authenticated, never deletable", async () => {
     const admin = await sharedAdmin();
+    const volunteer = await sharedVolunteer();
 
-    const read = await admin.from("review_tokens").select("id").limit(1);
-    expect(read.error, "authenticated can SELECT review_tokens — a token hash is now readable").not.toBeNull();
-    expect(read.error!.message).toMatch(/permission denied/i);
+    const adminRead = await admin.from("review_tokens").select("id").limit(1);
+    expect(adminRead.error, "an admin can no longer read review links (US-28 regression)").toBeNull();
 
-    // A DELETE's WHERE clause needs SELECT too, so this is denied for the same
-    // reason; what matters is that it is denied.
+    const volunteerRead = await volunteer.from("review_tokens").select("id").limit(1);
+    expect(volunteerRead.error).toBeNull();
+    expect(volunteerRead.data, "a volunteer can read review_tokens rows").toEqual([]);
+
+    // No DELETE grant at all: denied even for an admin.
     const del = await admin.from("review_tokens").delete().eq("issued_to_email", AUTOTEST_REVIEW_EMAIL);
     expect(del.error, "authenticated can DELETE from review_tokens").not.toBeNull();
 
     // Therefore: nothing this suite inserts into review_tokens can ever be
-    // removed or repaired by it. Any future test that inserts here is a
-    // permanent write to the shared dev project.
+    // removed by it. Any future test that inserts here is a permanent write to
+    // the shared dev project.
   });
 
   test("import_submission is admin-only and anon cannot call it at all", async () => {

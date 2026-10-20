@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import { mapDrive } from "@/lib/supabase/mappers";
 import type { Drive, DriveStatus, DistributionMethod } from "@/lib/types";
 import { FormField } from "@/components/FormField";
-import { AdminNav } from "../AdminNav";
 import { AdminPageHeader } from "../AdminPageHeader";
 
 const STATUS_LABELS: Record<DriveStatus, string> = {
@@ -80,8 +79,7 @@ export default function DrivesPage() {
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <AdminNav />
+      <div className="mx-auto max-w-7xl px-6 py-10">
         <div className="rounded-lg bg-status-critical/10 px-4 py-3 text-sm text-ink-primary">
           Couldn&apos;t load drives: {loadError}
         </div>
@@ -91,15 +89,14 @@ export default function DrivesPage() {
 
   if (!drives) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <AdminNav />
+      <div className="mx-auto max-w-7xl px-6 py-10">
         <p className="text-ink-secondary">Loading…</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
+    <div className="mx-auto max-w-7xl px-6 py-10">
       <AdminPageHeader
         title="Drives"
         description={
