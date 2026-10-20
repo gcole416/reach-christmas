@@ -2431,6 +2431,47 @@ Status: **In review** — built on `dev` 2026-10-20. No migration, no RLS change
 
 ---
 
+## US-62: Sponsor-first Assign workspace + "Suggest matches" draft
+
+Replaces US-57's one-child-at-a-time popup. Season size is ~200 children and
+~150 roster entries (Grant, 2026-10-20), where a popup per child is ~1,000
+clicks with no overview.
+
+Decided by Grant, 2026-10-20: sponsor-first layout; ship the draft in the same
+build; sponsor preferences stay free text in the roster's Notes.
+
+Acceptance criteria:
+- [x] Header shows supply vs demand: children with a sponsor, waiting, open
+  sponsor spots, how many more are needed, entries with no limit set, and how
+  many confidential children are matched elsewhere.
+- [x] Left: active roster sorted by open room (most first; no limit set next;
+  full ones folded under "Full (n)"), searchable by name, email or notes,
+  each showing room as dots plus notes.
+- [x] Right: waiting children grouped by household, with "Assign all n" and
+  per-child Assign, filters for school, boy/girl and grade, and search. Each
+  click saves immediately; capacity warns ("2 over") but never blocks (US-57).
+- [x] Selected-sponsor bar: room, notes, the children they already have, and
+  "Next with room" once they're full.
+- [x] 10-second Undo toast after every assign.
+- [x] "Suggest matches" drafts a whole pass without writing anything: keeps a
+  household with a sibling's existing sponsor, then places households whole,
+  biggest first, to the earliest sign-up with room; splits only a household
+  too big for any one sponsor (marked). Never over capacity; no limit set
+  counts as 1. Review screen flags notes, lets staff remove any household,
+  and saves with a progress count and a list of anything that failed.
+- [x] Simulated at 200 children / 150 sponsors: all placed when room exists,
+  no sponsor over capacity, no child twice, ~10 ms.
+- [x] e2e (`assign-workspace.spec.ts`): household assign, undo, single assign,
+  and draft discard writes nothing. Self-contained test household and roster
+  entry; never saves a draft on shared dev.
+
+No migration, no RLS change (same assign_card_to_sponsor_family and cancel
+paths; the store's assign/cancel just gained a skip-refresh option for batches).
+
+Status: **In review** — built on `dev` 2026-10-20.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open

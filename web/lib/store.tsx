@@ -195,7 +195,9 @@ interface DataContextValue {
     options?: { force?: boolean }
   ) => Promise<SaveFamilyEditResult>;
   updateAssignmentStatus: (assignmentId: string, status: AssignmentStatus) => Promise<Result>;
-  cancelAssignment: (assignmentId: string) => Promise<Result>;
+  /** `refresh: false` skips the data reload, for a caller doing several writes
+   *  in a row (the Assign page's undo) that refreshes once at the end. */
+  cancelAssignment: (assignmentId: string, opts?: { refresh?: boolean }) => Promise<Result>;
   updateAssignmentNotes: (assignmentId: string, notes: string) => Promise<Result>;
   updateCardPrinted: (cardId: string, printed: boolean) => Promise<Result>;
   // US-35: the shop-day status/notes for one high schooler. Plain
@@ -225,7 +227,13 @@ interface DataContextValue {
     rows: { displayName: string; contactEmail?: string; contactPhone?: string; capacity?: number }[]
   ) => Promise<BulkImportSponsorFamiliesResult>;
   updateSponsorFamily: (id: string, patch: UpdateSponsorFamilyPatch) => Promise<Result>;
-  assignCardToSponsorFamily: (cardId: string, sponsorFamilyId: string) => Promise<AssignCardToSponsorFamilyResult>;
+  /** `refresh: false` skips the data reload, for a caller assigning several cards in
+   *  a row (a household, or a saved draft) that refreshes once at the end. */
+  assignCardToSponsorFamily: (
+    cardId: string,
+    sponsorFamilyId: string,
+    opts?: { refresh?: boolean }
+  ) => Promise<AssignCardToSponsorFamilyResult>;
   sendSponsorEmails: (kind: SponsorEmailKind) => Promise<SendSponsorEmailsResult>;
   savedViews: SavedView[];
   addSavedView: (view: Omit<SavedView, "id">) => void;
@@ -1049,11 +1057,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return { ok: true };
   }
 
-  async function cancelAssignment(assignmentId: string): Promise<Result> {
+  async function cancelAssignment(assignmentId: string, opts?: { refresh?: boolean }): Promise<Result> {
     const supabase = createClient();
     const { error } = await supabase.from("assignments").update({ status: "cancelled" }).eq("id", assignmentId);
     if (error) return { ok: false, error: error.message };
-    await refresh();
+    if (opts?.refresh !== false) await refresh();
     return { ok: true };
   }
 
@@ -1258,7 +1266,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // of those rather than raising, same shape as claimCardWithCode above.
   async function assignCardToSponsorFamily(
     cardId: string,
-    sponsorFamilyId: string
+    sponsorFamilyId: string,
+    opts?: { refresh?: boolean }
   ): Promise<AssignCardToSponsorFamilyResult> {
     const supabase = createClient();
     const { data: rpcData, error } = await supabase.rpc("assign_card_to_sponsor_family", {
@@ -1274,7 +1283,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         error: result?.error ?? "Something went wrong assigning this card. Please try again.",
       };
     }
-    await refresh();
+    if (opts?.refresh !== false) await refresh();
     return { ok: true, sponsorId: result.sponsor_id, assignmentId: result.assignment_id };
   }
 
