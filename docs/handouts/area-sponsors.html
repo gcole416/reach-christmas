@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Reach Christmas: Sponsors Guide</title>
+<!-- Staff handout (DRAFT, 2026-10-20, not yet reviewed). Area guide for whoever runs Sponsors: Sponsor roster, Assign sponsors, Print cards.
+     Rendered to area-sponsors.pdf (US Letter, flowing pages). Not yet in the staff help menu: after review,
+     copy the PDF to web/help-docs/ and register it in app/admin/help/[doc]/route.ts and HELP_DOCS in AdminNav.tsx.
+     Copy rules: "household(s)" in person-facing text, no em-dashes. Button and menu labels quoted here must match
+     web/app/admin/** exactly; re-check them when those screens change. The only real contact is the
+     Reach Christmas Technical Lead's in the footer (Grant's, at his request, 2026-10-20); no household, child or sponsor details. -->
+<style>
+  /* Shared look for the staff handouts. Same ink, fonts and numbered-step style as the
+     counselor handouts; prints as US Letter pages, reads as one column on a phone. */
+  @page { size: Letter; margin: .45in .55in .45in; }
+  :root {
+    --ink: #0b0b0b; --ink2: #52514e; --muted: #7a7873; --line: rgba(11,11,11,.13);
+    --bg: #ffffff; --soft: #f5f5f1; --card: #ffffff;
+    --blue: #2a78d6; --blue-bg: #eef4fc;
+    --good: #0b7f3a; --good-bg: #ecf7ef;
+    --warn: #8a5a00; --warn-bg: #fdf5e3;
+    --crit: #b42318; --crit-bg: #fdeeec;
+    --violet: #4a3aa7; --aqua: #1baf7a; --yellow: #a1750d;
+    --on-accent: #ffffff;
+  }
+  @media screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #f1f0ec; --ink2: #c3c1bb; --muted: #9a978f; --line: rgba(241,240,236,.16);
+      --bg: #17171a; --soft: #222226; --card: #1c1c20;
+      --blue: #6ea8f0; --blue-bg: #1b2636;
+      --good: #5cc98a; --good-bg: #16281e;
+      --warn: #e2b55a; --warn-bg: #2c2414;
+      --crit: #f08a7e; --crit-bg: #301b19;
+      --violet: #a79cf0; --aqua: #4fd3a3; --yellow: #e2b55a;
+      --on-accent: #0b0b0b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #f1f0ec; --ink2: #c3c1bb; --muted: #9a978f; --line: rgba(241,240,236,.16);
+    --bg: #17171a; --soft: #222226; --card: #1c1c20;
+    --blue: #6ea8f0; --blue-bg: #1b2636;
+    --good: #5cc98a; --good-bg: #16281e;
+    --warn: #e2b55a; --warn-bg: #2c2414;
+    --crit: #f08a7e; --crit-bg: #301b19;
+    --violet: #a79cf0; --aqua: #4fd3a3; --yellow: #e2b55a;
+    --on-accent: #0b0b0b;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; }
+
+  /* Screen: one readable column with a phone-safe gutter. Print: fixed Letter pages. */
+  .page { max-width: 8.5in; margin: 0 auto;
+    padding-block: 28px 36px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .page + .page { border-top: 1px dashed var(--line); }
+  @media print {
+    /* One continuous flow across Letter sheets; blocks below never split across a page. */
+    html, body { font-size: 10pt; }
+    .page { max-width: none; padding: 0; }
+    .page + .page { border-top: 0; margin-top: 10px; }
+    .proc, .card, .note, ol.steps > li, tr, .flow { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+    .screen-only { display: none !important; }
+  }
+
+  .kicker { font-size: 8.5pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 21pt; margin: 2px 0 4px; letter-spacing: -.01em; line-height: 1.15; text-wrap: balance; }
+  h2 { font-size: 13.5pt; margin: 16px 0 6px; text-wrap: balance; }
+  h3 { font-size: 11.5pt; margin: 12px 0 5px; }
+  p { margin: 0 0 6px; }
+  .lede { color: var(--ink2); margin: 0 0 12px; max-width: 6.8in; }
+  .small { font-size: 9.3pt; color: var(--ink2); }
+  ul.tight { margin: 4px 0 6px; padding-left: 18px; }
+  ul.tight li { margin-bottom: 2px; }
+
+  /* Screen labels exactly as the app shows them */
+  .btn { display: inline-block; border: 1px solid var(--line); background: var(--soft); border-radius: 5px;
+    padding: 0 5px; font-weight: 600; color: var(--ink); font-size: 9.5pt; white-space: nowrap; }
+  .nav { font-weight: 600; color: var(--blue); white-space: nowrap; }
+  .pill { display: inline-block; font-size: 8.5pt; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+    background: var(--soft); border: 1px solid var(--line); white-space: nowrap; }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 99px; color: var(--on-accent); background: var(--blue); }
+  .tag.admin { background: var(--violet); }
+  .tag.vol { background: var(--good); }
+
+  /* Numbered steps: only where order matters */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 8px 36px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 25px; height: 25px;
+    border-radius: 50%; background: var(--blue); color: var(--on-accent); font-weight: 700;
+    display: grid; place-items: center; font-size: 10.5pt; }
+  ol.steps strong.t { display: block; font-size: 10.8pt; }
+  ol.steps p { margin: 1px 0 0; color: var(--ink2); }
+
+  /* Season flow strip */
+  .flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 6px 0 14px; }
+  .flow > div { position: relative; text-align: center; padding: 0 4px; min-width: 0; }
+  .flow .dot { width: 28px; height: 28px; border-radius: 50%; margin: 0 auto 5px; display: grid; place-items: center;
+    color: var(--on-accent); font-weight: 700; font-size: 10.5pt; background: var(--blue); position: relative; z-index: 1; }
+  .flow > div:not(:last-child)::after { content: ""; position: absolute; top: 14px; left: calc(50% + 14px);
+    right: calc(-50% + 14px); height: 2px; background: var(--line); }
+  .flow b { display: block; font-size: 9.5pt; }
+  .flow span { display: block; font-size: 8.5pt; color: var(--ink2); line-height: 1.25; margin-top: 1px; }
+  @media screen and (max-width: 560px) {
+    .flow { grid-template-columns: 1fr; gap: 8px; text-align: left; }
+    .flow > div { display: grid; grid-template-columns: 28px 1fr; column-gap: 10px; text-align: left; padding: 0; }
+    .flow .dot { margin: 0; grid-row: span 2; }
+    .flow > div::after { display: none; }
+  }
+
+  /* Cards and callouts */
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media screen and (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card);
+    border-top: 4px solid var(--c, var(--blue)); min-width: 0; }
+  .card h3 { margin: 0 0 4px; font-size: 11pt; }
+  .card p, .card li { color: var(--ink2); font-size: 9.7pt; }
+  .card ul { margin: 2px 0 0; padding-left: 16px; }
+  .note { border-radius: 9px; padding: 9px 12px; margin: 8px 0; font-size: 9.7pt; background: var(--soft); color: var(--ink2); }
+  .note b { color: var(--ink); }
+  .note.good { background: var(--good-bg); border: 1.5px solid var(--good); }
+  .note.warn { background: var(--warn-bg); border: 1.5px solid var(--warn); }
+  .note.crit { background: var(--crit-bg); border: 1.5px solid var(--crit); }
+  .note.crit h3 { color: var(--crit); margin-top: 0; }
+
+  /* Tables (scroll inside their own box on narrow screens) */
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 8.3pt; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.k { font-weight: 600; }
+  @media screen and (min-width: 561px) { td.k { white-space: nowrap; } }
+  /* Phones: each table row becomes a small stacked block, label first. */
+  @media screen and (max-width: 560px) {
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr:first-child:has(th) { display: none; }
+    tr { border-bottom: 1px solid var(--line); padding: 7px 0; }
+    td { border: 0; padding: 1px 0; }
+    td.k { font-size: 10.5pt; }
+  }
+  .yes { color: var(--good); font-weight: 700; }
+  .no { color: var(--crit); font-weight: 700; }
+
+  /* Admin procedures */
+  .proc { border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px 4px; margin: 0 0 10px; background: var(--card); }
+  .proc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 4px; }
+  .proc-head h2 { margin: 0; font-size: 12.5pt; }
+  .proc-head .when { font-size: 8.8pt; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .where { font-size: 9.3pt; color: var(--ink2); margin-bottom: 6px; }
+
+  .footer { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 9pt; color: var(--ink2);
+    break-inside: avoid; }
+  .fill { border-bottom: 1px solid var(--ink2); height: 18px; margin-top: 4px; }
+  .fill-label { color: var(--muted); font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .fill.filled { height: auto; padding-bottom: 2px; font-weight: 600; color: var(--ink); font-size: 10.5pt; }
+  @media screen and (max-width: 560px) { .contact { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<section class="page">
+  <div class="kicker">Reach Christmas 2026 · OneLife Church · Area guide</div>
+  <h1>Sponsors: the roster, matching, and cards</h1>
+  <p class="lede">Church members sign up to sponsor on Church Center (the church's online sign-up), not in this app. Our job is to load that list,
+    match each child to a sponsor, and get each sponsor their child's card. It all lives under <span class="nav">Sponsors</span> in the menu.
+    New to the app? Read the volunteer guide first.</p>
+
+  <div class="flow">
+    <div><div class="dot">1</div><b>Sign up</b><span>Sponsors register on Church Center</span></div>
+    <div><div class="dot">2</div><b>Load the roster</b><span>Import the list once, add late sign-ups</span></div>
+    <div><div class="dot">3</div><b>Assign</b><span>Match children to sponsors</span></div>
+    <div><div class="dot">4</div><b>Cards out</b><span>Printed, or emailed once email is on</span></div>
+    <div><div class="dot">5</div><b>Gifts due</b><span>Late 10 days after assigning</span></div>
+    <div><div class="dot">6</div><b>Gifts team</b><span>Takes over when gifts arrive</span></div>
+  </div>
+
+  <h2>The three Sponsors pages</h2>
+  <div class="tbl"><table>
+    <tr><th>Page</th><th>What it's for</th></tr>
+    <tr><td class="k">Sponsor roster</td><td>Everyone who signed up this year: contact details, <b>capacity</b> (how many children they offered to buy for), how many they have, notes, and whether their cards were emailed. Shows <b>Active</b> sponsors unless you change the Status filter.</td></tr>
+    <tr><td class="k">Assign sponsors</td><td>Sponsors on the left, children waiting on the right. Pick a sponsor, then click children. Brothers and sisters are grouped so a household can go to one sponsor.</td></tr>
+    <tr><td class="k">Print cards</td><td>The paper card for each child: card number, first name, grade, sizes, wish list, and needs. Mark each one printed once it's off the printer.</td></tr>
+  </table></div>
+  <p class="small">Volunteers and admins can do everything on these pages. Removing a sponsor completely is done by an admin.</p>
+
+  <h2>Reading the roster</h2>
+  <div class="tbl"><table>
+    <tr><th>You see</th><th>It means</th></tr>
+    <tr><td class="k">2 / 3</td><td>Has 2 children, offered to take 3. Just "2" means no capacity was given.</td></tr>
+    <tr><td class="k">At capacity, Over capacity</td><td>Full, or given more children than they offered. The app warns you but still lets you assign.</td></tr>
+    <tr><td class="k">Emailed, 1 not emailed yet</td><td>Whether the app has emailed this sponsor their cards.</td></tr>
+    <tr><td class="k">Inactive</td><td>Dropped out. Hidden from Assign sponsors and skipped by emails. Nothing is deleted.</td></tr>
+  </table></div>
+
+  <h2>Who you won't see on Assign sponsors</h2>
+  <p><b>High schoolers</b> (they shop for themselves), <b>children on hold</b>, and <b>confidential households</b>. The app can't assign
+    confidential children yet, so admins match those outside the app. That's why the Dashboard's "Need a sponsor" number can be higher than the list you see.</p>
+
+  <div class="note crit">
+    <h3>What a sponsor may know</h3>
+    <p>A child's <b>first name, grade, sizes, wish list, specific needs, and card number</b>. That's all that's on the card. If a sponsor calls or emails,
+      never share a child's last name, school, or anything about the household, and don't explain what the letters in a card number mean.
+      Point them to the church drop-off details instead.</p>
+  </div>
+</section>
+
+<section class="page">
+  <h2>Common tasks</h2>
+
+  <h3>Assign children to a sponsor</h3>
+  <ol class="steps">
+    <li><strong class="t">Pick a sponsor on the left.</strong><p>Sponsors with the most room are at the top. If staff added a note (for example "two girls" or "same household as last year"), it shows under their name.</p></li>
+    <li><strong class="t">Click children on the right.</strong><p>Click <span class="btn">Assign</span> for one child, or <span class="btn">Assign all 3</span> to keep a household together. Each child's line shows grade, age, and sex, and you can filter by school, sex, and grade.</p></li>
+    <li><strong class="t">Made a mistake?</strong><p>Click <span class="btn">Undo</span> in the message at the bottom. It's there for 10 seconds. After that, don't try to fix it by reassigning. Tell your lead the card number; the Gifts team cancels it on Fulfillment, and your lead tells the sponsor if their card already went out.</p></li>
+  </ol>
+
+  <h3>Let the app suggest matches</h3>
+  <p><span class="btn">Suggest matches…</span> drafts matches for as many waiting children as sponsors have room for, keeping households together where it can.
+    Nothing saves until you review it. A sponsor with no capacity set is given room for 1. Check sponsors marked "Check the note", click <span class="btn">×</span>
+    to take out anything that's wrong, then click <span class="btn">Save 40 assignments</span> (the number is how many are in the draft). Children the draft couldn't place
+    are listed under "Not placed by the draft". If someone else assigned a child meanwhile, that one fails and the rest still save.</p>
+
+  <h3>Get cards to sponsors</h3>
+  <p><b>Printing:</b> <span class="nav">Sponsors → Print cards</span> lists every card not printed yet, including children who don't have a sponsor yet,
+    so it's simplest to print once most children are assigned. Click <span class="btn">Print this page</span>, then <span class="btn">Mark printed</span> on each card that came out.
+    Tick "Show already-printed cards too" to reprint one.</p>
+  <p><b>Email:</b> <span class="btn">Email all assigned</span> on the roster sends each sponsor one email with a card for each of their children. Cards
+    already emailed aren't sent again. <span class="btn">Remind all assigned</span> re-emails sponsors whose emailed cards went out at least 20 hours ago and whose
+    gifts haven't arrived. Sponsors who got paper cards aren't reminded, so call or email them yourself.
+    <b>Use these only when your lead says email is turned on.</b> Until then the send step shows an error, and cards go out on paper.</p>
+
+  <h3>A sponsor drops out</h3>
+  <p>First ask the Gifts team to <span class="btn">Cancel</span> each of their cards on Fulfillment, so those children come back to Assign sponsors.
+    Then click <span class="btn">Mark inactive</span> on the roster. Marking inactive alone leaves their children assigned to them.</p>
+
+  <div class="note warn"><b>The gift clock starts at assignment.</b> A sponsor shows as late 10 days after they're assigned, not 10 days after
+    they get the card. Get cards out the same week you assign. Late sponsors appear on the Dashboard under "Sponsors running late",
+    with phone and email so someone can follow up kindly.</div>
+
+  <h2>For your lead</h2>
+  <h3>Load the Church Center list (once a season)</h3>
+  <ol class="steps">
+    <li><strong class="t">Shape the export.</strong><p>Save Church Center's export as a CSV file with a header row of <b>name, email, phone, capacity</b>. Only <b>name</b> is required. Example row: <code>Jane Smith,jane@example.com,555-0100,2</code></p></li>
+    <li><strong class="t">Preview it.</strong><p><span class="nav">Sponsors → Sponsor roster</span> → <span class="btn">Import CSV</span>. Choose the file (or paste it) and click <span class="btn">Preview import</span>. Nothing is saved yet. Rows with no name are skipped.</p></li>
+    <li><strong class="t">Import.</strong><p>Click <span class="btn">Import 42</span> (the number is how many rows have a name). Every row lands, or none do.</p></li>
+  </ol>
+  <p class="small"><b>Import only once.</b> The app doesn't check for repeats, so importing the same file twice adds everyone twice.
+    For late sign-ups use <span class="btn">+ Add sponsor</span>. Notes don't come in with the import; add them with <span class="btn">Edit</span>.</p>
+
+  <div class="footer contact">
+    <div><div class="fill-label">Reach Christmas Technical Lead</div><div class="fill filled">Grant Cole · 913-687-2618</div></div>
+    <div><div class="fill-label">Sponsor lead</div><div class="fill"></div></div>
+    <div><div class="fill-label">Gift drop-off place and dates</div><div class="fill"></div></div>
+  </div>
+</section>
+</body>
+</html>

@@ -2063,6 +2063,12 @@ Acceptance criteria:
 - [ ] The one-letter card code stays read-only once the school has households,
   since card numbers embed it.
 - [ ] No schema change; e2e covers an edit.
+- [ ] Added 2026-10-20 (staff handouts review): the replace-review-link dialog
+  already tells staff to "correct the school's liaison email before you email the
+  new link" (`FormLinkPanel.tsx:307-308`), which is impossible until this ships.
+  Once Edit exists, make that sentence point at it ("Edit the school on Setup →
+  Schools"). Then update the admin handout (`docs/handouts/admin-guide.html`, A3
+  and the "Can't be undone" box) and re-render its PDF.
 
 Status: **Backlog** — decided.
 Owner: frontend-designer.
@@ -2476,6 +2482,476 @@ No migration, no RLS change (same assign_card_to_sponsor_family and cancel
 paths; the store's assign/cancel just gained a skip-refresh option for batches).
 
 Status: **In review** — built on `dev` 2026-10-20.
+
+---
+
+# Found while writing the staff handouts (US-63 … US-75)
+
+Grant asked for first-time-user handouts for volunteers and admins (2026-10-20;
+drafts in [docs/handouts/](handouts/), not yet committed). Three agents
+inventoried every staff screen from the code, and a fact-check agent verified
+each handout claim against it. Those passes surfaced the problems below. The
+handouts currently tell staff how to work around each one. **Every story's
+last criterion is to update the handout that describes the workaround**, so
+the docs don't keep warning about something that's been fixed.
+
+US-63 is a confidential-data leak and is **fix before launch**. Grant asked for
+the rest as stories to schedule ("I'll fix them soon"). Two related problems
+were folded into existing stories instead of duplicated: school editing
+(**US-49**, criterion added) and the wish-list save (**US-70** depends on
+**US-48** DB-10).
+
+---
+
+## US-63: Hide registrations imported as confidential from uncleared volunteers
+
+As an admin who imports a school registration as a confidential household, I
+want its original registration hidden from volunteers without confidential
+access, so ticking "Create this as a confidential household" actually protects
+that household.
+
+**The leak (verified 2026-10-20).** `form_submissions`' read policy is
+`drive_school_id is not null or can_view_confidential()`
+([20260830120000_intake_forms.sql:1304-1306](../supabase/migrations/20260830120000_intake_forms.sql#L1304)),
+and no later migration overrides it. It only hides *confidential-channel*
+registrations. A registration that came in through a **school** link and was
+imported with the confidential box ticked keeps `drive_school_id` set. Any
+signed-in volunteer can therefore still read it on Intake → Registrations under
+"Imported" (`listSubmissions`, [web/lib/intake.ts:525-536](../web/lib/intake.ts#L525),
+has no confidential filter). That includes the guardian's name, phone, and
+email, every child's first name, sizes, wish list, and notes, and counselor
+corrections. The household itself is hidden correctly; only its source
+registration leaks. The same happens if a household is flipped to confidential
+later in SQL.
+
+This contradicts the AGENTS.md guardrail ("any new query, view, or policy
+touching families/children must keep confidential rows out of a volunteer's
+results unless they have `can_view_confidential`").
+
+Acceptance criteria:
+- [ ] `form_submissions` read policy also excludes a row whose
+  `imported_family_id` is a confidential family unless `can_view_confidential()`.
+  It checks through the existing `security definer` helper
+  `family_is_confidential(imported_family_id)` (from
+  [20260811120000](../supabase/migrations/20260811120000_fix_confidential_rls_subquery_leak.sql#L73)),
+  **not** a raw `exists (select … from families …)` subquery. A raw subquery
+  runs under the caller's RLS, sees no row for a confidential family, and
+  silently re-opens the leak (the US-16 bug class).
+- [ ] Because the check runs at read time, it covers registrations imported
+  before this fix and households flipped to confidential later. No backfill.
+- [ ] The admin update and insert policies keep working for cleared staff:
+  import, counselor-corrected import, and the idempotent re-import path
+  (`import_submission`).
+- [ ] Anything else that reads `form_submissions` as the caller (the
+  Dashboard's "Ready to import" and "Waiting on counselor" counts, the
+  cross-school phone-match hint in `shared.ts`, the counselor digest counts) is
+  checked. It must neither show a hidden row nor crash on a missing one.
+- [ ] `security definer` functions that return submission data
+  (`get_review_roster`, digest and email functions) are reviewed and listed in
+  the migration header: which still return a confidential-imported
+  registration, and why that's acceptable (e.g. the counselor's own roster of
+  first name, age, and grade for a household they referred).
+- [ ] UI copy: the "Imported" group blurb no longer says "Already in the drive
+  as ordinary households" (`shared.ts:136-139`). The import box's warning ("A
+  household imported normally and edited later is readable by every volunteer
+  in between") stays accurate.
+- [ ] Verified **as a signed-in volunteer without confidential access**, not in
+  the SQL editor, which bypasses RLS: a school registration imported as
+  confidential is absent from Registrations and from a direct
+  `/admin/submissions/{id}` visit ("couldn't be found"). A cleared volunteer and
+  an admin still see it. Repeat for a household flipped to confidential after
+  an ordinary import. Add an e2e test that does the same.
+- [ ] Migration applied to dev and recorded in
+  [docs/MIGRATION_LEDGER.md](MIGRATION_LEDGER.md), and folded into
+  `prod_bootstrap.sql` or listed as a post-bootstrap step, whichever the prod
+  launch plan calls for at the time.
+- [ ] **reach-reviewer gate** (RLS change on a table holding child PII).
+- [ ] Handouts: remove the "The original registration stays visible" bullet from
+  `docs/handouts/admin-guide.html` (Confidential households section) and
+  re-render the PDF.
+
+Status: **Backlog** — fix before launch.
+Owner: database-engineer, then reach-reviewer.
+
+---
+
+## US-64: Marking a sponsor inactive releases their children
+
+As sponsor staff, when a sponsor drops out I want "Mark inactive" to deal with
+the children already assigned to them, so those children don't sit with a
+sponsor who's gone.
+
+Today "Mark inactive" only sets `sponsor_families.is_active`
+([web/lib/store.tsx:1288-1311](../web/lib/store.tsx#L1288)). The children stay
+assigned. They're missing from Assign sponsors, and they show on the Dashboard
+as "Sponsors running late" ten days later.
+
+Acceptance criteria:
+- [ ] Clicking "Mark inactive" on an entry that has active assignments opens a
+  confirm step listing those children by first name and card number, with the
+  stage each is at.
+- [ ] Confirming cancels every assignment still at "Assigned" (through the
+  existing cancel path, so the audit log records it) and marks the entry
+  inactive. Those children reappear on Assign sponsors.
+- [ ] A gift already "Received at church" or later is **not** cancelled. The
+  sponsor delivered, so their gift stays. The confirm step says so.
+- [ ] An entry with no active assignments is marked inactive in one click, as
+  today.
+- [ ] e2e covers a sponsor with one assigned and one received child.
+- [ ] Handouts: simplify "A sponsor drops out" in `area-sponsors.html` and A8
+  step 2 in `admin-guide.html`. Re-render the PDFs.
+
+Status: **Backlog**.
+Owner: frontend-designer (no schema change expected).
+
+---
+
+## US-65: Match and track sponsors for confidential children
+
+As an admin, I want to give a confidential child a sponsor and follow their gift
+in the app, so confidential households aren't run from a paper list.
+
+Today the database refuses to assign a confidential card, by design from US-58
+(`assign_card_to_sponsor_family`, [20261019120000:136-150](../supabase/migrations/20261019120000_staff_sponsor_emails.sql#L136)).
+The Assign page says these children are "matched separately"
+([assign/page.tsx:228-232](../web/app/admin/assign/page.tsx#L228)), but nothing
+does that. Their cards stay in Unassigned on Fulfillment with no buttons. They
+inflate the Dashboard's "Need a sponsor" count, and their households never reach
+"all delivered" on Distribution.
+
+**Decision needed (Grant):** who may match a confidential child, and does the
+sponsor get the normal card? Recommended: admins and cleared volunteers
+(`can_view_confidential()`) can assign. The sponsor gets the same card fields as
+anyone else (first name, grade, sizes, wish list, needs). The card number's
+school code needs US-71 first, so the card doesn't hint at the school.
+
+Acceptance criteria (assuming the recommendation):
+- [ ] The assign function accepts a confidential card when the caller passes
+  `can_view_confidential()`, and still refuses everyone else.
+- [ ] Assign sponsors shows confidential children only to cleared staff, in their
+  own clearly marked group. The Suggest-matches draft never includes them.
+- [ ] Once assigned, a confidential card moves through Fulfillment like any
+  other. Uncleared volunteers still get no rows for it.
+- [ ] Sponsor emails (`send-sponsor-emails`) decide explicitly whether to include
+  confidential cards; today they're skipped.
+- [ ] **reach-reviewer gate** (changes a confidential-refusal invariant).
+- [ ] Handouts: remove the "matched by hand / off-app" text in
+  `admin-guide.html` (Confidential section and A6), `area-sponsors.html`,
+  `area-gifts.html`, and the "Sponsor pool" glossary row in
+  `volunteer-guide.html`.
+
+Status: **Backlog** — needs Grant's decision.
+Owner: database-engineer, frontend-designer.
+
+---
+
+## US-66: Never leave the app with no open drive
+
+As an admin switching seasons, I want the app to stop me from leaving no drive
+open, so the staff site can't lock everyone out.
+
+Today, if no drive has status Open, every staff page, Drives included, shows
+only "No drive with status 'open' was found. Create one from the SQL editor…"
+([web/lib/store.tsx:298-301](../web/lib/store.tsx#L298)). Only someone with SQL
+access can recover. Two easy ways in: set this year's drive to Closed at season
+end, or close the old drive and reload before opening the new one. Separately,
+"Create drive" pre-fills next year (`getFullYear() + 1`,
+[drives/page.tsx:197](../web/app/admin/drives/page.tsx#L197)), which is wrong
+when creating the current season's drive in the fall.
+
+Acceptance criteria:
+- [ ] The Drives page shows an "Make this the open drive" action that closes the
+  current Open drive and opens the chosen one in **one** database call. The
+  one-open-drive rule still holds, and the app is never left with zero.
+- [ ] Choosing "Closed" or "Archived" on the only Open drive is refused with a
+  plain message ("Open another drive first, or this drive stays open").
+- [ ] With no Open drive, an admin can still reach Drives and open one. The
+  no-drive screen links there for admins, and tells volunteers to contact an
+  admin instead of mentioning the SQL editor.
+- [ ] "Create drive" pre-fills the current year if no drive for it exists yet,
+  otherwise next year.
+- [ ] e2e covers the switch and the refusal.
+- [ ] Handouts: simplify A1 and A12 in `admin-guide.html` and the no-drive line
+  in `volunteer-guide.html`.
+
+Status: **Backlog**.
+Owner: database-engineer (switch function), frontend-designer.
+
+---
+
+## US-67: Staff account lifecycle in the app (invite, reset, deactivate)
+
+As an admin, I want to add a volunteer, reset a forgotten password, and turn off
+someone's access without the Supabase dashboard.
+
+Today all three need the dashboard or `web/scripts/bulk-create-volunteers.mjs`.
+There's no forgot-password link, the Staff page only edits role and confidential
+access, and removing someone means deleting their auth user. ADM-6 (Grant,
+2026-09-29) decided in-app invites come **next season**, after the email-domain
+work, since the church's filter blocked invite emails. The service_role key is
+permanently off-limits, so the design can't use a server route holding it.
+
+Acceptance criteria:
+- [ ] An approved pattern for invites and resets that doesn't use service_role
+  (ADM-6's options: invite link, Supabase's built-in invite or recovery email
+  once the domain works, or another flow). Recorded in OPEN_QUESTIONS ADM-6
+  before building.
+- [ ] Admins can deactivate a staff member in-app. A deactivated account signs in
+  to a "Your access has been turned off" page and gets no rows from any
+  staff-data policy. Likely a `profiles.is_active` flag checked by a shared
+  `is_staff()` helper in every staff policy, reviewed as an RLS change.
+- [ ] Reactivation works. Deactivation and reactivation are audited.
+- [ ] **reach-reviewer gate** for the deactivation policy change.
+- [ ] Handouts: update A2 and A10 in `admin-guide.html` and the sign-in steps in
+  `volunteer-guide.html`.
+
+Status: **Backlog** — next season per ADM-6. The deactivate half could come
+sooner if Grant wants it this season. Until then, A10 in the admin handout
+documents the interim steps.
+Owner: database-engineer, frontend-designer.
+
+---
+
+## US-68: Safer Fulfillment: guard Cancel and allow one step back
+
+As Gifts staff, I want a wrong click on Fulfillment to be fixable, and "Cancel"
+to be hard to hit by accident once a gift is in, so a misclick doesn't take a
+child's sponsor away.
+
+Today any volunteer can Cancel an assignment at every stage except Delivered,
+including after the gift is at church, guarded only by a browser confirm
+([fulfillment/page.tsx:82-91, 246-264](../web/app/admin/fulfillment/page.tsx#L82)).
+And there's no way to move a card back a step after a wrong "Mark received",
+"Mark verified", or "Mark delivered".
+
+**Decision needed (Grant):** who can step back? Recommended: anyone can undo the
+step they just took (an Undo toast, like Assign sponsors), and admins can step
+any card back one stage.
+
+Acceptance criteria (assuming the recommendation):
+- [ ] After each "Mark …" click, a 10-second Undo toast reverts it.
+- [ ] Admins get a "Move back one step" action on any card past Assigned. It
+  clears the timestamp for that step and is audited.
+- [ ] "Cancel" on a card at "Received at church" or "Verified" is admin-only. The
+  database enforces this, not just the button. Its confirm text names the
+  sponsor and says the gift is already at church.
+- [ ] e2e covers undo, step-back, and the volunteer refusal.
+- [ ] **reach-reviewer gate** if the admin-only rule is enforced in RLS or a
+  function.
+- [ ] Handouts: rewrite the "Clicked the wrong card?" box in `area-gifts.html`
+  and the A8 note in `admin-guide.html`.
+
+Status: **Backlog** — needs Grant's decision.
+Owner: frontend-designer, database-engineer (admin-only rule).
+
+---
+
+## US-69: "Remove" on a saved child does nothing
+
+As intake staff, I don't want a Remove button that looks like it worked but
+didn't.
+
+On a household's edit page, "Remove" on an existing child's block drops it from
+the form, but saving never deletes the child. The child comes back on reload.
+It's a deliberate no-op ([web/lib/store.tsx:855-866](../web/lib/store.tsx#L855)),
+because deleting a child stays a rare SQL-only action (household page footer).
+The button doesn't say so.
+
+Acceptance criteria:
+- [ ] On the household edit page, "Remove" shows only on child blocks that
+  haven't been saved yet.
+- [ ] Saved children show a short note instead: "To remove a saved child, ask an
+  admin." Admins see the same note until an in-app removal exists.
+- [ ] Add a household (`/admin/intake`) is unchanged; Remove works there.
+- [ ] e2e: a saved child block has no Remove button.
+- [ ] Handouts: no change needed. `area-intake.html` already says you can't
+  delete a saved child.
+
+Status: **Backlog**.
+Owner: frontend-designer.
+
+---
+
+## US-70: Volunteers can add to a child's saved wish list
+
+As an intake volunteer, I want to add or fix a wish-list item on a child who
+already has a saved list, since that's ordinary intake work.
+
+Today any change to a child with a saved wish list deletes and re-inserts the
+whole list. Delete is admin-only
+([init.sql:389](../supabase/migrations/20260708120000_init.sql#L389)), so a
+volunteer gets "Couldn't update {name}'s wishlist. Only an admin can change or
+remove wishlist items…" as a partial save
+([web/lib/store.tsx:1065-1073](../web/lib/store.tsx#L1065)). That's true even
+when they only *add* a fourth item.
+
+**Depends on US-48 DB-10**, which replaces the list in one transactional
+function. **Decision needed (Grant):** should volunteers be able to edit saved
+wish lists at all? Recommended: yes, through that function, for any child the
+caller can see (same confidential gate).
+
+Acceptance criteria (assuming yes):
+- [ ] DB-10's replace function lets a volunteer replace the list for a child
+  they can see. It keeps refusing a confidential child for an uncleared caller.
+  Direct table DELETE stays admin-only.
+- [ ] A volunteer can add, edit, and remove wish-list items on a saved child, and
+  the save is all-or-nothing.
+- [ ] **reach-reviewer gate** (new `security definer` path writing child data).
+- [ ] Handouts: remove the "needs an admin" wish-list lines from
+  `volunteer-guide.html`, `area-intake.html`, and `admin-guide.html`.
+
+If the answer is no: hide the wish-list edit controls from volunteers on saved
+children, with a note to ask an admin, so the partial-save error can't happen.
+
+Status: **Backlog** — after US-48 DB-10; needs Grant's decision.
+Owner: database-engineer.
+
+---
+
+## US-71: Household tags can repeat
+
+As staff, I need every household tag and card number to be unique within a
+drive, since gifts are labeled and found by card number.
+
+Confidential households take their number from their own drive-wide sequence
+(`next_confidential_family_number`), but the tag's prefix comes from the school
+code, or `Z` with no school
+([web/lib/queries.ts:66-90](../web/lib/queries.ts#L66)). So a confidential
+household entered by hand and a direct referral can both be `Z1`. A school
+registration imported as confidential can repeat an existing school tag like
+`OL1`. It also carries the school's code on a confidential child's card number,
+which hints at the school.
+
+**Decision needed (Grant):** the confidential prefix. Recommended: one reserved
+prefix for every confidential household, regardless of school (for example
+`X`). The Schools form refuses that code for a school.
+
+Acceptance criteria (assuming the recommendation):
+- [ ] Confidential households tag as `{reserved prefix}{confidential number}`
+  everywhere: Households, Fulfillment, Print cards, Distribution, sponsor PDFs,
+  and search.
+- [ ] Adding a school with the reserved code is refused.
+- [ ] A check confirms no two households in the current dev drive share a tag;
+  any existing duplicates are listed for Grant before the change.
+- [ ] Handouts: remove the "now and then two households share a tag" sentence
+  from `area-intake.html`.
+
+Status: **Backlog** — needs Grant's decision.
+Owner: frontend-designer (tag display), database-engineer (school-code check).
+
+---
+
+## US-72: Admin settings screen for drop-off details
+
+As an admin, I want to set the gift drop-off place, days, and deadline in the
+app, so sponsor emails never go out with placeholder text.
+
+`app_settings.dropoff_location`, `dropoff_days`, and `dropoff_deadline` feed the
+sponsor card PDFs and emails. Days and deadline still hold "not set yet"
+placeholder text, and the only way to change them is a SQL `UPDATE` (US-43).
+The Church Center sign-up URL is also SQL-only (US-59). `app_settings` already
+has an admin-only update policy
+([20260923120000:117-118](../supabase/migrations/20260923120000_counselor_email_links.sql#L117)),
+so no RLS change is needed.
+
+Acceptance criteria:
+- [ ] A Setup → Settings page (admin-only in the nav) edits drop-off location,
+  days, deadline, and the Church Center sign-up link, each with a one-line
+  explanation of where it appears.
+- [ ] "Email all assigned" and "Remind all assigned" refuse to send while days
+  or deadline still hold the placeholder, with a message that links to
+  Settings.
+- [ ] Volunteers who open the page by URL see the values read-only, with the
+  usual volunteer notice.
+- [ ] e2e covers an edit and the send refusal.
+- [ ] Handouts: A7 in `admin-guide.html` points to Settings instead of the
+  database contact.
+
+Status: **Backlog** — before email is turned on.
+Owner: frontend-designer.
+
+---
+
+## US-73: Distribution progress counts only sponsored children
+
+As Gifts staff, I want a household's "delivered" progress to reach its full
+count once every sponsored child's gift is delivered.
+
+Distribution's Progress ("2 / 3 delivered") counts every card except children
+on hold ([web/lib/queries.ts:778-812](../web/lib/queries.ts#L778)). High
+schoolers' cards never move on Fulfillment, so a household with a teenager never
+reads complete. Unassigned confidential cards have the same effect until US-65
+lands.
+
+Acceptance criteria:
+- [ ] Progress counts only sponsor-pool cards: not high schoolers, not on hold.
+- [ ] A household with high schoolers shows them separately (for example "+1 high
+  schooler"), so the hand-off still accounts for every child.
+- [ ] A household of only high schoolers doesn't show "0 / 0".
+- [ ] Handouts: remove the Progress caveat from "Hand gifts off to a school" in
+  `area-gifts.html`.
+
+Status: **Backlog**.
+Owner: frontend-designer.
+
+---
+
+## US-74: Sponsor CSV import flags people already on the roster
+
+As sponsor staff, I want the import preview to flag rows already on the roster,
+so importing the Church Center list twice (or a corrected list) doesn't
+duplicate everyone.
+
+Today the import has no duplicate check, and `sponsor_families` has no unique
+constraint ([ImportSponsorsModal.tsx](../web/app/admin/sponsors/ImportSponsorsModal.tsx)).
+
+Acceptance criteria:
+- [ ] The preview marks a row "Already on the roster" when its email matches an
+  existing entry in this drive (case-insensitive), or it has no email and both
+  name and phone match.
+- [ ] Marked rows are skipped by default. A per-row checkbox lets staff import
+  one anyway (two people sharing an email).
+- [ ] The summary line counts new, already-on-roster, and no-name rows separately.
+- [ ] "+ Add sponsor" warns, without blocking, when the email is already on the
+  roster.
+- [ ] Handouts: soften "Import only once" in `area-sponsors.html` and A6 in
+  `admin-guide.html`.
+
+Status: **Backlog**.
+Owner: frontend-designer.
+
+---
+
+## US-75: Staff copy and small UI fixes from the handouts review
+
+Small mismatches the handout fact-check found. Each is a copy change or a tiny
+UI fix.
+
+Acceptance criteria:
+- [ ] **Registrations, "Waiting on counselor":** volunteers always see "{school}:
+  no counselor link yet. Set one up in Registration links below."
+  ([SubmissionsQueue.tsx:76](../web/app/admin/submissions/SubmissionsQueue.tsx#L76)),
+  even when a link exists. Review links are admin-readable only, and volunteers
+  can't set one up. For volunteers, show nothing or "Ask an admin for this
+  school's counselor link".
+- [ ] **Households status filter:** remove "Cancelled". It can never match,
+  because cancelled assignments show as "Needs a sponsor"
+  ([queries.ts:286-293](../web/lib/queries.ts#L286);
+  [StatusBadge.tsx:13](../web/components/StatusBadge.tsx#L13)).
+- [ ] **On hold empty state:** "No households on hold." → "No children on hold."
+  ([on-hold/page.tsx:72](../web/app/admin/on-hold/page.tsx#L72)).
+- [ ] **Print cards:** the page title "Printable cards"
+  ([print/page.tsx:41](../web/app/admin/print/page.tsx#L41)) matches the nav
+  label "Print cards".
+- [ ] **Shopping list:** "Claimed {n}d ago"
+  ([shopping-list/page.tsx:120](../web/app/admin/shopping-list/page.tsx#L120)) →
+  "Assigned {n}d ago". It's the assignment date; claiming is gone.
+- [ ] **No-drive error:** covered by US-66.
+- [ ] Handouts: re-check quoted labels in `docs/handouts/*.html` against the new
+  copy and re-render any changed PDF.
+
+Status: **Backlog**.
+Owner: frontend-designer.
 
 ---
 

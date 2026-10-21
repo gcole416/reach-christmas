@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Reach Christmas: Intake Guide</title>
+<!-- Staff handout (DRAFT, 2026-10-20, not yet reviewed). Area guide for whoever runs Intake: Registrations, On hold, Households, High schoolers, Add a household.
+     Rendered to area-intake.pdf (US Letter, flowing pages). Not yet in the staff help menu: after review,
+     copy the PDF to web/help-docs/ and register it in app/admin/help/[doc]/route.ts and HELP_DOCS in AdminNav.tsx.
+     Copy rules: "household(s)" in person-facing text, no em-dashes. Button and menu labels quoted here must match
+     web/app/admin/** exactly; re-check them when those screens change. The only real contact is the
+     Reach Christmas Technical Lead's in the footer (Grant's, at his request, 2026-10-20); no household, child or sponsor details. -->
+<style>
+  /* Shared look for the staff handouts. Same ink, fonts and numbered-step style as the
+     counselor handouts; prints as US Letter pages, reads as one column on a phone. */
+  @page { size: Letter; margin: .45in .55in .45in; }
+  :root {
+    --ink: #0b0b0b; --ink2: #52514e; --muted: #7a7873; --line: rgba(11,11,11,.13);
+    --bg: #ffffff; --soft: #f5f5f1; --card: #ffffff;
+    --blue: #2a78d6; --blue-bg: #eef4fc;
+    --good: #0b7f3a; --good-bg: #ecf7ef;
+    --warn: #8a5a00; --warn-bg: #fdf5e3;
+    --crit: #b42318; --crit-bg: #fdeeec;
+    --violet: #4a3aa7; --aqua: #1baf7a; --yellow: #a1750d;
+    --on-accent: #ffffff;
+  }
+  @media screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #f1f0ec; --ink2: #c3c1bb; --muted: #9a978f; --line: rgba(241,240,236,.16);
+      --bg: #17171a; --soft: #222226; --card: #1c1c20;
+      --blue: #6ea8f0; --blue-bg: #1b2636;
+      --good: #5cc98a; --good-bg: #16281e;
+      --warn: #e2b55a; --warn-bg: #2c2414;
+      --crit: #f08a7e; --crit-bg: #301b19;
+      --violet: #a79cf0; --aqua: #4fd3a3; --yellow: #e2b55a;
+      --on-accent: #0b0b0b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #f1f0ec; --ink2: #c3c1bb; --muted: #9a978f; --line: rgba(241,240,236,.16);
+    --bg: #17171a; --soft: #222226; --card: #1c1c20;
+    --blue: #6ea8f0; --blue-bg: #1b2636;
+    --good: #5cc98a; --good-bg: #16281e;
+    --warn: #e2b55a; --warn-bg: #2c2414;
+    --crit: #f08a7e; --crit-bg: #301b19;
+    --violet: #a79cf0; --aqua: #4fd3a3; --yellow: #e2b55a;
+    --on-accent: #0b0b0b;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; }
+
+  /* Screen: one readable column with a phone-safe gutter. Print: fixed Letter pages. */
+  .page { max-width: 8.5in; margin: 0 auto;
+    padding-block: 28px 36px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .page + .page { border-top: 1px dashed var(--line); }
+  @media print {
+    /* One continuous flow across Letter sheets; blocks below never split across a page. */
+    html, body { font-size: 10pt; }
+    .page { max-width: none; padding: 0; }
+    .page + .page { border-top: 0; margin-top: 10px; }
+    .proc, .card, .note, ol.steps > li, tr, .flow { break-inside: avoid; }
+    h2, h3 { break-after: avoid; }
+    .screen-only { display: none !important; }
+  }
+
+  .kicker { font-size: 8.5pt; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  h1 { font-size: 21pt; margin: 2px 0 4px; letter-spacing: -.01em; line-height: 1.15; text-wrap: balance; }
+  h2 { font-size: 13.5pt; margin: 16px 0 6px; text-wrap: balance; }
+  h3 { font-size: 11.5pt; margin: 12px 0 5px; }
+  p { margin: 0 0 6px; }
+  .lede { color: var(--ink2); margin: 0 0 12px; max-width: 6.8in; }
+  .small { font-size: 9.3pt; color: var(--ink2); }
+  ul.tight { margin: 4px 0 6px; padding-left: 18px; }
+  ul.tight li { margin-bottom: 2px; }
+
+  /* Screen labels exactly as the app shows them */
+  .btn { display: inline-block; border: 1px solid var(--line); background: var(--soft); border-radius: 5px;
+    padding: 0 5px; font-weight: 600; color: var(--ink); font-size: 9.5pt; white-space: nowrap; }
+  .nav { font-weight: 600; color: var(--blue); white-space: nowrap; }
+  .pill { display: inline-block; font-size: 8.5pt; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+    background: var(--soft); border: 1px solid var(--line); white-space: nowrap; }
+  .tag { display: inline-block; font-size: 8pt; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 99px; color: var(--on-accent); background: var(--blue); }
+  .tag.admin { background: var(--violet); }
+  .tag.vol { background: var(--good); }
+
+  /* Numbered steps: only where order matters */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 8px 36px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 25px; height: 25px;
+    border-radius: 50%; background: var(--blue); color: var(--on-accent); font-weight: 700;
+    display: grid; place-items: center; font-size: 10.5pt; }
+  ol.steps strong.t { display: block; font-size: 10.8pt; }
+  ol.steps p { margin: 1px 0 0; color: var(--ink2); }
+
+  /* Season flow strip */
+  .flow { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin: 6px 0 14px; }
+  .flow > div { position: relative; text-align: center; padding: 0 4px; min-width: 0; }
+  .flow .dot { width: 28px; height: 28px; border-radius: 50%; margin: 0 auto 5px; display: grid; place-items: center;
+    color: var(--on-accent); font-weight: 700; font-size: 10.5pt; background: var(--blue); position: relative; z-index: 1; }
+  .flow > div:not(:last-child)::after { content: ""; position: absolute; top: 14px; left: calc(50% + 14px);
+    right: calc(-50% + 14px); height: 2px; background: var(--line); }
+  .flow b { display: block; font-size: 9.5pt; }
+  .flow span { display: block; font-size: 8.5pt; color: var(--ink2); line-height: 1.25; margin-top: 1px; }
+  @media screen and (max-width: 560px) {
+    .flow { grid-template-columns: 1fr; gap: 8px; text-align: left; }
+    .flow > div { display: grid; grid-template-columns: 28px 1fr; column-gap: 10px; text-align: left; padding: 0; }
+    .flow .dot { margin: 0; grid-row: span 2; }
+    .flow > div::after { display: none; }
+  }
+
+  /* Cards and callouts */
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  @media screen and (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--card);
+    border-top: 4px solid var(--c, var(--blue)); min-width: 0; }
+  .card h3 { margin: 0 0 4px; font-size: 11pt; }
+  .card p, .card li { color: var(--ink2); font-size: 9.7pt; }
+  .card ul { margin: 2px 0 0; padding-left: 16px; }
+  .note { border-radius: 9px; padding: 9px 12px; margin: 8px 0; font-size: 9.7pt; background: var(--soft); color: var(--ink2); }
+  .note b { color: var(--ink); }
+  .note.good { background: var(--good-bg); border: 1.5px solid var(--good); }
+  .note.warn { background: var(--warn-bg); border: 1.5px solid var(--warn); }
+  .note.crit { background: var(--crit-bg); border: 1.5px solid var(--crit); }
+  .note.crit h3 { color: var(--crit); margin-top: 0; }
+
+  /* Tables (scroll inside their own box on narrow screens) */
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 8.3pt; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.k { font-weight: 600; }
+  @media screen and (min-width: 561px) { td.k { white-space: nowrap; } }
+  /* Phones: each table row becomes a small stacked block, label first. */
+  @media screen and (max-width: 560px) {
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr:first-child:has(th) { display: none; }
+    tr { border-bottom: 1px solid var(--line); padding: 7px 0; }
+    td { border: 0; padding: 1px 0; }
+    td.k { font-size: 10.5pt; }
+  }
+  .yes { color: var(--good); font-weight: 700; }
+  .no { color: var(--crit); font-weight: 700; }
+
+  /* Admin procedures */
+  .proc { border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px 4px; margin: 0 0 10px; background: var(--card); }
+  .proc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 4px; }
+  .proc-head h2 { margin: 0; font-size: 12.5pt; }
+  .proc-head .when { font-size: 8.8pt; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .where { font-size: 9.3pt; color: var(--ink2); margin-bottom: 6px; }
+
+  .footer { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 9pt; color: var(--ink2);
+    break-inside: avoid; }
+  .fill { border-bottom: 1px solid var(--ink2); height: 18px; margin-top: 4px; }
+  .fill-label { color: var(--muted); font-size: 8.5pt; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .contact { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+  .fill.filled { height: auto; padding-bottom: 2px; font-weight: 600; color: var(--ink); font-size: 10.5pt; }
+  @media screen and (max-width: 560px) { .contact { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<section class="page">
+  <div class="kicker">Reach Christmas 2026 · OneLife Church · Area guide</div>
+  <h1>Intake: getting households into the drive</h1>
+  <p class="lede">Intake covers everything from a household registering until each of its children has a card ready for a sponsor.
+    It all lives under <span class="nav">Intake</span> in the menu. New to the app? Read the volunteer guide first.</p>
+
+  <div class="flow">
+    <div><div class="dot">1</div><b>Registers</b><span>Household uses its school's link</span></div>
+    <div><div class="dot">2</div><b>Counselor confirms</b><span>On their private review page</span></div>
+    <div><div class="dot">3</div><b>Ready to import</b><span>Listed first on Registrations</span></div>
+    <div><div class="dot">4</div><b>Admin imports</b><span>One click makes the household and cards</span></div>
+    <div><div class="dot">5</div><b>Check it</b><span>Fix details on the Households page</span></div>
+    <div><div class="dot">6</div><b>Ready</b><span>In the sponsor pool, or on the High schoolers list</span></div>
+  </div>
+  <p class="small">Households you type in on <b>Add a household</b> skip steps 1 to 4. They're ready as soon as you save.</p>
+
+  <h2>The five Intake pages</h2>
+  <div class="tbl"><table>
+    <tr><th>Page</th><th>What it's for</th></tr>
+    <tr><td class="k">Registrations</td><td>Forms households sent in, grouped by status (below). The <b>Registration links</b> panel at the bottom holds each school's links; admins manage those.</td></tr>
+    <tr><td class="k">On hold</td><td>Children paused while staff check for a double registration. A child on hold is left out of sponsor matching, printing, and every count. Only an admin can release one.</td></tr>
+    <tr><td class="k">Households</td><td>Everyone in the drive, one row per child. Filter by school or status, search by name or card number, and click a household tag to open and edit it.</td></tr>
+    <tr><td class="k">High schoolers</td><td>Grades 9 to 12, who shop for themselves. Track each one from <b>Not contacted</b> to <b>Invited</b>, <b>Confirmed</b>, and <b>Attended</b>.</td></tr>
+    <tr><td class="k">Add a household</td><td>Type in a household that didn't use a registration link, like a phone or paper referral.</td></tr>
+  </table></div>
+
+  <h2>What a registration's status means</h2>
+  <div class="tbl"><table>
+    <tr><th>Status</th><th>Meaning and what to do</th></tr>
+    <tr><td class="k"><span class="pill">Waiting on counselor</span></td><td>The household sent the form; the school hasn't confirmed it. It can't be imported yet. If one sits for a long time, mention it to an admin.</td></tr>
+    <tr><td class="k"><span class="pill">Ready to import</span></td><td>The counselor confirmed it. Listed under "Confirmed by counselor, ready to import". An admin imports it.</td></tr>
+    <tr><td class="k"><span class="pill">Imported</span></td><td>It's now a household in the drive. Nothing to do.</td></tr>
+    <tr><td class="k"><span class="pill">Rejected</span> <span class="pill">Duplicate</span></td><td>The counselor didn't approve it, or said it was sent twice. It can't be imported.</td></tr>
+  </table></div>
+
+  <h2>Reading a household tag</h2>
+  <p>A tag is the school's code plus a number counted within that school: <b>OL1</b>, <b>OL2</b>, and so on. Households with no school
+    use <b>Z</b>. Each child's card adds their number: <b>OL1.2</b> is the second child in household OL1. Confidential households are
+    numbered separately, so now and then two households share a tag. If a tag looks doubled, check the school or ask an admin.</p>
+</section>
+
+<section class="page">
+  <h2>Common tasks</h2>
+
+  <h3>Add a household by hand</h3>
+  <ol class="steps">
+    <li><strong class="t">Check it isn't already in.</strong><p><span class="nav">Intake → Households</span>, search a child's first name. If you find them, edit that household instead.</p></li>
+    <li><strong class="t">Pick where the referral came from.</strong><p><span class="nav">Intake → Add a household</span>. Under <b>Referral source</b>, pick the school if a school counselor referred them, otherwise "Direct referral (no school)". Pick "Confidential" only when an admin or the counselor says the household needs extra privacy. Volunteers without confidential approval won't see it, though you'll still see the ones you enter.</p></li>
+    <li><strong class="t">Enter each child.</strong><p>First name is required. Add grade, age, sex, sizes, wish list, and specific needs. Type grades as numbers ("10", not "10th") so high schoolers are picked up. High schoolers don't get a wish list; anything typed there isn't saved. Use <span class="btn">+ Add another child</span> for siblings.</p></li>
+    <li><strong class="t">Check the wish lists, then save.</strong><p>Once saved, only an admin can change a wish list. Click <span class="btn">Save household</span>. The household number is assigned for you. If Save won't go, look for an empty child box and click <span class="btn">Remove</span> on it.</p></li>
+  </ol>
+  <p class="small">This form has no parent name or phone fields. If staff will need them, put them in "Internal notes", which only staff can see.</p>
+
+  <h3>Fix a typo or add a child</h3>
+  <p><span class="nav">Intake → Households</span>, search the child's name or card number, and click the household tag. Make the change and click
+    <span class="btn">Save changes</span>. You can add a wish list to a child who has none. Any change to a wish list that's already saved, even adding
+    one more item, needs an admin. You can't delete a household or a saved child; ask an admin.</p>
+
+  <h3>A child may be registered twice</h3>
+  <p>You may see "Possibly the same household (same guardian phone)". A household with children at two schools registers once per school
+    and comes in as two households on purpose, so that alone is fine. If the <b>same child</b> appears twice, tell an admin, who can put one on hold.</p>
+
+  <h3>Run the high-schooler shop day list</h3>
+  <p><span class="nav">Intake → High schoolers</span>. Use the <b>Shop day</b> dropdown on each row, or switch to <b>Board</b> (one column per status) and click
+    <span class="btn">Mark invited</span>, <span class="btn">Mark confirmed</span>, <span class="btn">Mark attended</span>. The <b>Notes</b> box saves when you click away.
+    <span class="btn">Copy roster (CSV)</span> copies the list with guardian phone numbers for spreadsheet use. Paste it only where your lead tells you to, and delete it after shop day.</p>
+
+  <div class="note warn"><b>Two people, one household:</b> if someone else saves the same household while you're editing, you'll see "Someone else changed this household
+    while you were editing". Nothing you typed is lost. Choose <span class="btn">Reload the latest version</span> unless you're sure yours is right.</div>
+
+  <h2>For admins</h2>
+
+  <h3>Import a confirmed registration <span class="tag admin">Admin</span></h3>
+  <ol class="steps">
+    <li><strong class="t">Open it.</strong><p>Dashboard tile <b>Ready to import</b>, or <span class="nav">Intake → Registrations</span>. Click a row under "Confirmed by counselor, ready to import". Check that row and the registration page for a "Possibly the same household" note.</p></li>
+    <li><strong class="t">Read before you import.</strong><p>Check the yellow <b>Counselor corrections</b> box. The counselor's fixes are applied when you import.</p></li>
+    <li><strong class="t">Decide on confidential now.</strong><p>Click <span class="btn">Import this household</span>. If it needs extra privacy, tick "Create this as a confidential household". It can't be switched in the app afterward.</p></li>
+    <li><strong class="t">Import and check.</strong><p>Click <span class="btn">Import now</span>. You'll see a message like "Created Household 3 with 2 children." Click <span class="btn">Open the household</span> to see its full tag and look it over. Clicking twice won't make a second copy.</p></li>
+  </ol>
+
+  <h3>Hold and release <span class="tag admin">Admin</span></h3>
+  <p>Open the household and click <span class="btn">Put this child on hold</span> under the child, give a short reason, and click <span class="btn">Put on hold</span>.
+    If a sponsor already has that card, cancel it on Gifts → Fulfillment first. Once it's sorted out, click <span class="btn">Release hold</span> on <span class="nav">Intake → On hold</span>.</p>
+
+  <div class="footer contact">
+    <div><div class="fill-label">Reach Christmas Technical Lead</div><div class="fill filled">Grant Cole · 913-687-2618</div></div>
+    <div><div class="fill-label">Intake lead</div><div class="fill"></div></div>
+    <div><div class="fill-label">Admin who imports registrations</div><div class="fill"></div></div>
+  </div>
+</section>
+</body>
+</html>
