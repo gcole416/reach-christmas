@@ -7,11 +7,11 @@ Migration file headers have their own "APPLY STATUS" notes; if a header and
 this ledger disagree, **this ledger wins**.
 
 - **Dev:** `thvyntrxmahygesltgft`
-- **Prod:** a fresh project, to be created at launch (decided by Grant,
-  2026-10-20). The old prod project (`mpiueduyrmplrueviupl`) is retired, not
-  migrated: read-only probing on 2026-10-20 showed it had only part of the July
-  schema (for example `is_admin` and `public_available_cards`, but not
-  `request_claim_code` or `get_form`), with no record of what was applied.
+- **Prod:** `mpiueduyrmplrueviupl`, rebuilt from empty on 2026-10-20. It had
+  only part of the July schema with no record of what was applied, and the
+  free plan had no slot for a new project, so Grant wiped it (all app objects
+  in `public`, all logins, app Vault secrets; nothing in it was needed) and
+  ran `prod_bootstrap.sql` on the empty database. Nothing from dev was copied.
 
 Dev status was verified on 2026-10-20: every migration's feature is present on
 dev (the e2e suite exercises all of them, and the five whose headers still said
@@ -36,40 +36,40 @@ See [PROD_LAUNCH_CHECKLIST.md](PROD_LAUNCH_CHECKLIST.md) step 2.
 
 | # | Migration | Dev | Prod (new project) | Notes for a fresh database |
 |---|---|---|---|---|
-| 1 | `20260708120000_init.sql` | applied (Jul) | not applied | Creates `pgcrypto`. Includes the signup trigger: every new login gets a `volunteer` profile (see checklist 1.3). |
-| 2 | `20260708130000_profiles_staff_management.sql` | applied (Jul) | not applied | |
-| 3 | `20260708140000_confidential_referral_access.sql` | applied (Jul) | not applied | |
-| 4 | `20260708150000_one_open_drive.sql` | applied (Jul) | not applied | |
-| 5 | `20260708160000_atomic_family_numbers.sql` | applied (Jul) | not applied | |
-| 6 | `20260808130000_fix_role_escalation_guard_null_auth.sql` | applied (Aug) | not applied | Lets the SQL Editor promote the first admin (checklist 3.2). |
-| 7 | `20260811120000_fix_confidential_rls_subquery_leak.sql` | applied 2026-08-11 | not applied | |
-| 8 | `20260812090000_restrict_confidential_helper_grants.sql` | applied (Aug) | not applied | |
-| 9 | `20260812100000_assignment_notes_and_verification.sql` | applied (Aug) | not applied | |
-| 10 | `20260812110000_verified_pipeline_stage.sql` | applied (Aug) | not applied | |
-| 11 | `20260818120000_fix_public_available_cards_anon_bug.sql` | applied 2026-08-18 | not applied | |
-| 12 | `20260818130000_replace_sort_tag_with_is_test_data.sql` | applied 2026-08-18 | not applied | |
-| 13 | `20260818140000_one_card_per_child.sql` | applied 2026-08-18 | not applied | Its duplicate-card pre-check is moot on an empty database. |
-| 14 | `20260818150000_school_liaison_on_schools.sql` | applied 2026-08-18 | not applied | ADM-3 backfill pre-check is moot on an empty database. |
-| 15 | `20260818160000_email_verified_claims.sql` | applied 2026-08-18 | not applied | Creates `pg_net` and `supabase_vault`. |
-| 16 | `20260818170000_fix_pgcrypto_schema_qualification.sql` | applied 2026-08-18 | not applied | |
-| 17 | `20260818180000_fix_attempt_cap_off_by_one.sql` | applied 2026-08-18 | not applied | |
-| 18 | `20260830120000_intake_forms.sql` | applied 2026-08-31 | not applied | Large; run it alone. |
-| 19 | `20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql` | applied 2026-09-01 | not applied | |
-| 20 | `20260903120000_review_link_recopy.sql` | applied 2026-09-03 | not applied | Header still says "not yet applied"; it is. |
-| 21 | `20260908130000_high_schooler_bucket.sql` | applied 2026-09-08 | not applied | |
-| 22 | `20260909120000_child_on_hold.sql` | applied 2026-09-09 | not applied | |
-| 23 | `20260923120000_counselor_email_links.sql` | applied 2026-09-23 | not applied | Header stale (applied). Creates `app_settings`. |
-| 24 | `20260923130000_counselor_email_digest.sql` | applied 2026-09-23 | not applied | Header stale (applied). Creates `pg_cron` and **schedules the daily digest**; `prod_setup.sql` removes the schedule for the email-off launch. |
-| 25 | `20260923140000_digest_cooldown.sql` | applied (Sep) | not applied | Header stale (applied). |
-| 26 | `20260930120000_sponsor_thank_you_email.sql` | applied (Sep 30) | not applied | |
-| 27 | `20261015120000_fix_claim_card_pgcrypto_regression.sql` | applied 2026-10-19 | not applied | |
-| 28 | `20261015130000_sponsor_card_pdf_email.sql` | applied 2026-10-19 | not applied | |
-| 29 | `20261015140000_sponsor_families.sql` | applied 2026-10-19 | not applied | |
-| 30 | `20261015150000_assign_card_to_sponsor_family.sql` | applied 2026-10-19 | not applied | |
-| 31 | `20261015160000_church_center_signup_link.sql` | applied 2026-10-19 | not applied | |
-| 32 | `20261015170000_net_revoke_and_assign_race_fix.sql` | applied 2026-10-19 | not applied | |
-| 33 | `20261019120000_staff_sponsor_emails.sql` | applied 2026-10-19 | not applied | Header stale (applied). |
-| 34 | `20261019130000_replace_review_token.sql` | applied 2026-10-20 | not applied | |
+| 1 | `20260708120000_init.sql` | applied (Jul) | applied 2026-10-20 (bootstrap) | Creates `pgcrypto`. Includes the signup trigger: every new login gets a `volunteer` profile (see checklist 1.3). |
+| 2 | `20260708130000_profiles_staff_management.sql` | applied (Jul) | applied 2026-10-20 (bootstrap) | |
+| 3 | `20260708140000_confidential_referral_access.sql` | applied (Jul) | applied 2026-10-20 (bootstrap) | |
+| 4 | `20260708150000_one_open_drive.sql` | applied (Jul) | applied 2026-10-20 (bootstrap) | |
+| 5 | `20260708160000_atomic_family_numbers.sql` | applied (Jul) | applied 2026-10-20 (bootstrap) | |
+| 6 | `20260808130000_fix_role_escalation_guard_null_auth.sql` | applied (Aug) | applied 2026-10-20 (bootstrap) | Lets the SQL Editor promote the first admin (checklist 3.2). |
+| 7 | `20260811120000_fix_confidential_rls_subquery_leak.sql` | applied 2026-08-11 | applied 2026-10-20 (bootstrap) | |
+| 8 | `20260812090000_restrict_confidential_helper_grants.sql` | applied (Aug) | applied 2026-10-20 (bootstrap) | |
+| 9 | `20260812100000_assignment_notes_and_verification.sql` | applied (Aug) | applied 2026-10-20 (bootstrap) | |
+| 10 | `20260812110000_verified_pipeline_stage.sql` | applied (Aug) | applied 2026-10-20 (bootstrap) | |
+| 11 | `20260818120000_fix_public_available_cards_anon_bug.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | |
+| 12 | `20260818130000_replace_sort_tag_with_is_test_data.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | |
+| 13 | `20260818140000_one_card_per_child.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | Its duplicate-card pre-check is moot on an empty database. |
+| 14 | `20260818150000_school_liaison_on_schools.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | ADM-3 backfill pre-check is moot on an empty database. |
+| 15 | `20260818160000_email_verified_claims.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | Creates `pg_net` and `supabase_vault`. |
+| 16 | `20260818170000_fix_pgcrypto_schema_qualification.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | |
+| 17 | `20260818180000_fix_attempt_cap_off_by_one.sql` | applied 2026-08-18 | applied 2026-10-20 (bootstrap) | |
+| 18 | `20260830120000_intake_forms.sql` | applied 2026-08-31 | applied 2026-10-20 (bootstrap) | Large; run it alone. |
+| 19 | `20260901120000_revoke_execute_from_public_and_tighten_bcrypt_check.sql` | applied 2026-09-01 | applied 2026-10-20 (bootstrap) | |
+| 20 | `20260903120000_review_link_recopy.sql` | applied 2026-09-03 | applied 2026-10-20 (bootstrap) | Header still says "not yet applied"; it is. |
+| 21 | `20260908130000_high_schooler_bucket.sql` | applied 2026-09-08 | applied 2026-10-20 (bootstrap) | |
+| 22 | `20260909120000_child_on_hold.sql` | applied 2026-09-09 | applied 2026-10-20 (bootstrap) | |
+| 23 | `20260923120000_counselor_email_links.sql` | applied 2026-09-23 | applied 2026-10-20 (bootstrap) | Header stale (applied). Creates `app_settings`. |
+| 24 | `20260923130000_counselor_email_digest.sql` | applied 2026-09-23 | applied 2026-10-20 (bootstrap) | Header stale (applied). Creates `pg_cron` and **schedules the daily digest**; `prod_setup.sql` removes the schedule for the email-off launch. |
+| 25 | `20260923140000_digest_cooldown.sql` | applied (Sep) | applied 2026-10-20 (bootstrap) | Header stale (applied). |
+| 26 | `20260930120000_sponsor_thank_you_email.sql` | applied (Sep 30) | applied 2026-10-20 (bootstrap) | |
+| 27 | `20261015120000_fix_claim_card_pgcrypto_regression.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 28 | `20261015130000_sponsor_card_pdf_email.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 29 | `20261015140000_sponsor_families.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 30 | `20261015150000_assign_card_to_sponsor_family.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 31 | `20261015160000_church_center_signup_link.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 32 | `20261015170000_net_revoke_and_assign_race_fix.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
+| 33 | `20261019120000_staff_sponsor_emails.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | Header stale (applied). |
+| 34 | `20261019130000_replace_review_token.sql` | applied 2026-10-20 | applied 2026-10-20 (bootstrap) | |
 
 **Never run on prod** (dev-only data scripts in `supabase/`): `demo_seed.sql`,
 `demo_seed_bulk.sql`, `intake_demo_seed.sql`, `reset_dev_data.sql`,

@@ -18,8 +18,8 @@
 do $prod_setup$
 declare
   -- ▼▼▼ EDIT THESE TWO ▼▼▼
-  v_site_url text := 'https://REPLACE-WITH-PROD-URL.vercel.app';
-  v_church_center_url text := 'https://REPLACE-WITH-CHURCH-CENTER-SIGNUP-LINK';
+  v_site_url text := 'https://reach-christmas.vercel.app';
+  v_church_center_url text := 'https://churchcenter.com';
   -- ▲▲▲
 begin
   if v_site_url like '%REPLACE%' or v_church_center_url like '%REPLACE%' then
