@@ -26,3 +26,5 @@ web/scripts/volunteers-credentials-*.csv
 # generate-form-pdfs.mjs output — rendered review/translation PDFs, generated
 # on demand, not project source.
 web/scripts/form-review-pdfs/
+.vercel
+/.env*.local
