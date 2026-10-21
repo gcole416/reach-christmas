@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeNextPath } from "@/lib/safe-next";
 
 // Next.js 16 renamed `middleware.ts`/`middleware()` to `proxy.ts`/`proxy()`.
 // This refreshes the Supabase auth session cookie on every request and gates
@@ -42,15 +43,19 @@ export async function proxy(request: NextRequest) {
   const isLoginRoute = pathname === "/admin/login";
 
   if (isAdminRoute && !isLoginRoute && !user) {
+    // Remember where they were going (e.g. a help-document link from an
+    // email) so the login page can send them there after signing in.
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
+    url.search = "";
+    const next = safeNextPath(pathname + request.nextUrl.search);
+    if (next) url.searchParams.set("next", next);
     return NextResponse.redirect(url);
   }
 
   if (isLoginRoute && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/admin";
-    return NextResponse.redirect(url);
+    const next = safeNextPath(request.nextUrl.searchParams.get("next")) ?? "/admin";
+    return NextResponse.redirect(new URL(next, request.url));
   }
 
   return supabaseResponse;

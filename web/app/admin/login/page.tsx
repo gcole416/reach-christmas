@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { FormField } from "@/components/FormField";
+import { safeNextPath } from "@/lib/safe-next";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,6 +22,14 @@ export default function LoginPage() {
     setLoading(false);
     if (error) {
       setError(error.message);
+      return;
+    }
+    // Back to the page that sent them here (proxy.ts adds ?next=), e.g. a
+    // help PDF linked from an email. A full page load, not router.push: the
+    // help documents are route handlers, not pages.
+    const next = safeNextPath(new URLSearchParams(window.location.search).get("next"));
+    if (next) {
+      window.location.assign(next);
       return;
     }
     router.push("/admin");
