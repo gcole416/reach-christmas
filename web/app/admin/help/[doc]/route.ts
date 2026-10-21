@@ -11,6 +11,11 @@ import { cookies } from "next/headers";
 // is skipped. Only the names listed here can be served (no path from the URL
 // ever reaches the filesystem).
 const DOCS: Record<string, string> = {
+  "volunteer-guide": "volunteer-guide.pdf",
+  "admin-guide": "admin-guide.pdf",
+  "area-intake": "area-intake.pdf",
+  "area-sponsors": "area-sponsors.pdf",
+  "area-gifts": "area-gifts.pdf",
   "counselor-steps": "counselor-steps.pdf",
   "counselor-big-picture": "counselor-big-picture.pdf",
 };

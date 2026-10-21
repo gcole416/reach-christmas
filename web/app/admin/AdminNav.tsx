@@ -298,10 +298,15 @@ export function AdminAccountMenu() {
 // Helper documents for staff, each opening in a new tab. They're staff-only:
 // the files live in web/help-docs/ (not public/) and are served by
 // app/admin/help/[doc]/route.ts behind the login. To add one, drop the file in
-// web/help-docs/, register it in that route's DOCS map, and list it here. The
-// counselor PDFs are rendered from docs/handouts/ (see the comment at the top
+// web/help-docs/, register it in that route's DOCS map, and list it here. All
+// of these PDFs are rendered from docs/handouts/ (see the comment at the top
 // of each .html source); copy the PDF over after re-rendering.
 const HELP_DOCS: MenuEntry[] = [
+  { href: "/admin/help/volunteer-guide", label: "Volunteer welcome guide", newTab: true },
+  { href: "/admin/help/admin-guide", label: "Admin procedures", newTab: true },
+  { href: "/admin/help/area-intake", label: "Intake guide", newTab: true },
+  { href: "/admin/help/area-sponsors", label: "Sponsors guide", newTab: true },
+  { href: "/admin/help/area-gifts", label: "Gifts guide", newTab: true },
   { href: "/admin/help/counselor-steps", label: "Counselor steps", newTab: true },
   { href: "/admin/help/counselor-big-picture", label: "Counselor big picture", newTab: true },
 ];
