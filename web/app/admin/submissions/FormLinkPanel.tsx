@@ -41,6 +41,16 @@ export interface PendingReviewCounts {
  */
 const SPANISH_LINK_CREATION_ENABLED = false;
 
+/**
+ * Hides the per-school "Counselor email" box (the Email buttons and the
+ * daily-digest toggle). Email is off in prod until a sending domain is
+ * verified, so staff copy links and send them from their own email; Grant
+ * asked (2026-10-25) to hide the box so volunteers don't think the app sends
+ * them. The "households waiting" line still shows. Flip back to true once
+ * email is turned on (PROD_LAUNCH_CHECKLIST §8).
+ */
+const COUNSELOR_EMAIL_ENABLED = false;
+
 // The staff surface for registration links (ADM-24, US-28): every link on
 // screen, copyable, sendable by hand — the family form link AND the counselor
 // review link — plus create/revoke.
@@ -946,6 +956,14 @@ export function FormLinkPanel({
             </div>
           )}
 
+          {!COUNSELOR_EMAIL_ENABLED ? (
+            pending && pending.count > 0 ? (
+              <p className="px-1 text-xs text-ink-secondary">
+                {pending.count} household{pending.count > 1 ? "s" : ""} waiting on the counselor since{" "}
+                {formatDate(pending.oldestIso)}
+              </p>
+            ) : null
+          ) : (
           <div className="space-y-2 rounded-lg border border-gridline bg-background p-3">
             <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">
               Counselor email
@@ -1013,6 +1031,7 @@ export function FormLinkPanel({
               ) : null}
             </div>
           </div>
+          )}
 
           {creatingFor === driveSchoolId && canManage ? (
             <CreateLinkForm
