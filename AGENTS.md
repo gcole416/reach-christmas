@@ -29,6 +29,7 @@ child's PII if it's made without understanding who's supposed to see what.
 - **Prod is read-only for tooling.** Never write to prod from a script or an agent. Schema changes reach prod only through the promotion steps in [docs/PROD_LAUNCH_CHECKLIST.md](docs/PROD_LAUNCH_CHECKLIST.md) and [docs/MIGRATION_LEDGER.md](docs/MIGRATION_LEDGER.md), with Grant's go-ahead each time.
 - **Keep dev email off** while it holds real addresses. Do not restore the Resend key, the digest schedule or the Edge Functions on dev without Grant deciding it.
 - **Telling them apart:** every site not wired to prod shows an amber "PRACTICE SITE" strip ([web/components/PracticeSiteBanner.tsx](web/components/PracticeSiteBanner.tsx)).
+- **How code gets to each site:** only through GitHub (`gcole416/reach-christmas`). Push to the `dev` branch and Vercel builds the practice site from it; `main` builds prod, and only moves when Grant promotes it. Never deploy from a local machine (no `vercel deploy`, no uploading files to Vercel). If Vercel shows a deployment as "Blocked" or failed, the fix is on Vercel's side (the deployment page says why, and has Redeploy), not a different way of pushing.
 - **Refreshing dev from prod:** [web/scripts/copy-prod-to-dev.mjs](web/scripts/copy-prod-to-dev.mjs) (details in [web/README.md](web/README.md)). It replaces all dev data and logins, and can only read prod.
 
 ## How that maps to the code
