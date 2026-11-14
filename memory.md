@@ -1,6 +1,7 @@
 # Memory / Reminders
 
-- When spinning up the SQL server for testing, run the `reset_dev_sql` query and then the `demo_seed` query to remove and repopulate data on the dev site.
+- Since 2026-11-14 the dev site is a **practice copy of prod** (real names, prod logins, email off). See "Two sites" in [AGENTS.md](AGENTS.md). To reset dev back to prod's current state, run `node scripts/copy-prod-to-dev.mjs --go` from `web/`.
+- The older way to get test data (run the `reset_dev_sql` query, then `demo_seed`) still works but wipes the practice copy and replaces it with fake demo data. Only do that if Grant asks for it.
 
 ## GitLab issue tracking
 

@@ -25,6 +25,30 @@ Copy `.env.local.example` to whichever of the two you're setting up and fill in 
 Settings → API values (the `sb_publishable_*` anon key — never the `sb_secret_*`/`service_role` key, which
 bypasses RLS entirely and must never be used in this app). Neither real env file is committed.
 
+### Dev is a practice copy of prod
+
+Since 2026-11-14 the dev project holds a copy of prod's data and logins, so the team can practice on
+realistic records. That makes dev data **real PII**: handle it like prod. Dev's email is switched off
+(no Resend key in Vault, digest job disabled, no Edge Functions deployed) so practice can never email a
+real counselor or sponsor. Any site not wired to prod shows an amber "PRACTICE SITE" strip.
+
+To refresh dev from prod again (replaces ALL dev data and logins; prod is only read):
+
+```bash
+node scripts/copy-prod-to-dev.mjs         # dry run: compares both, changes nothing
+node scripts/copy-prod-to-dev.mjs --go    # backs up dev to ../supabase/.temp/, then copies
+```
+
+It needs a git-ignored `web/.env.copy.local` with two Supabase access tokens (dashboard → Account →
+Access Tokens): `SUPABASE_ACCESS_TOKEN` (read-only; the only token ever sent to prod) and
+`SUPABASE_WRITE_TOKEN` (write; only ever sent to dev). Revoke both and delete the file afterwards.
+The script keeps dev's own `site_url`/`edge_functions_url`, leaves the schema alone (both projects must
+already have identical tables or it stops), and turns the dev digest job off.
+
+After a copy, the e2e test accounts in `.env.test.local` no longer exist on dev; re-create them before
+running the suite. `docs/training/practice-sponsors.csv` is a fake 150-sponsor roster for practicing the
+Sponsors import.
+
 ## Working from more than one machine
 
 The repo lives on GitHub; clone it anywhere. Env files are gitignored (see the table above), so on

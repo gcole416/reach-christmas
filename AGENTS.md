@@ -15,6 +15,22 @@ child's PII if it's made without understanding who's supposed to see what.
 | **Sponsors/Donors** | Browse available kids and claim ones to buy for | Public, unauthenticated. Sees only first name, grade, sizes, specific needs, and wishlist for *non-confidential, unclaimed* cards — never last name, school, or address |
 | **School partner/counselor** | Refers families | Not an app user in Phase 1 — informal/offline channel only |
 
+## Two sites: prod is real, dev is the practice copy
+
+| | Prod | Dev (practice site) |
+|---|---|---|
+| Site | `reach-christmas.vercel.app` (branch `main`) | `reach-christmas-git-dev-reach-christmas.vercel.app` (branch `dev`) |
+| Supabase | `mpiueduyrmplrueviupl` | `thvyntrxmahygesltgft` |
+| Data | The real drive | A copy of prod taken 2026-11-14, plus whatever the team has practiced since |
+| Logins | Staff accounts | The same accounts and passwords as prod, as of the copy |
+| Email | Off | Off: no Resend key, digest disabled, no Edge Functions |
+
+- **Dev holds real names.** Since the 2026-11-14 copy, dev contains real households, children and counselors. Treat dev rows as PII: nothing from dev goes into commits, fixtures, logs or chat, same as prod.
+- **Prod is read-only for tooling.** Never write to prod from a script or an agent. Schema changes reach prod only through the promotion steps in [docs/PROD_LAUNCH_CHECKLIST.md](docs/PROD_LAUNCH_CHECKLIST.md) and [docs/MIGRATION_LEDGER.md](docs/MIGRATION_LEDGER.md), with Grant's go-ahead each time.
+- **Keep dev email off** while it holds real addresses. Do not restore the Resend key, the digest schedule or the Edge Functions on dev without Grant deciding it.
+- **Telling them apart:** every site not wired to prod shows an amber "PRACTICE SITE" strip ([web/components/PracticeSiteBanner.tsx](web/components/PracticeSiteBanner.tsx)).
+- **Refreshing dev from prod:** [web/scripts/copy-prod-to-dev.mjs](web/scripts/copy-prod-to-dev.mjs) (details in [web/README.md](web/README.md)). It replaces all dev data and logins, and can only read prod.
+
 ## How that maps to the code
 
 - **`app_role` enum** (`admin` \| `volunteer`) on `profiles`, set in [supabase/migrations/20260708120000_init.sql](supabase/migrations/20260708120000_init.sql). Sponsors and school partners are not `profiles` rows at all — they never authenticate.
@@ -28,4 +44,5 @@ child's PII if it's made without understanding who's supposed to see what.
 - Enforce access at the database layer (RLS/views), not just in UI conditionals — a client-side check is not a security boundary here.
 - Never add a column to `public_available_cards` (or any future anon-facing view) without checking it against the "sponsors never see: last name, school, address" rule in DESIGN.md §5.
 - Any new table holding family/child data needs RLS enabled and policies mirroring the existing `is_admin()`/`can_view_confidential()` pattern before it ships — not as a follow-up.
-- No real family/sponsor PII in commits, fixtures, or logs. Test/demo data comes from the `reset_dev_sql` + `demo_seed` queries (see [memory.md](memory.md)), never the legacy spreadsheet.
+- No real family/sponsor PII in commits, fixtures, or logs. Dev now holds a copy of real data (see the table above), so this covers anything read from dev too. Fake data for fixtures comes from the `demo_seed` scripts or [docs/training/practice-sponsors.csv](docs/training/practice-sponsors.csv), never the legacy spreadsheet.
+- The `reset_dev_*` and `demo_seed*` scripts and the e2e suite still run against dev, but they now wipe or mix into the practice copy. Check with Grant before running them; re-run the copy script afterwards to get back to prod's state.
