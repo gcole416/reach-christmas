@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { StatTile } from "@/components/StatTile";
-import { listSubmissions } from "@/lib/intake";
+import { listSubmissions, type SubmissionRecord } from "@/lib/intake";
 import { OverdueBadge, StatusBadge } from "@/components/StatusBadge";
 import { useData } from "@/lib/store";
 import {
@@ -10,36 +10,41 @@ import {
   getCardsNeedingPrint,
   getDashboardStats,
   getOverdueAssignments,
+  getTentativeChurchTarget,
   OVERDUE_WARNING_DAYS,
 } from "@/lib/queries";
 import { AdminPageHeader } from "./AdminPageHeader";
 
-// Registrations waiting on staff or on a counselor. Same grouping as the
-// Registrations page (submissions/shared.ts): verified = ready to import;
-// submitted / under_review = waiting on the counselor.
-function useRegistrationCounts(driveId: string | undefined) {
-  const [counts, setCounts] = useState<{ ready: number; waiting: number } | null>(null);
+// This drive's registrations, for the counts below. Null until loaded (or if
+// the load fails, in which case the tiles keep showing "…").
+function useSubmissions(driveId: string | undefined) {
+  const [items, setItems] = useState<SubmissionRecord[] | null>(null);
   useEffect(() => {
     if (!driveId) return;
     let cancelled = false;
     listSubmissions(driveId).then((res) => {
       if (cancelled || !res.ok) return;
-      setCounts({
-        ready: res.items.filter((s) => s.status === "verified").length,
-        waiting: res.items.filter((s) => s.status === "submitted" || s.status === "under_review").length,
-      });
+      setItems(res.items);
     });
     return () => {
       cancelled = true;
     };
   }, [driveId]);
-  return counts;
+  return items;
 }
 
 export default function AdminPage() {
   const { data, viewerRole } = useData();
-  const registrations = useRegistrationCounts(data?.drive.id);
+  const submissions = useSubmissions(data?.drive.id);
   if (!data) return null;
+
+  // Same grouping as the Registrations page (submissions/shared.ts): verified =
+  // ready to import; submitted / under_review = waiting on the counselor.
+  const registrations = submissions && {
+    ready: submissions.filter((s) => s.status === "verified").length,
+    waiting: submissions.filter((s) => s.status === "submitted" || s.status === "under_review").length,
+  };
+  const tentative = submissions && getTentativeChurchTarget(data, submissions);
 
   const isAdmin = viewerRole === "admin";
   const stats = getDashboardStats(data);
@@ -90,7 +95,7 @@ export default function AdminPage() {
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold text-ink-secondary">This season so far</h2>
-        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           <StatTile label="Children registered" value={stats.totalChildren} />
           <StatTile
             label="Church sign-ups needed"
@@ -105,6 +110,22 @@ export default function AdminPage() {
                     } to go`
             }
             href="/admin/sponsors"
+          />
+          <StatTile
+            label="Tentative church target"
+            value={tentative ? tentative.total : "…"}
+            hint={
+              tentative
+                ? `${tentative.confirmed} imported + ${tentative.pending} not yet imported${
+                    tentative.duplicatesSkipped > 0
+                      ? `, ${tentative.duplicatesSkipped} duplicate${
+                          tentative.duplicatesSkipped === 1 ? "" : "s"
+                        } left out`
+                      : ""
+                  }`
+                : "Counting registrations"
+            }
+            href="/admin/submissions"
           />
           <StatTile
             label="High schoolers"

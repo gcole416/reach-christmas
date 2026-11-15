@@ -15,6 +15,7 @@ import type {
   DistributionMethod,
   Family,
   SponsorFamily,
+  SubmissionRecord,
 } from "./types";
 
 export const OVERDUE_WARNING_DAYS = 10;
@@ -358,6 +359,95 @@ export function getDashboardStats(data: DataBundle): DashboardStats {
       .filter((sf) => sf.driveId === data.drive.id && sf.isActive)
       .reduce((sum, sf) => sum + (sf.capacity ?? 1), 0),
   };
+}
+
+export interface TentativeChurchTarget {
+  /** Imported children the church shops for (same as `churchSignupsNeeded`). */
+  confirmed: number;
+  /** Children in registrations not imported yet who would join that pool. */
+  pending: number;
+  /** confirmed + pending: the number to plan sponsor sign-ups against. */
+  total: number;
+  /** Pending children left out because the same child is already counted. */
+  duplicatesSkipped: number;
+}
+
+/** Last 10 digits of a phone number, or "" when there aren't 10. */
+function phoneKey(value: string | null | undefined): string {
+  const digits = (value ?? "").replace(/\D/g, "");
+  return digits.length < 10 ? "" : digits.slice(-10);
+}
+
+/** A first name reduced to letters and digits, accents and case removed. */
+function nameKey(value: unknown): string {
+  return (typeof value === "string" ? value : "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * How many children the church may end up shopping for: the ones already
+ * imported, plus the ones in registrations that are still waiting on a
+ * counselor or on import. A planning number, so it leans toward counting a
+ * child rather than dropping one.
+ *
+ * A pending child is NOT counted when:
+ *  - their grade (after the counselor's correction, if any) is 9-12, since
+ *    high schoolers shop for themselves;
+ *  - the registration was rejected or marked a duplicate (only submitted /
+ *    under_review / verified registrations are read at all);
+ *  - a child with the same first name under the same guardian phone is
+ *    already counted, whether imported (held or not) or earlier in the
+ *    queue. That is the household that registered twice. A registration with
+ *    no usable phone or name can't be matched, so its children are counted.
+ *
+ * Volunteers without confidential clearance get fewer rows back from RLS, so
+ * their total can be lower than an admin's.
+ */
+export function getTentativeChurchTarget(
+  data: DataBundle,
+  submissions: SubmissionRecord[],
+): TentativeChurchTarget {
+  const confirmed = getDashboardStats(data).churchSignupsNeeded;
+
+  const familyPhone = new Map(data.families.map((f) => [f.id, phoneKey(f.guardianPhone)]));
+  const seen = new Set<string>();
+  for (const child of data.children) {
+    const phone = familyPhone.get(child.familyId) ?? "";
+    const name = nameKey(child.firstName);
+    if (phone && name) seen.add(`${phone}|${name}`);
+  }
+
+  let pending = 0;
+  let duplicatesSkipped = 0;
+  // Oldest first, so when two pending registrations repeat a child the
+  // earlier one is the one that counts.
+  const queue = submissions
+    .filter((s) => s.status === "submitted" || s.status === "under_review" || s.status === "verified")
+    .sort((a, b) => (a.submittedAt ?? "").localeCompare(b.submittedAt ?? ""));
+  for (const submission of queue) {
+    const answerPhone = submission.answers.family?.guardian_phone;
+    const phone = phoneKey(submission.submitterPhone) || phoneKey(typeof answerPhone === "string" ? answerPhone : "");
+    const children = Array.isArray(submission.answers.children) ? submission.answers.children : [];
+    children.forEach((child, idx) => {
+      const fix = submission.corrections?.[idx + 1];
+      if (isHighSchoolGrade(fix?.grade ?? child.grade)) return;
+      const name = nameKey(fix?.firstName ?? child.first_name);
+      if (phone && name) {
+        const key = `${phone}|${name}`;
+        if (seen.has(key)) {
+          duplicatesSkipped += 1;
+          return;
+        }
+        seen.add(key);
+      }
+      pending += 1;
+    });
+  }
+
+  return { confirmed, pending, total: confirmed + pending, duplicatesSkipped };
 }
 
 /** The shop-day pipeline (US-35), lowest to highest. `attended` is the end. */
