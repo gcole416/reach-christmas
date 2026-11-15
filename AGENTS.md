@@ -30,6 +30,7 @@ child's PII if it's made without understanding who's supposed to see what.
 - **Keep dev email off** while it holds real addresses. Do not restore the Resend key, the digest schedule or the Edge Functions on dev without Grant deciding it.
 - **Telling them apart:** every site not wired to prod shows an amber "PRACTICE SITE" strip ([web/components/PracticeSiteBanner.tsx](web/components/PracticeSiteBanner.tsx)).
 - **How code gets to each site:** only through GitHub (`gcole416/reach-christmas`). Push to the `dev` branch and Vercel builds the practice site from it; `main` builds prod, and only moves when Grant promotes it. Never deploy from a local machine (no `vercel deploy`, no uploading files to Vercel). If Vercel shows a deployment as "Blocked" or failed, the fix is on Vercel's side (the deployment page says why, and has Redeploy), not a different way of pushing.
+- **No co-author lines on commits.** Do not end commit messages with `Co-Authored-By:` (for an AI assistant or anyone else). Vercel's Hobby plan treats a co-author as a second contributor and blocks the deployment ("commit author did not have contributing access"), as happened on 2026-11-14.
 - **Refreshing dev from prod:** [web/scripts/copy-prod-to-dev.mjs](web/scripts/copy-prod-to-dev.mjs) (details in [web/README.md](web/README.md)). It replaces all dev data and logins, and can only read prod.
 
 ## How that maps to the code
