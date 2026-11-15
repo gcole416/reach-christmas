@@ -90,8 +90,22 @@ export default function AdminPage() {
 
       <section className="mt-10">
         <h2 className="text-sm font-semibold text-ink-secondary">This season so far</h2>
-        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <StatTile label="Children registered" value={stats.totalChildren} />
+          <StatTile
+            label="Church sign-ups needed"
+            value={stats.churchSignupsNeeded}
+            hint={
+              stats.churchSignupsSoFar === 0
+                ? "Kids the church shops for"
+                : stats.churchSignupsSoFar >= stats.churchSignupsNeeded
+                  ? `${stats.churchSignupsSoFar} signed up, all covered`
+                  : `${stats.churchSignupsSoFar} signed up, ${
+                      stats.churchSignupsNeeded - stats.churchSignupsSoFar
+                    } to go`
+            }
+            href="/admin/sponsors"
+          />
           <StatTile
             label="High schoolers"
             value={stats.totalHighSchoolers}

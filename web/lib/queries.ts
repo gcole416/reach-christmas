@@ -314,6 +314,13 @@ export interface DashboardStats {
   cardsAvailable: number;
   cardsDelivered: number;
   overdueCount: number;
+  /** Children the church shops for: how many sponsor sign-up spots this drive
+   *  needs in total. The same pool as `totalChildren` (no high schoolers, no
+   *  held children), named for what staff plan the Church Center sign-up from. */
+  churchSignupsNeeded: number;
+  /** Spots the active sponsor roster already covers. An entry with no
+   *  capacity set counts as 1, the same rule the assignment draft uses. */
+  churchSignupsSoFar: number;
 }
 
 export function getDashboardStats(data: DataBundle): DashboardStats {
@@ -346,6 +353,10 @@ export function getDashboardStats(data: DataBundle): DashboardStats {
     cardsAvailable: sponsoredCards.length - cardsClaimed,
     cardsDelivered,
     overdueCount: getOverdueAssignments(data).length,
+    churchSignupsNeeded: sponsoredChildIds.size,
+    churchSignupsSoFar: data.sponsorFamilies
+      .filter((sf) => sf.driveId === data.drive.id && sf.isActive)
+      .reduce((sum, sf) => sum + (sf.capacity ?? 1), 0),
   };
 }
 
