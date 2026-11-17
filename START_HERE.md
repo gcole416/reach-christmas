@@ -21,6 +21,7 @@ that's never optional. Everything else below is read on demand.
 | Vercel hosting setup | [docs/DEPLOY.md](docs/DEPLOY.md) — Phases 1-4 (project, env vars, branch mapping) | its Phase 0/5, superseded by the checklist |
 | Running a live-notes doc for a team meeting | [docs/templates/live-meeting-notes-template.html](docs/templates/live-meeting-notes-template.html) — copy, fill in the agenda, publish as an Artifact with the `artifact` capability so notes autosave and are shareable | — |
 | Resetting dev data, GitLab issue conventions | [memory.md](memory.md) | — |
+| Backing up prod, or checking when the last backup was | [docs/BACKUP_LOG.md](docs/BACKUP_LOG.md) (the log) and [web/README.md](web/README.md#backing-up-prod) (how) | — |
 | Spawning or understanding a specialist agent | the matching file in [.claude/agents/](.claude/agents/) | the other five agents' files |
 | Setting up or troubleshooting the agent team itself | [agent_coding_help/AGENT-TEAM-SETUP.md](agent_coding_help/AGENT-TEAM-SETUP.md) | — |
 

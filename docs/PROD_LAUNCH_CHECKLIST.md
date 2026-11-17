@@ -55,8 +55,11 @@ skip ahead; ask Claude to look at the error first.
   could create an account and read that. Staff accounts are still created from
   the dashboard (step 3), which works with sign-ups off. *(Worth checking the
   same setting on dev too.)*
-- [ ] **1.4** Database → Backups: confirm what backups this plan includes
-  (DOC-3).
+- [x] **1.4** Database → Backups: confirm what backups this plan includes
+  (DOC-3). **Checked 2026-11-16: the free plan includes none**, and Grant
+  chose not to upgrade this year. Backups are local snapshots from
+  `web/scripts/backup-prod.mjs` (read-only), each one recorded in
+  [BACKUP_LOG.md](BACKUP_LOG.md). Take one before every prod migration.
 
 ## 2. Build the database (you paste; Claude can watch the results)
 

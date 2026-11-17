@@ -49,6 +49,29 @@ After a copy, the e2e test accounts in `.env.test.local` no longer exist on dev;
 running the suite. `docs/training/practice-sponsors.csv` is a fake 150-sponsor roster for practicing the
 Sponsors import.
 
+### Backing up prod
+
+Prod is on Supabase's free plan, which has **no backups** (Grant chose not to upgrade, 2026-11-16).
+Our backups are local snapshots:
+
+```bash
+node scripts/backup-prod.mjs                       # saves to ~/Reach Christmas backups/
+node scripts/backup-prod.mjs --out "D:\Backups"    # or a folder you choose (never inside the repo)
+```
+
+- **Read-only.** It loads only `SUPABASE_ACCESS_TOKEN` from `web/.env.copy.local` and sends single
+  `SELECT`s with `read_only: true`. It cannot change prod.
+- **What's saved:** every row of every `public` table plus logins (`auth.users` / `auth.identities`,
+  password hashes only), in one consistent snapshot, with a `.sha256` file next to it. The schema itself
+  lives in `supabase/migrations`.
+- **Logged automatically.** Each run appends a row (time, computer, counts, file name, checksum; no
+  PII) to [docs/BACKUP_LOG.md](../docs/BACKUP_LOG.md). Commit that change.
+- **The file is real PII.** The script refuses to write inside the repo. Keep backups on your computer
+  or an encrypted USB drive; never email, share, sync to a shared folder, or commit them.
+- **When:** before any prod migration or risky step, before a big import, and weekly during the drive.
+- **Restoring** writes to prod, so there's no restore script yet on purpose; one gets written only if
+  it's needed, and run only with Grant's go-ahead.
+
 ## Working from more than one machine
 
 The repo lives on GitHub; clone it anywhere. Env files are gitignored (see the table above), so on
