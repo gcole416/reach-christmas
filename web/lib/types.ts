@@ -1,3 +1,5 @@
+import type { ChurchCenterSnapshot } from "./sponsorCsv";
+
 // Mirrors SCHEMA.md — the TypeScript shape of the database. Row shapes
 // arriving from Supabase (snake_case) get converted to these (camelCase) at
 // the boundary in lib/supabase/mappers.ts.
@@ -215,6 +217,16 @@ export interface SponsorFamily {
   // without deleting it and losing the assignment history through it.
   isActive: boolean;
   createdAt: string;
+  // US-76: the Church Center "Registration ID" (how a re-import recognises
+  // this entry; null when added by hand), its "Submitted" time (Suggest
+  // matches fills earliest sign-ups first), and the sponsor_imports row that
+  // added it (for the "New" badge).
+  churchCenterRegistrationId: string | null;
+  signedUpAt: string | null;
+  addedByImportId: string | null;
+  // What Church Center said at the last import; a re-import only proposes
+  // changes Church Center made since then (see lib/sponsorCsv.ts).
+  churchCenterSnapshot: ChurchCenterSnapshot | null;
   // Computed: the count of non-cancelled assignments reached through
   // `sponsors.sponsorFamilyId` pointing at this roster entry — i.e. how many
   // cards this entry has actually taken so far, not a counter column kept in

@@ -10,6 +10,8 @@ import { SponsorFamilyFormModal } from "./SponsorFamilyFormModal";
 import { ImportSponsorsModal } from "./ImportSponsorsModal";
 import { SendSponsorEmailsModal } from "./SendSponsorEmailsModal";
 import type { SponsorEmailKind } from "@/lib/store";
+import { formatSignUpDate, useLatestSponsorImport } from "@/lib/sponsorImport";
+import { LastImportLine, NewBadge } from "./LastImportLine";
 
 // US-56: the sponsor sign-up roster staff import from Church Center (plus any
 // stragglers added by hand). This page only lists/edits `sponsor_families`
@@ -18,7 +20,7 @@ import type { SponsorEmailKind } from "@/lib/store";
 // intake form.
 
 type StatusFilter = "active" | "inactive" | "all";
-type SortOrder = "name" | "unassigned_first" | "assigned_first";
+type SortOrder = "name" | "signup" | "unassigned_first" | "assigned_first";
 
 export default function SponsorsAdminPage() {
   const { data, updateSponsorFamily } = useData();
@@ -31,6 +33,7 @@ export default function SponsorsAdminPage() {
   const [editTarget, setEditTarget] = useState<SponsorFamily | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const { latest: latestImport, badgeImportId } = useLatestSponsorImport(data?.drive.id, data);
 
   if (!data) return null;
 
@@ -45,6 +48,9 @@ export default function SponsorsAdminPage() {
       return statusMatches && searchMatches;
     })
     .sort((a, b) => {
+      if (sortOrder === "signup") {
+        return (a.signedUpAt ?? a.createdAt).localeCompare(b.signedUpAt ?? b.createdAt);
+      }
       // "Has a child" first or last, then by name within each group.
       if (sortOrder !== "name") {
         const aHas = a.assignedCount > 0 ? 1 : 0;
@@ -68,9 +74,9 @@ export default function SponsorsAdminPage() {
         title="Sponsor roster"
         description={
           <>
-            Everyone signed up to sponsor through Church Center this year. Import the list once, add
-            stragglers by hand as they sign up, and keep capacity current as entries fill. Assigning a
-            card to one of these entries happens on the{" "}
+            Everyone signed up to sponsor through Church Center this year. Drop in a fresh Church Center
+            export whenever new people sign up: people already here keep their children, and only new
+            sign-ups are added. Assigning a card to one of these entries happens on the{" "}
             <span className="font-medium text-ink-primary">Assign sponsors</span> page.
           </>
         }
@@ -92,7 +98,7 @@ export default function SponsorsAdminPage() {
               onClick={() => setShowImport(true)}
               className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink-secondary hover:border-cat-blue hover:text-ink-primary"
             >
-              Import CSV
+              Import / update from Church Center
             </button>
             <button
               onClick={() => setShowAddForm(true)}
@@ -103,6 +109,10 @@ export default function SponsorsAdminPage() {
           </div>
         }
       />
+
+      <div className="mb-4">
+        <LastImportLine latest={latestImport} />
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name, email, or phone…" />
@@ -123,6 +133,7 @@ export default function SponsorsAdminPage() {
             className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink-primary"
           >
             <option value="name">Sort: name</option>
+            <option value="signup">Sort: sign-up order</option>
             <option value="unassigned_first">Sort: no child yet first</option>
             <option value="assigned_first">Sort: has a child first</option>
           </select>
@@ -155,6 +166,10 @@ export default function SponsorsAdminPage() {
                       <span className="ml-1.5 inline-flex items-center rounded-full bg-ink-muted/15 px-2 py-0.5 text-[11px] font-medium text-ink-secondary">
                         Inactive
                       </span>
+                    ) : null}
+                    {badgeImportId && sf.addedByImportId === badgeImportId ? <NewBadge /> : null}
+                    {sf.signedUpAt ? (
+                      <div className="text-xs text-ink-muted">Signed up {formatSignUpDate(sf.signedUpAt)}</div>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 text-ink-secondary">
@@ -208,7 +223,7 @@ export default function SponsorsAdminPage() {
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-ink-secondary">
                   {allSponsorFamilies.length === 0
-                    ? "No sponsors yet. Import a CSV from Church Center or add one by hand."
+                    ? "No sponsors yet. Import the Church Center export or add one by hand."
                     : "No sponsors match this view."}
                 </td>
               </tr>

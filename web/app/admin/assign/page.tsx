@@ -16,6 +16,8 @@ import {
 import { SearchInput } from "@/components/SearchInput";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { DraftReview } from "./DraftReview";
+import { useLatestSponsorImport } from "@/lib/sponsorImport";
+import { LastImportLine, NewBadge } from "../sponsors/LastImportLine";
 
 // US-62: sponsor-first matching. Pick a roster entry with room on the left,
 // click children (or a whole household) on the right; each click is one
@@ -95,6 +97,7 @@ export default function AssignSponsorsPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const workspace = useMemo(() => (data ? buildAssignWorkspace(data) : null), [data]);
+  const { latest: latestImport, badgeImportId: newImportId } = useLatestSponsorImport(data?.drive.id, data);
 
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -209,6 +212,10 @@ export default function AssignSponsorsPage() {
         }
       />
 
+      <div className="mb-3">
+        <LastImportLine latest={latestImport} />
+      </div>
+
       {/* Supply and demand */}
       <div className="mb-6 rounded-xl border border-border bg-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-sm">
@@ -248,7 +255,7 @@ export default function AssignSponsorsPage() {
               </p>
             ) : null}
             {withRoom.map((r) => (
-              <SponsorRow key={r.id} entry={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
+              <SponsorRow key={r.id} entry={r} isNew={!!newImportId && r.addedByImportId === newImportId} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
             ))}
             {full.length > 0 ? (
               <>
@@ -262,7 +269,7 @@ export default function AssignSponsorsPage() {
                 </button>
                 {showFull
                   ? full.map((r) => (
-                      <SponsorRow key={r.id} entry={r} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
+                      <SponsorRow key={r.id} entry={r} isNew={!!newImportId && r.addedByImportId === newImportId} selected={r.id === selectedId} onSelect={() => setSelectedId(r.id)} />
                     ))
                   : null}
               </>
@@ -417,7 +424,17 @@ export default function AssignSponsorsPage() {
   );
 }
 
-function SponsorRow({ entry, selected, onSelect }: { entry: RosterEntry; selected: boolean; onSelect: () => void }) {
+function SponsorRow({
+  entry,
+  isNew,
+  selected,
+  onSelect,
+}: {
+  entry: RosterEntry;
+  isNew: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const fullOrOver = entry.open != null && entry.open <= 0;
   return (
     <button
@@ -429,7 +446,10 @@ function SponsorRow({ entry, selected, onSelect }: { entry: RosterEntry; selecte
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium text-ink-primary">{entry.displayName}</span>
+        <span className="truncate text-sm font-medium text-ink-primary">
+          {entry.displayName}
+          {isNew ? <NewBadge /> : null}
+        </span>
         <RoomDots entry={entry} />
       </div>
       <p className={`mt-0.5 text-xs ${fullOrOver ? "text-status-warning" : "text-ink-muted"}`}>{roomLabel(entry)}</p>

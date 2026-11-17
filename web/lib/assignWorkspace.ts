@@ -50,6 +50,10 @@ export interface RosterEntry {
   notes: string | null;
   capacity: number | null;
   createdAt: string;
+  /** US-76: Church Center sign-up time, falling back to createdAt. "Earliest sign-up" means this. */
+  signUpOrder: string;
+  /** US-76: the import that added this entry (for the "New" badge). */
+  addedByImportId: string | null;
   assignedCount: number;
   /** capacity - assigned (can go negative when over); null when no capacity is set. */
   open: number | null;
@@ -183,6 +187,8 @@ export function buildAssignWorkspace(data: DataBundle): AssignWorkspace {
         notes: sf.notes,
         capacity: sf.capacity,
         createdAt: sf.createdAt,
+        signUpOrder: sf.signedUpAt ?? sf.createdAt,
+        addedByImportId: sf.addedByImportId,
         assignedCount: assignedChildren.length,
         open: sf.capacity == null ? null : sf.capacity - assignedChildren.length,
         assignedChildren,
@@ -211,7 +217,7 @@ export function sortRosterByRoom(roster: RosterEntry[]): RosterEntry[] {
     (a, b) =>
       bucket(a) - bucket(b) ||
       (b.open ?? 0) - (a.open ?? 0) ||
-      a.createdAt.localeCompare(b.createdAt),
+      a.signUpOrder.localeCompare(b.signUpOrder),
   );
 }
 
@@ -288,7 +294,7 @@ export function suggestMatches(households: WaitingHousehold[], roster: RosterEnt
   //    room for all of them; a household too big for any one sponsor is split
   //    right then, while the roomiest sponsors are still free, across as few
   //    sponsors as possible (most room first) and marked `splitAcross`.
-  const signUpOrder = [...roster].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const signUpOrder = [...roster].sort((a, b) => a.signUpOrder.localeCompare(b.signUpOrder));
   // Households that can never fit one sponsor (bigger than the roomiest
   // sponsor's room) go last, so they don't use up room a whole household
   // needs; everything else goes whole, biggest first.

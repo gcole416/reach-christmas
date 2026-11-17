@@ -2917,7 +2917,7 @@ Acceptance criteria:
 - [ ] Handouts: soften "Import only once" in `area-sponsors.html` and A6 in
   `admin-guide.html`.
 
-Status: **Backlog**.
+Status: **Superseded by US-76** (2026-11-16), which builds this duplicate check into the Church Center import/update.
 Owner: frontend-designer.
 
 ---
@@ -2952,6 +2952,72 @@ Acceptance criteria:
 
 Status: **Backlog**.
 Owner: frontend-designer.
+
+---
+
+## US-76: Import and update the sponsor roster from the Church Center export
+
+As sponsor staff, I want to drop the latest Church Center registrations export
+into the same Import window as often as I like, so new sign-ups are added and
+ready to assign while everyone already on the roster keeps their children.
+
+Decided by Grant, 2026-11-16: read the Church Center file as exported (no
+reshaping); a changed count updates the limit but never below children already
+assigned; cancelled or missing people are flagged only, never changed; also
+save each person's Church Center sign-up time for first-come matching, and show
+when the roster was last updated. Supersedes **US-74**.
+
+Acceptance criteria:
+- [x] The importer recognises the Church Center export (Registration ID, first
+  and last name, phone, home/work/other email, Count, Status, Submitted) and
+  still accepts `name, email, phone, capacity`. Addresses are never read into
+  the app.
+- [x] Rows with two emails (`a@x;b@y`) keep the first as the contact email and
+  put the rest in the new entry's Notes.
+- [x] Matching: Church Center Registration ID first; a hand-added entry is
+  linked by email the first time it appears; the simple format matches by
+  email, or name and phone when there's no email.
+- [x] Preview groups: New (added), Changed (name/email/phone/count, per-row
+  untick), Needs a look (cancelled in Church Center, missing from the file,
+  count went below children assigned), Possible duplicates (same email, second
+  registration; skipped unless ticked), Already on the roster, Skipped.
+- [x] An import never touches assignments, notes or active/inactive status. A
+  changed count never drops below children already assigned, enforced in the
+  database as well as the preview.
+- [x] One all-or-nothing save (`apply_sponsor_import`, security invoker, so
+  the existing roster RLS applies). A concurrent import of the same people or
+  a roster entry deleted mid-preview rolls everything back with a plain
+  message.
+- [x] `sponsor_families.signed_up_at` from Church Center's Submitted time;
+  Suggest matches and the roster's room sort fill earliest sign-ups first.
+- [x] "Last updated from Church Center: <time> by <name> (n new, n changed)"
+  on the roster and Assign pages, from a new staff-only `sponsor_imports` log.
+  Entries added by the latest import get a "New" badge on both pages.
+- [x] Roster gains "Sort: sign-up order" and shows each entry's sign-up date.
+- [x] Hand edits stick: each entry keeps what Church Center said at the last
+  import (`church_center_snapshot`), and a re-import only proposes a change
+  Church Center made since then. Unticking a proposed change is remembered,
+  so it isn't asked again. Updates send only the changed fields, so an edit
+  made between preview and confirm isn't overwritten.
+- [x] `sponsor-csv.spec.ts`: parsing and plan tests with made-up data (no
+  browser, no database). Dry run on the real 2026-11-16 export, locally, counts
+  only: 69 rows, 68 new, 1 possible duplicate, 123 spots, 10 two-email rows
+  split, no address in the save; re-importing the same file adds nobody.
+- [x] Handouts: `area-sponsors.html` and A6 in `admin-guide.html` updated.
+  Both PDFs re-rendered and copied to `web/help-docs/` (the in-app help menu).
+- [x] Migration `20261116120000_church_center_roster_sync.sql` applied to dev 2026-11-16 and verified (columns, triggers, grants, policies, anon has nothing).
+- [x] reach-reviewer 2026-11-16: no blockers. Fixed before the final apply:
+  the log's counts (an UPDATE that RLS silently skipped), re-imports undoing
+  hand edits, stale overwrites, importer name now stamped by the database,
+  table privileges narrowed to select/insert, negative counts refused on
+  updates, a Registration ID can't match one entry twice, and the New badge
+  follows the last import that added people.
+- [ ] Before the next `copy-prod-to-dev.mjs` run: the script refuses while dev
+  has these extra columns/table and prod doesn't. Update the script, or
+  promote US-76 first (Grant, 2026-11-16).
+
+Status: **In review**, built on `dev` 2026-11-16. Prod untouched.
+Owner: frontend-designer (modal, pages), database-engineer (migration).
 
 ---
 

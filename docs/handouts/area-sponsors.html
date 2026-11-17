@@ -175,7 +175,7 @@
 
   <div class="flow">
     <div><div class="dot">1</div><b>Sign up</b><span>Sponsors register on Church Center</span></div>
-    <div><div class="dot">2</div><b>Load the roster</b><span>Import the list once, add late sign-ups</span></div>
+    <div><div class="dot">2</div><b>Load the roster</b><span>Import the Church Center list, re-import as people sign up</span></div>
     <div><div class="dot">3</div><b>Assign</b><span>Match children to sponsors</span></div>
     <div><div class="dot">4</div><b>Cards out</b><span>Printed, or emailed once email is on</span></div>
     <div><div class="dot">5</div><b>Gifts due</b><span>Late 10 days after assigning</span></div>
@@ -246,14 +246,15 @@
     with phone and email so someone can follow up kindly.</div>
 
   <h2>For your lead</h2>
-  <h3>Load the Church Center list (once a season)</h3>
+  <h3>Load or update the Church Center list</h3>
   <ol class="steps">
-    <li><strong class="t">Shape the export.</strong><p>Save Church Center's export as a CSV file with a header row of <b>name, email, phone, capacity</b>. Only <b>name</b> is required. Example row: <code>Jane Smith,jane@example.com,555-0100,2</code></p></li>
-    <li><strong class="t">Preview it.</strong><p><span class="nav">Sponsors → Sponsor roster</span> → <span class="btn">Import CSV</span>. Choose the file (or paste it) and click <span class="btn">Preview import</span>. Nothing is saved yet. Rows with no name are skipped.</p></li>
-    <li><strong class="t">Import.</strong><p>Click <span class="btn">Import 42</span> (the number is how many rows have a name). Every row lands, or none do.</p></li>
+    <li><strong class="t">Export.</strong><p>In Church Center, export the registrations list as a CSV. Use the file as it is; there's nothing to reshape.</p></li>
+    <li><strong class="t">Preview it.</strong><p><span class="nav">Sponsors → Sponsor roster</span> → <span class="btn">Import / update from Church Center</span>. Choose the file and click <span class="btn">Preview</span>. Nothing is saved yet. The preview sorts everyone into New, Changed, Needs a look, Possible duplicates and Already on the roster.</p></li>
+    <li><strong class="t">Confirm.</strong><p>Click <span class="btn">Add 12 and update 3</span> (the numbers match the preview). Every change lands, or none do.</p></li>
   </ol>
-  <p class="small"><b>Import only once.</b> The app doesn't check for repeats, so importing the same file twice adds everyone twice.
-    For late sign-ups use <span class="btn">+ Add sponsor</span>. Notes don't come in with the import; add them with <span class="btn">Edit</span>.</p>
+  <p class="small"><b>Repeat whenever new people sign up.</b> People already on the roster keep their assigned children, and only new sign-ups are added. New ones get a <b>New</b> badge on the roster and on Assign sponsors.
+    Nothing under "Needs a look" changes on its own: if someone cancelled, use <span class="btn">Mark inactive</span>, then reassign their children.
+    A possible duplicate (same email, second registration) is skipped unless you tick it. Notes don't come in with the import; add them with <span class="btn">Edit</span>.</p>
 
   <div class="footer contact">
     <div><div class="fill-label">Reach Christmas Technical Lead</div><div class="fill filled">Grant Cole · 913-687-2618</div></div>
