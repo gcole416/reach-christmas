@@ -70,7 +70,7 @@ See [PROD_LAUNCH_CHECKLIST.md](PROD_LAUNCH_CHECKLIST.md) step 2.
 | 32 | `20261015170000_net_revoke_and_assign_race_fix.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | |
 | 33 | `20261019120000_staff_sponsor_emails.sql` | applied 2026-10-19 | applied 2026-10-20 (bootstrap) | Header stale (applied). |
 | 34 | `20261019130000_replace_review_token.sql` | applied 2026-10-20 | applied 2026-10-20 (bootstrap) | |
-| 36 | `20261116120000_church_center_roster_sync.sql` | applied 2026-11-16 | not applied | US-76. Additive only (new `sponsor_imports` table, four nullable `sponsor_families` columns, `apply_sponsor_import()`). Safe to re-run. While it is on dev but not prod, `copy-prod-to-dev.mjs` refuses to run (structures differ). Number 35 is left for `20261112120000_must_change_password.sql`. |
+| 36 | `20261116120000_church_center_roster_sync.sql` | applied 2026-11-16 | applied 2026-11-16 (SQL Editor, after backup) | US-76. Additive only (new `sponsor_imports` table, four nullable `sponsor_families` columns, `apply_sponsor_import()`). Safe to re-run. Verified read-only on both projects. Dev and prod structures match again, so `copy-prod-to-dev.mjs` runs. Number 35 is left for `20261112120000_must_change_password.sql`. |
 
 **Never run on prod** (dev-only data scripts in `supabase/`): `demo_seed.sql`,
 `demo_seed_bulk.sql`, `intake_demo_seed.sql`, `reset_dev_data.sql`,

@@ -3012,11 +3012,12 @@ Acceptance criteria:
   table privileges narrowed to select/insert, negative counts refused on
   updates, a Registration ID can't match one entry twice, and the New badge
   follows the last import that added people.
-- [ ] Before the next `copy-prod-to-dev.mjs` run: the script refuses while dev
-  has these extra columns/table and prod doesn't. Update the script, or
-  promote US-76 first (Grant, 2026-11-16).
+- [x] `copy-prod-to-dev.mjs` works again: promoting US-76 made the dev and
+  prod structures match.
+- [x] Promoted to prod 2026-11-16 (Grant's go-ahead): local backup first,
+  migration via SQL Editor, verified read-only, then `main` moved to `dev`.
 
-Status: **In review**, built on `dev` 2026-11-16. Prod untouched.
+Status: **Done**, on dev and prod 2026-11-16.
 Owner: frontend-designer (modal, pages), database-engineer (migration).
 
 ---

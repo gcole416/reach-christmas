@@ -11,8 +11,8 @@
 -- APPLY STATUS (docs/MIGRATION_LEDGER.md wins if this disagrees)
 -- =============================================================================
 --   DEV:  applied 2026-11-16 (Grant, SQL Editor).
---   PROD: NOT APPLIED. Promote only through PROD_LAUNCH_CHECKLIST /
---         MIGRATION_LEDGER with Grant's go-ahead.
+--   PROD: applied 2026-11-16 (Grant, SQL Editor, after the first local
+--         backup in docs/BACKUP_LOG.md). Verified read-only the same day.
 --
 -- =============================================================================
 -- What this adds
