@@ -3055,7 +3055,7 @@ still needs one, so every child in the sponsor pool is accounted for.
   email carries this season's fixed drop-off text (`DROPOFF_INSTRUCTIONS` in
   [web/lib/manualSponsorEmail.ts](../web/lib/manualSponsorEmail.ts)): Reach
   Christmas table at OneLife Church, from November 21, due December 6, gifts
-  in a bag and NOT wrapped, no need to print the card or bring IDs. Update
+  in a bag and NOT wrapped, no need to print, but bring the email so gifts can be tracked. Update
   that list next season.
   - The card PDFs (black and white, half-letter, one page per child) and the
     editable drop-off fields were built and then removed. To bring them back,

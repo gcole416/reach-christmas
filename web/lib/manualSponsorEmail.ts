@@ -26,7 +26,7 @@ export const DROPOFF_INSTRUCTIONS = [
   "Bring your gifts to the Reach Christmas table at OneLife Church.",
   "You can drop them off starting November 21. All gifts are due by December 6.",
   "Bring the gifts in a bag. Please DO NOT WRAP them.",
-  "You don't need to print out the card or bring any IDs.",
+  "You don't need to print out these details, but please bring this email to help us track your gifts!",
 ];
 
 export interface SponsorEmailCard {
