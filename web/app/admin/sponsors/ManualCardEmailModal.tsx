@@ -10,29 +10,39 @@ import {
   getSponsorEmailCards,
   markCardsEmailed,
   unmarkCardsEmailed,
-  useDropoffInfo,
+  useDropoffDetails,
+  type SponsorEmailCard,
 } from "@/lib/manualSponsorEmail";
+import { buildCardsPdf, cardPdfFileName, downloadPdf } from "@/lib/cardPdf";
 
-// Email is off, so staff send cards from their own mailbox: copy the
-// pre-written email from here, send it, then click "Mark as emailed" so the
-// roster's tally knows. See lib/manualSponsorEmail.ts.
+// Email is off, so staff send cards from their own mailbox: download the card
+// PDFs, copy the pre-written email from here, attach and send, then click
+// "Mark as emailed" so the roster's tally knows. See lib/manualSponsorEmail.ts
+// and lib/cardPdf.ts.
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
 }
 
-export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily: SponsorFamily; onClose: () => void }) {
+export function ManualCardEmailModal({
+  sponsorFamily,
+  onClose,
+}: {
+  sponsorFamily: SponsorFamily;
+  onClose: () => void;
+}) {
   const { data, refresh } = useData();
-  const { info: dropoff, loaded: dropoffLoaded } = useDropoffInfo();
+  const { dropoff, setField: setDropoffField, loaded: dropoffLoaded } = useDropoffDetails();
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [includeEmailed, setIncludeEmailed] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const allCards = useMemo(
-    () => (data ? getSponsorEmailCards(data, sponsorFamily.id) : []),
-    [data, sponsorFamily.id],
-  );
+  const allCards = useMemo(() => (data ? getSponsorEmailCards(data, sponsorFamily.id) : []), [data, sponsorFamily.id]);
   // Confidential cards can't be assigned through the roster today (US-65), so
   // this should never trigger. If one ever does, it stays out of the email.
   const confidential = allCards.filter((c) => c.isConfidential);
@@ -48,6 +58,30 @@ export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily
     const ok = await copyText(text);
     setCopied(ok ? label : null);
     if (!ok) setError("Couldn't copy. Select the text and copy it by hand.");
+  }
+
+  async function handlePdf(cards: SponsorEmailCard[], mode: "each" | "combined") {
+    setPdfBusy(true);
+    setError(null);
+    try {
+      if (mode === "combined" || cards.length === 1) {
+        const name =
+          cards.length === 1
+            ? cardPdfFileName(cards[0])
+            : `Reach-Christmas-cards-${sponsorFamily.displayName.replace(/[^A-Za-z0-9]+/g, "-")}.pdf`;
+        downloadPdf(await buildCardsPdf(cards, dropoff), name);
+      } else {
+        // One file per card. The browser may ask once to allow several
+        // downloads; the short gap keeps it from dropping any.
+        for (const c of cards) {
+          downloadPdf(await buildCardsPdf([c], dropoff), cardPdfFileName(c));
+          await new Promise((r) => setTimeout(r, 400));
+        }
+      }
+    } catch {
+      setError("Couldn't make the PDF. Try again, or copy the message without it.");
+    }
+    setPdfBusy(false);
   }
 
   async function handleMark() {
@@ -81,7 +115,10 @@ export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={busy ? undefined : onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      onClick={busy ? undefined : onClose}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -92,10 +129,14 @@ export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily
         <h2 id="manual-email-title" className="text-lg font-semibold text-ink-primary">
           Email cards to {sponsorFamily.displayName}
         </h2>
-        <p className="mt-1 text-sm text-ink-secondary">
-          Copy each part into a new email from the Reach mailbox, send it, then come back and click{" "}
-          <span className="font-medium text-ink-primary">Mark as emailed</span>.
-        </p>
+        <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-sm text-ink-secondary">
+          <li>Check the drop-off details below, then download the card PDFs.</li>
+          <li>Start a new email from the Reach mailbox and copy in the To, Subject and Message.</li>
+          <li>Attach the PDFs and send.</li>
+          <li>
+            Come back and click <span className="font-medium text-ink-primary">Mark as emailed</span>.
+          </li>
+        </ol>
 
         {sendable.length === 0 ? (
           <p className="mt-4 text-sm text-ink-secondary">This sponsor has no cards assigned yet.</p>
@@ -110,20 +151,29 @@ export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily
                       <span className="font-medium">{c.cardNumber}</span> · {c.firstName}
                       {c.grade ? ` · Grade ${c.grade}` : ""}
                     </span>
-                    {c.emailedAt ? (
-                      <span className="flex items-center gap-2 text-xs text-status-good">
-                        Emailed {formatDate(c.emailedAt)}
-                        <button
-                          onClick={() => handleUnmark(c.assignmentId)}
-                          disabled={busy}
-                          className="text-ink-muted underline hover:text-ink-primary disabled:opacity-50"
-                        >
-                          Undo
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-status-warning">Not emailed yet</span>
-                    )}
+                    <span className="flex items-center gap-3">
+                      <button
+                        onClick={() => handlePdf([c], "each")}
+                        disabled={pdfBusy}
+                        className="text-xs font-medium text-cat-blue hover:opacity-80 disabled:opacity-50"
+                      >
+                        PDF
+                      </button>
+                      {c.emailedAt ? (
+                        <span className="flex items-center gap-2 text-xs text-status-good">
+                          Emailed {formatDate(c.emailedAt)}
+                          <button
+                            onClick={() => handleUnmark(c.assignmentId)}
+                            disabled={busy}
+                            className="text-ink-muted underline hover:text-ink-primary disabled:opacity-50"
+                          >
+                            Undo
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-status-warning">Not emailed yet</span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -137,23 +187,70 @@ export function ManualCardEmailModal({ sponsorFamily, onClose }: { sponsorFamily
                   onChange={(e) => setIncludeEmailed(e.target.checked)}
                   className="h-4 w-4 rounded border-border"
                 />
-                Also include the {alreadyEmailed.length} already emailed {alreadyEmailed.length === 1 ? "card" : "cards"}
+                Also include the {alreadyEmailed.length} already emailed{" "}
+                {alreadyEmailed.length === 1 ? "card" : "cards"}
               </label>
             ) : null}
 
             {confidential.length > 0 ? (
               <div className="rounded-lg bg-status-warning/10 px-3 py-2 text-ink-primary">
-                {confidential.length} confidential {confidential.length === 1 ? "card is" : "cards are"} left out of this
-                email. Check with an admin before sending.
+                {confidential.length} confidential {confidential.length === 1 ? "card is" : "cards are"} left out of
+                this email. Check with an admin before sending.
               </div>
             ) : null}
 
-            {dropoffLoaded && !dropoffIsComplete(dropoff) ? (
-              <div className="rounded-lg bg-status-warning/10 px-3 py-2 text-ink-primary">
-                The drop-off details aren&apos;t filled in (or you can&apos;t see them), so the email says
-                &quot;[add drop-off details]&quot;. Replace that in your email before sending.
+            {/* Drop-off: goes on every card and in the email */}
+            <fieldset className="rounded-lg border border-border px-3 pb-3 pt-1">
+              <legend className="px-1 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                Drop-off details
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    ["location", "Where", "OneLife Church..."],
+                    ["days", "When", "e.g. Sundays Dec 7 and 14"],
+                    ["deadline", "Deadline", "e.g. Sunday, Dec 14"],
+                  ] as const
+                ).map(([field, label, placeholder]) => (
+                  <label key={field} className="block text-xs text-ink-secondary">
+                    {label}
+                    <input
+                      value={dropoff[field] ?? ""}
+                      onChange={(e) => setDropoffField(field, e.target.value)}
+                      placeholder={placeholder}
+                      disabled={!dropoffLoaded}
+                      className="mt-0.5 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-ink-primary"
+                    />
+                  </label>
+                ))}
               </div>
-            ) : null}
+              <p className="mt-2 text-xs text-ink-muted">
+                {dropoffLoaded && !dropoffIsComplete(dropoff)
+                  ? 'Fill in all three before downloading. A blank one is left off the cards, and shows as "[add drop-off details]" in the email.'
+                  : "Remembered on this computer for the next sponsor."}
+              </p>
+            </fieldset>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => handlePdf(inEmail, "each")}
+                disabled={pdfBusy || !dropoffLoaded}
+                className="rounded-lg border border-cat-blue px-4 py-2 text-sm font-medium text-cat-blue hover:bg-cat-blue/5 disabled:opacity-50"
+              >
+                {pdfBusy
+                  ? "Making PDFs…"
+                  : `Download ${inEmail.length === 1 ? "card PDF" : `${inEmail.length} card PDFs`}`}
+              </button>
+              {inEmail.length > 1 ? (
+                <button
+                  onClick={() => handlePdf(inEmail, "combined")}
+                  disabled={pdfBusy || !dropoffLoaded}
+                  className="text-xs font-medium text-ink-secondary underline hover:text-ink-primary disabled:opacity-50"
+                >
+                  or all in one file
+                </button>
+              ) : null}
+            </div>
 
             {/* To */}
             <div>

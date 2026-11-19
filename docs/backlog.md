@@ -3048,6 +3048,16 @@ still needs one, so every child in the sponsor pool is accounted for.
   Confidential), and the boxes add up to the pool. Done when only Emailed is
   non-zero.
 - [x] Roster sort "not emailed yet first"; Dashboard tile "Cards not emailed".
+- [x] Card PDFs, made in the browser ([web/lib/cardPdf.ts](../web/lib/cardPdf.ts),
+  `pdf-lib` 1.17.1, the same library the Edge Functions use): a half-letter
+  page per child, with the card number, first name, grade, sizes, wish list,
+  "good to know" (specific needs) and drop-off. Same field whitelist as the
+  print page and `public_available_cards`. Download one file per card, or
+  all of a sponsor's cards in one file. Long text wraps or runs onto a second
+  page; nothing is cut off.
+- [x] Drop-off details are editable in the modal, starting from `app_settings`
+  and remembered in this browser. Days and deadline are still placeholders
+  in `app_settings`, and there's no screen to edit them there.
 - [ ] Grant tries it on dev.
 - [ ] Promote to prod (no migration; code only) after review.
 

@@ -26,11 +26,28 @@ export interface DropoffInfo {
   deadline: string | null;
 }
 
-// app_settings is admin-only, so a volunteer gets null here and the email
-// keeps a visible placeholder instead. The seeded placeholders ("[drop-off
-// days not set yet ...]") count as not set, too.
-export function useDropoffInfo(): { info: DropoffInfo | null; loaded: boolean } {
-  const [info, setInfo] = useState<DropoffInfo | null>(null);
+// Drop-off details for the email and the card PDFs. Starts from
+// app_settings (admin-only, so a volunteer starts blank, and the seeded
+// "[... not set yet ...]" placeholders count as blank), then whatever this
+// browser last typed into the modal wins, so it's entered once, not per
+// sponsor. Church info, not family data, so localStorage is fine.
+const DROPOFF_STORAGE_KEY = "reach.manualEmail.dropoff";
+
+function readSavedDropoff(): Partial<DropoffInfo> {
+  try {
+    const raw = window.localStorage.getItem(DROPOFF_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Partial<DropoffInfo>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function useDropoffDetails(): {
+  dropoff: DropoffInfo;
+  setField: (field: keyof DropoffInfo, value: string) => void;
+  loaded: boolean;
+} {
+  const [dropoff, setDropoff] = useState<DropoffInfo>({ location: null, days: null, deadline: null });
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -44,18 +61,31 @@ export function useDropoffInfo(): { info: DropoffInfo | null; loaded: boolean } 
       .maybeSingle()
       .then(({ data }) => {
         if (cancelled) return;
-        setInfo(
-          data
-            ? { location: clean(data.dropoff_location), days: clean(data.dropoff_days), deadline: clean(data.dropoff_deadline) }
-            : null,
-        );
+        const saved = readSavedDropoff();
+        const pick = (k: keyof DropoffInfo, fromDb: unknown) => (saved[k]?.trim() ? saved[k]!.trim() : clean(fromDb));
+        setDropoff({
+          location: pick("location", data?.dropoff_location),
+          days: pick("days", data?.dropoff_days),
+          deadline: pick("deadline", data?.dropoff_deadline),
+        });
         setLoaded(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
-  return { info, loaded };
+  function setField(field: keyof DropoffInfo, value: string) {
+    setDropoff((prev) => {
+      const next = { ...prev, [field]: value.trim() ? value : null };
+      try {
+        window.localStorage.setItem(DROPOFF_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        // Private window etc.: the value still applies for this visit.
+      }
+      return next;
+    });
+  }
+  return { dropoff, setField, loaded };
 }
 
 export interface SponsorEmailCard {
@@ -65,6 +95,12 @@ export interface SponsorEmailCard {
   grade: string | null;
   emailedAt: string | null;
   isConfidential: boolean;
+  pantSize: string | null;
+  shirtSize: string | null;
+  shoeSize: string | null;
+  wishlist: string[];
+  specificNeeds: string | null;
+  /** This card's block in the plain-text email. */
   text: string;
 }
 
@@ -96,6 +132,11 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
           grade: child.grade,
           emailedAt: a.cardEmailedAt,
           isConfidential: family?.isConfidential ?? false,
+          pantSize: child.pantSize,
+          shirtSize: child.shirtSize,
+          shoeSize: child.shoeSize,
+          wishlist,
+          specificNeeds: child.specificNeeds,
           text,
         },
       ];
@@ -109,6 +150,7 @@ export function buildSponsorCardEmail(
   sponsorName: string,
   cards: SponsorEmailCard[],
   dropoff: DropoffInfo | null,
+  withPdfs = true,
 ): { subject: string; body: string } {
   const many = cards.length > 1;
   const numbers = cards.map((c) => c.cardNumber).join(", ");
@@ -119,7 +161,11 @@ export function buildSponsorCardEmail(
   const body =
     `Hi ${sponsorName},\n\n` +
     `Thank you for sponsoring this Christmas! Here ${many ? `are the ${cards.length} children` : "is the child"} ` +
-    `you're shopping for.\n\n` +
+    `you're shopping for.` +
+    (withPdfs
+      ? ` ${many ? "Each card is" : "The card is"} attached as a PDF, so you can print it or bring it with you shopping.`
+      : "") +
+    `\n\n` +
     cards.map((c) => c.text).join("\n") +
     `\nDrop-off:\n` +
     `Location: ${dropoff?.location ?? DROPOFF_PLACEHOLDER}\n` +
