@@ -2,9 +2,9 @@
 
 // Manual card emails (email is off, so staff send cards from their own
 // mailbox). Two halves:
-//   * buildSponsorCardEmail: the same email text send-sponsor-emails would
-//     send (supabase/functions/send-sponsor-emails/index.ts buildEmail), ready
-//     to paste into Gmail/Outlook.
+//   * buildSponsorCardEmail: the email text, ready to paste into
+//     Gmail/Outlook. Child details match send-sponsor-emails' buildEmail;
+//     the drop-off part is this season's fixed DROPOFF_INSTRUCTIONS.
 //   * markCardsEmailed / unmarkCardsEmailed: set or clear
 //     assignments.card_emailed_at, the same column the automatic email sets,
 //     so the roster's "not emailed yet" count and "Email all assigned" both
@@ -14,79 +14,20 @@
 //   * getCardEmailTally: does every child in the sponsor pool end up either
 //     emailed or explicitly still outstanding? The buckets add up to the pool.
 
-import { useEffect, useState } from "react";
 import { createClient } from "./supabase/client";
 import { describeDbError } from "./permissions";
 import { getActiveAssignment, getPrintableCardLabel, getSponsorPoolCards } from "./queries";
 import type { Assignment, DataBundle } from "./types";
 
-export interface DropoffInfo {
-  location: string | null;
-  days: string | null;
-  deadline: string | null;
-}
-
-// Drop-off details for the email and the card PDFs. Starts from
-// app_settings (admin-only, so a volunteer starts blank, and the seeded
-// "[... not set yet ...]" placeholders count as blank), then whatever this
-// browser last typed into the modal wins, so it's entered once, not per
-// sponsor. Church info, not family data, so localStorage is fine.
-const DROPOFF_STORAGE_KEY = "reach.manualEmail.dropoff";
-
-function readSavedDropoff(): Partial<DropoffInfo> {
-  try {
-    const raw = window.localStorage.getItem(DROPOFF_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Partial<DropoffInfo>) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function useDropoffDetails(): {
-  dropoff: DropoffInfo;
-  setField: (field: keyof DropoffInfo, value: string) => void;
-  loaded: boolean;
-} {
-  const [dropoff, setDropoff] = useState<DropoffInfo>({ location: null, days: null, deadline: null });
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const clean = (v: unknown) => {
-      const s = typeof v === "string" ? v.trim() : "";
-      return s && !s.startsWith("[") ? s : null;
-    };
-    createClient()
-      .from("app_settings")
-      .select("dropoff_location, dropoff_days, dropoff_deadline")
-      .maybeSingle()
-      .then(({ data }) => {
-        if (cancelled) return;
-        const saved = readSavedDropoff();
-        const pick = (k: keyof DropoffInfo, fromDb: unknown) => (saved[k]?.trim() ? saved[k]!.trim() : clean(fromDb));
-        setDropoff({
-          location: pick("location", data?.dropoff_location),
-          days: pick("days", data?.dropoff_days),
-          deadline: pick("deadline", data?.dropoff_deadline),
-        });
-        setLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  function setField(field: keyof DropoffInfo, value: string) {
-    setDropoff((prev) => {
-      const next = { ...prev, [field]: value.trim() ? value : null };
-      try {
-        window.localStorage.setItem(DROPOFF_STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        // Private window etc.: the value still applies for this visit.
-      }
-      return next;
-    });
-  }
-  return { dropoff, setField, loaded };
-}
+// This season's drop-off instructions (Grant, 2026-11-18). Fixed text, not
+// app_settings: the days/deadline columns there were never filled in, and
+// there's no screen to edit them. Update these for next season.
+export const DROPOFF_INSTRUCTIONS = [
+  "Bring your gifts to the Reach Christmas table at OneLife Church.",
+  "You can drop them off starting November 21. All gifts are due by December 6.",
+  "Bring the gifts in a bag. Please DO NOT WRAP them.",
+  "You don't need to print out the card or bring any IDs.",
+];
 
 export interface SponsorEmailCard {
   assignmentId: string;
@@ -95,13 +36,6 @@ export interface SponsorEmailCard {
   grade: string | null;
   emailedAt: string | null;
   isConfidential: boolean;
-  /** "M" or "F" only. "Prefer not to say", blank, or anything else staff typed stays off the card. */
-  sexLabel: "M" | "F" | null;
-  pantSize: string | null;
-  shirtSize: string | null;
-  shoeSize: string | null;
-  wishlist: string[];
-  specificNeeds: string | null;
   /** This card's block in the plain-text email. */
   text: string;
 }
@@ -123,7 +57,8 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
         .map((w) => w.description);
       // Sponsors get M/F but not age (Grant, 2026-11-18).
       const sex = (child.sex ?? "").trim().toUpperCase();
-      const sexLabel: SponsorEmailCard["sexLabel"] = sex === "M" || sex === "F" ? sex : null;
+      // Only "M" or "F"; "Prefer not to say", blank, or free text stays off.
+      const sexLabel = sex === "M" || sex === "F" ? sex : null;
       const about = [child.grade ? `grade ${child.grade}` : null, sexLabel].filter(Boolean).join(", ");
       const text =
         `${child.firstName}${about ? ` (${about})` : ""}, card ${cardNumber}\n` +
@@ -138,12 +73,6 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
           grade: child.grade,
           emailedAt: a.cardEmailedAt,
           isConfidential: family?.isConfidential ?? false,
-          sexLabel,
-          pantSize: child.pantSize,
-          shirtSize: child.shirtSize,
-          shoeSize: child.shoeSize,
-          wishlist,
-          specificNeeds: child.specificNeeds,
           text,
         },
       ];
@@ -151,39 +80,22 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
     .sort((x, y) => x.cardNumber.localeCompare(y.cardNumber, undefined, { numeric: true }));
 }
 
-const DROPOFF_PLACEHOLDER = "[add drop-off details]";
-
-export function buildSponsorCardEmail(
-  sponsorName: string,
-  cards: SponsorEmailCard[],
-  dropoff: DropoffInfo | null,
-  withPdfs = true,
-): { subject: string; body: string } {
+export function buildSponsorCardEmail(sponsorName: string, cards: SponsorEmailCard[]): { subject: string; body: string } {
   const many = cards.length > 1;
   const numbers = cards.map((c) => c.cardNumber).join(", ");
   // Card numbers in the subject so the Sent folder can be searched by card.
   const subject = many
-    ? `Your Reach Christmas sponsor cards (${numbers})`
-    : `Your Reach Christmas sponsor card for ${cards[0]?.firstName ?? ""} (${numbers})`;
+    ? `Reach Christmas: the children you're sponsoring (${numbers})`
+    : `Reach Christmas: the child you're sponsoring, ${cards[0]?.firstName ?? ""} (${numbers})`;
   const body =
     `Hi ${sponsorName},\n\n` +
     `Thank you for sponsoring this Christmas! Here ${many ? `are the ${cards.length} children` : "is the child"} ` +
-    `you're shopping for.` +
-    (withPdfs
-      ? ` ${many ? "Each card is" : "The card is"} attached as a PDF, so you can print it or bring it with you shopping.`
-      : "") +
-    `\n\n` +
+    `you're shopping for.\n\n` +
     cards.map((c) => c.text).join("\n") +
-    `\nDrop-off:\n` +
-    `Location: ${dropoff?.location ?? DROPOFF_PLACEHOLDER}\n` +
-    `When: ${dropoff?.days ?? DROPOFF_PLACEHOLDER}\n` +
-    `Deadline: ${dropoff?.deadline ?? DROPOFF_PLACEHOLDER}\n\n` +
-    `Thank you for partnering with us this season.`;
+    `\nDropping off your gifts:\n` +
+    DROPOFF_INSTRUCTIONS.map((line) => `- ${line}`).join("\n") +
+    `\n\nThank you for partnering with us this season.`;
   return { subject, body };
-}
-
-export function dropoffIsComplete(d: DropoffInfo | null): boolean {
-  return !!(d?.location && d.days && d.deadline);
 }
 
 type Result = { ok: true } | { ok: false; error: string };

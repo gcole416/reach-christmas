@@ -3048,19 +3048,19 @@ still needs one, so every child in the sponsor pool is accounted for.
   Confidential), and the boxes add up to the pool. Done when only Emailed is
   non-zero.
 - [x] Roster sort "not emailed yet first"; Dashboard tile "Cards not emailed".
-- [x] Card PDFs, made in the browser ([web/lib/cardPdf.ts](../web/lib/cardPdf.ts),
-  `pdf-lib` 1.17.1, the same library the Edge Functions use): a half-letter
-  page per child, with the card number, first name, grade, sizes, wish list,
-  "good to know" (specific needs) and drop-off. Same field whitelist as the
-  print page and `public_available_cards`. Download one file per card, or
-  all of a sponsor's cards in one file. Long text wraps or runs onto a second
-  page; nothing is cut off.
-- [x] Drop-off details are editable in the modal, starting from `app_settings`
-  and remembered in this browser. Days and deadline are still placeholders
-  in `app_settings`, and there's no screen to edit them there.
-- [x] Grant, 2026-11-18: cards are black and white, and show M/F next to the
-  grade (only "M" or "F"; "Prefer not to say" or blank shows nothing). No
-  age. The email text carries the same M/F. DESIGN.md decision log updated.
+- [x] Grant, 2026-11-18: the email shows M/F next to the grade (only "M" or
+  "F"; "Prefer not to say" or blank shows nothing). No age. DESIGN.md
+  decision log updated.
+- [x] Grant, 2026-11-18: **no PDFs and no drop-off fields this year.** The
+  email carries this season's fixed drop-off text (`DROPOFF_INSTRUCTIONS` in
+  [web/lib/manualSponsorEmail.ts](../web/lib/manualSponsorEmail.ts)): Reach
+  Christmas table at OneLife Church, from November 21, due December 6, gifts
+  in a bag and NOT wrapped, no need to print the card or bring IDs. Update
+  that list next season.
+  - The card PDFs (black and white, half-letter, one page per child) and the
+    editable drop-off fields were built and then removed. To bring them back,
+    restore `web/lib/cardPdf.ts` and the modal from commit `7b91d6d`, and
+    re-add `pdf-lib` 1.17.1.
 - [ ] Grant tries it on dev.
 - [ ] Promote to prod (no migration; code only) after review.
 
