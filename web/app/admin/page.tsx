@@ -14,6 +14,7 @@ import {
   OVERDUE_WARNING_DAYS,
 } from "@/lib/queries";
 import { AdminPageHeader } from "./AdminPageHeader";
+import { getCardEmailTally } from "@/lib/manualSponsorEmail";
 
 // This drive's registrations, for the counts below. Null until loaded (or if
 // the load fails, in which case the tiles keep showing "…").
@@ -50,6 +51,7 @@ export default function AdminPage() {
   const stats = getDashboardStats(data);
   const overdue = getOverdueAssignments(data);
   const needsPrint = getCardsNeedingPrint(data);
+  const emailTally = getCardEmailTally(data);
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-10">
@@ -70,7 +72,7 @@ export default function AdminPage() {
 
       <section>
         <h2 className="text-sm font-semibold text-ink-secondary">Needs your attention</h2>
-        <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-4 lg:grid-cols-5">
           <StatTile
             label="Ready to import"
             value={registrations ? registrations.ready : "…"}
@@ -89,6 +91,16 @@ export default function AdminPage() {
             value={stats.cardsAvailable}
             hint="Ready to assign"
             href="/admin/assign"
+          />
+          <StatTile
+            label="Cards not emailed"
+            value={emailTally.notEmailed}
+            hint={
+              emailTally.notEmailed === 0
+                ? `${emailTally.emailed} emailed so far`
+                : `${emailTally.sponsorsToEmail} ${emailTally.sponsorsToEmail === 1 ? "sponsor" : "sponsors"} to email`
+            }
+            href="/admin/sponsors"
           />
         </div>
       </section>

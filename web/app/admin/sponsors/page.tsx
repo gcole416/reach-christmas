@@ -12,6 +12,9 @@ import { SendSponsorEmailsModal } from "./SendSponsorEmailsModal";
 import type { SponsorEmailKind } from "@/lib/store";
 import { formatSignUpDate, useLatestSponsorImport } from "@/lib/sponsorImport";
 import { LastImportLine, NewBadge } from "./LastImportLine";
+import { ManualCardEmailModal } from "./ManualCardEmailModal";
+import { getCardEmailTally, type CardEmailTally } from "@/lib/manualSponsorEmail";
+import Link from "next/link";
 
 // US-56: the sponsor sign-up roster staff import from Church Center (plus any
 // stragglers added by hand). This page only lists/edits `sponsor_families`
@@ -20,7 +23,7 @@ import { LastImportLine, NewBadge } from "./LastImportLine";
 // intake form.
 
 type StatusFilter = "active" | "inactive" | "all";
-type SortOrder = "name" | "signup" | "unassigned_first" | "assigned_first";
+type SortOrder = "name" | "signup" | "unassigned_first" | "assigned_first" | "unemailed_first";
 
 export default function SponsorsAdminPage() {
   const { data, updateSponsorFamily } = useData();
@@ -31,6 +34,7 @@ export default function SponsorsAdminPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [editTarget, setEditTarget] = useState<SponsorFamily | null>(null);
+  const [emailTarget, setEmailTarget] = useState<SponsorFamily | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const { latest: latestImport, badgeImportId } = useLatestSponsorImport(data?.drive.id, data);
@@ -38,6 +42,7 @@ export default function SponsorsAdminPage() {
   if (!data) return null;
 
   const allSponsorFamilies = getSponsorFamilies(data);
+  const tally = getCardEmailTally(data);
   const q = search.trim().toLowerCase();
   const sponsorFamilies = allSponsorFamilies
     .filter((sf) => {
@@ -50,6 +55,12 @@ export default function SponsorsAdminPage() {
     .sort((a, b) => {
       if (sortOrder === "signup") {
         return (a.signedUpAt ?? a.createdAt).localeCompare(b.signedUpAt ?? b.createdAt);
+      }
+      // Sponsors with cards still to email first (most cards first), then
+      // everyone else by name.
+      if (sortOrder === "unemailed_first") {
+        if (a.unemailedCount !== b.unemailedCount) return b.unemailedCount - a.unemailedCount;
+        return a.displayName.localeCompare(b.displayName);
       }
       // "Has a child" first or last, then by name within each group.
       if (sortOrder !== "name") {
@@ -114,6 +125,9 @@ export default function SponsorsAdminPage() {
         <LastImportLine latest={latestImport} />
       </div>
 
+      <CardEmailTallyStrip tally={tally} />
+
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search by name, email, or phone…" />
         <div className="flex items-center gap-3">
@@ -136,6 +150,7 @@ export default function SponsorsAdminPage() {
             <option value="signup">Sort: sign-up order</option>
             <option value="unassigned_first">Sort: no child yet first</option>
             <option value="assigned_first">Sort: has a child first</option>
+            <option value="unemailed_first">Sort: not emailed yet first</option>
           </select>
           <p className="text-sm text-ink-muted">
             {sponsorFamilies.length} of {allSponsorFamilies.length}
@@ -198,6 +213,14 @@ export default function SponsorsAdminPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
+                      {sf.assignedCount > 0 ? (
+                        <button
+                          onClick={() => setEmailTarget(sf)}
+                          className="text-xs font-medium text-cat-blue hover:opacity-80"
+                        >
+                          Email cards
+                        </button>
+                      ) : null}
                       <button
                         onClick={() => setEditTarget(sf)}
                         className="text-xs font-medium text-cat-blue hover:opacity-80"
@@ -239,6 +262,13 @@ export default function SponsorsAdminPage() {
         <SponsorFamilyFormModal sponsorFamily={editTarget} onClose={() => setEditTarget(null)} />
       ) : null}
       {showImport ? <ImportSponsorsModal onClose={() => setShowImport(false)} /> : null}
+      {emailTarget ? (
+        <ManualCardEmailModal
+          // Re-read from the fresh bundle so counts update after "Mark as emailed".
+          sponsorFamily={allSponsorFamilies.find((sf) => sf.id === emailTarget.id) ?? emailTarget}
+          onClose={() => setEmailTarget(null)}
+        />
+      ) : null}
       {sendKind ? (
         <SendSponsorEmailsModal
           kind={sendKind}
@@ -247,5 +277,67 @@ export default function SponsorsAdminPage() {
         />
       ) : null}
     </div>
+  );
+}
+
+// The "is every child accounted for?" check for manual card emails. Every
+// child in the sponsor pool lands in exactly one bucket, so the buckets add
+// up to the total; the job is done when only "Emailed" is non-zero.
+function CardEmailTallyStrip({ tally }: { tally: CardEmailTally }) {
+  if (tally.poolTotal === 0) return null;
+  const outstanding = tally.notEmailed + tally.claimedOnline + tally.noSponsor + tally.confidentialUnmatched;
+  const cell = (label: string, value: number, hint: string, tone: "good" | "warn" | "plain", href?: string) => {
+    const inner = (
+      <>
+        <div className="text-xs text-ink-secondary">{label}</div>
+        <div
+          className={`text-2xl font-semibold ${
+            tone === "good" ? "text-status-good" : tone === "warn" && value > 0 ? "text-ink-primary" : "text-ink-muted"
+          }`}
+        >
+          {value}
+        </div>
+        <div className="text-xs text-ink-muted">{hint}</div>
+      </>
+    );
+    return href ? (
+      <Link key={label} href={href} className="rounded-lg px-3 py-2 hover:bg-ink-muted/5">
+        {inner}
+      </Link>
+    ) : (
+      <div key={label} className="rounded-lg px-3 py-2">
+        {inner}
+      </div>
+    );
+  };
+  return (
+    <section aria-label="Card email tally" className="mb-6 rounded-xl border border-border bg-surface p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-ink-primary">
+          Card emails: {tally.emailed} of {tally.poolTotal} children emailed to a sponsor
+        </h2>
+        <p className={`text-sm ${outstanding === 0 ? "font-medium text-status-good" : "text-ink-secondary"}`}>
+          {outstanding === 0
+            ? "Every child is accounted for."
+            : `${outstanding} still to go. Done when every box except Emailed is 0.`}
+        </p>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
+        {cell("Emailed", tally.emailed, "Marked as emailed", "good")}
+        {cell(
+          "Not emailed yet",
+          tally.notEmailed,
+          `${tally.sponsorsToEmail} ${tally.sponsorsToEmail === 1 ? "sponsor" : "sponsors"} to email`,
+          "warn",
+        )}
+        {cell("Need a sponsor", tally.noSponsor, "Assign these first", "warn", "/admin/assign")}
+        {tally.claimedOnline > 0
+          ? cell("Claimed online", tally.claimedOnline, "Not on this roster; track by hand", "warn", "/admin/fulfillment")
+          : null}
+        {tally.confidentialUnmatched > 0
+          ? cell("Confidential", tally.confidentialUnmatched, "Matched outside the app; track by hand", "warn")
+          : null}
+      </div>
+    </section>
   );
 }

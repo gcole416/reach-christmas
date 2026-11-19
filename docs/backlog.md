@@ -3022,6 +3022,40 @@ Owner: frontend-designer (modal, pages), database-engineer (migration).
 
 ---
 
+## US-77: Email sponsor cards by hand and track who has been sent
+
+As staff, with email off and no automated emails from the church, I want to
+send each sponsor their cards from our own mailbox and see in the app who
+still needs one, so every child in the sponsor pool is accounted for.
+
+- [x] Sponsor roster: an "Email cards" action on every sponsor with cards.
+  The modal lists their cards (emailed or not), and gives To, Subject and
+  Message with Copy buttons. The text matches the automatic email
+  (`send-sponsor-emails`). Card numbers go in the subject so the Sent folder
+  can be searched by card.
+- [x] "Mark N cards as emailed" sets `assignments.card_emailed_at`, the same
+  column the automatic email sets, so "not emailed yet" counts, "Email all
+  assigned" and reminders all treat a hand-sent card as sent. Undo per card.
+  No migration: staff already have update rights on `assignments`, and the
+  audit trigger logs each change.
+- [x] By default the email holds only the cards not emailed yet, so a sponsor
+  given an extra child later gets just the new card. A checkbox adds the
+  rest back.
+- [x] Missing drop-off details (or a volunteer, who can't read
+  `app_settings`) leave a visible "[add drop-off details]" with a warning.
+- [x] Tally strip on the roster: every child in the sponsor pool falls in
+  exactly one box (Emailed, Not emailed yet, Need a sponsor, Claimed online,
+  Confidential), and the boxes add up to the pool. Done when only Emailed is
+  non-zero.
+- [x] Roster sort "not emailed yet first"; Dashboard tile "Cards not emailed".
+- [ ] Grant tries it on dev.
+- [ ] Promote to prod (no migration; code only) after review.
+
+Status: **On dev**, 2026-11-18.
+Owner: frontend-designer.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
