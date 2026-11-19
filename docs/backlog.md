@@ -3069,6 +3069,26 @@ Owner: frontend-designer.
 
 ---
 
+## US-78: Simplify the printed cards
+
+As staff, I want the cards from Print cards
+([web/app/admin/print/page.tsx](../web/app/admin/print/page.tsx)) to be
+simpler, so they're quicker to print and read.
+
+Grant will define what "simpler" means. Known so far:
+- [ ] **No M/F on the printed cards** (Grant, 2026-11-18). M/F goes only on
+  the cards emailed to sponsors (US-77). Don't copy it over when this is done.
+- [ ] No age, same as the emailed cards.
+- [ ] Grant's list of what to keep and what to drop: _to come_.
+- [ ] Still open from the print page's TODO: a layout for adhesive name-tag
+  sheets (needs the actual label product first). Decide whether that's part
+  of this story.
+
+Status: **Backlog**, waiting on Grant's list.
+Owner: frontend-designer.
+
+---
+
 ## Open questions
 
 **Moved to [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md)** — one page for every open
