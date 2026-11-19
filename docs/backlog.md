@@ -3058,6 +3058,9 @@ still needs one, so every child in the sponsor pool is accounted for.
 - [x] Drop-off details are editable in the modal, starting from `app_settings`
   and remembered in this browser. Days and deadline are still placeholders
   in `app_settings`, and there's no screen to edit them there.
+- [x] Grant, 2026-11-18: cards are black and white, and show M/F next to the
+  grade (only "M" or "F"; "Prefer not to say" or blank shows nothing). No
+  age. The email text carries the same M/F. DESIGN.md decision log updated.
 - [ ] Grant tries it on dev.
 - [ ] Promote to prod (no migration; code only) after review.
 

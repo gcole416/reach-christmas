@@ -112,7 +112,7 @@ Alternative considered: self-hosting on church infrastructure — more control, 
 
 - [x] ~~Roughly how many families/kids does the drive serve per year?~~ → ~400 families/year (Reach Christmas) — matches the ~407 kids found in the 2021 spreadsheet
 - [x] ~~Old spreadsheet review~~ → done, see §4/§6 findings below and the summary at the top of this session
-- [x] ~~What should sponsors see about a child?~~ → first name + grade only. No address, no school.
+- [x] ~~What should sponsors see about a child?~~ → first name + grade only. No address, no school. *Updated 2026-11-18 (Grant):* the card a staff-assigned sponsor is emailed (US-77) also carries sizes, wish list, specific needs and M/F. Age stays off ("school year is close enough"). The public sponsor page (`public_available_cards`) is unchanged.
 - [x] ~~Who else needs an admin account?~~ → Just you for now; others TBD once contact info is available. App should make it easy to add admins later without a rebuild.
 - [x] ~~Existing church login system?~~ → Church Center exists but you're not an admin there yet; integration deferred to Phase 2 (see §6, §7)
 - [x] ~~Should the sponsor-facing claim page require login?~~ → No login for sponsors. But admins need visibility into which sponsor is assigned to which child, plus status, so they can follow up on late sponsors — this is now a Phase 1 feature (§7).

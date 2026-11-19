@@ -95,6 +95,8 @@ export interface SponsorEmailCard {
   grade: string | null;
   emailedAt: string | null;
   isConfidential: boolean;
+  /** "M" or "F" only. "Prefer not to say", blank, or anything else staff typed stays off the card. */
+  sexLabel: "M" | "F" | null;
   pantSize: string | null;
   shirtSize: string | null;
   shoeSize: string | null;
@@ -119,8 +121,12 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
         .filter((w) => w.childId === child.id)
         .sort((x, y) => x.position - y.position)
         .map((w) => w.description);
+      // Sponsors get M/F but not age (Grant, 2026-11-18).
+      const sex = (child.sex ?? "").trim().toUpperCase();
+      const sexLabel: SponsorEmailCard["sexLabel"] = sex === "M" || sex === "F" ? sex : null;
+      const about = [child.grade ? `grade ${child.grade}` : null, sexLabel].filter(Boolean).join(", ");
       const text =
-        `${child.firstName}${child.grade ? ` (grade ${child.grade})` : ""}, card ${cardNumber}\n` +
+        `${child.firstName}${about ? ` (${about})` : ""}, card ${cardNumber}\n` +
         `  Sizes: pants ${child.pantSize ?? "n/a"}, shirt ${child.shirtSize ?? "n/a"}, shoes ${child.shoeSize ?? "n/a"}\n` +
         (wishlist.length ? `  Wish list:\n${wishlist.map((w) => `    - ${w}`).join("\n")}\n` : "") +
         (child.specificNeeds ? `  Notes: ${child.specificNeeds}\n` : "");
@@ -132,6 +138,7 @@ export function getSponsorEmailCards(data: DataBundle, sponsorFamilyId: string):
           grade: child.grade,
           emailedAt: a.cardEmailedAt,
           isConfidential: family?.isConfidential ?? false,
+          sexLabel,
           pantSize: child.pantSize,
           shirtSize: child.shirtSize,
           shoeSize: child.shoeSize,
