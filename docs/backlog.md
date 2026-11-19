@@ -3061,10 +3061,16 @@ still needs one, so every child in the sponsor pool is accounted for.
     editable drop-off fields were built and then removed. To bring them back,
     restore `web/lib/cardPdf.ts` and the modal from commit `7b91d6d`, and
     re-add `pdf-lib` 1.17.1.
-- [ ] Grant tries it on dev.
-- [ ] Promote to prod (no migration; code only) after review.
+- [x] Promoted to prod 2026-11-18 on Grant's go-ahead, so the team can start
+  emailing on 2026-11-19. Code only: `main` fast-forwarded to `dev`
+  (`0c72ae2`). Checked read-only on prod first: `assignments.card_emailed_at`,
+  the "staff update assignments" policy and the audit trigger were all there
+  (bootstrap, migration 33). No ledger change. No new backup: nothing in
+  the schema changed, and the last one is from 2026-11-17.
+- [ ] The team's walkthrough: "How to Email Sponsor Cards" (a shared doc, not
+  in the repo). Its "which mailbox" line is still for Grant to fill in.
 
-Status: **On dev**, 2026-11-18.
+Status: **Done**, on dev and prod 2026-11-18.
 Owner: frontend-designer.
 
 ---
